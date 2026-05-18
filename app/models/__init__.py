@@ -13,6 +13,7 @@ from app.models.leg import Leg
 from app.models.planning_share import PlanningShare
 from app.models.port import Port
 from app.models.rate_limit import RateLimitAttempt
+from app.models.ticket import Ticket, TicketComment
 from app.models.user import User
 from app.models.vessel import Vessel
 
@@ -28,6 +29,8 @@ __all__ = [
     "PlanningShare",
     "Port",
     "RateLimitAttempt",
+    "Ticket",
+    "TicketComment",
     "User",
     "Vessel",
 ]
