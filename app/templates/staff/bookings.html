@@ -39,7 +39,7 @@
             <td>
               {% if b.status == 'submitted' %}
                 <form method="post" action="/staff/bookings/{{ b.reference }}/confirm" style="display:inline">
-                  <input type="hidden" name="_csrf" value="{{ request.cookies.get('towt_csrf', '') }}" />
+                  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}" />
                   <button class="btn btn-primary text-sm" type="submit">Confirmer</button>
                 </form>
               {% endif %}

@@ -8,7 +8,7 @@
       <div class="alert alert-error" role="alert">{{ error }}</div>
     {% endif %}
     <form method="post" action="/login">
-      <input type="hidden" name="_csrf" value="{{ request.cookies.get('towt_csrf', '') }}" />
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}" />
       <div class="field">
         <label for="username">Identifiant</label>
         <input id="username" name="username" autocomplete="username" required autofocus />

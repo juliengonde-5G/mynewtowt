@@ -16,7 +16,7 @@
 {% endif %}
 
 <form method="post" action="/booking/new/{{ leg.leg_code }}" class="card">
-  <input type="hidden" name="_csrf" value="{{ request.cookies.get('towt_csrf', '') }}" />
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}" />
 
   <h2>Vos palettes</h2>
   <p class="text-muted text-sm">Ajoutez chaque type de palette à embarquer. Vous pourrez préciser des détails par la suite.</p>

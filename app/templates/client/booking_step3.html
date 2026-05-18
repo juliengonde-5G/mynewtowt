@@ -40,7 +40,7 @@
 </section>
 
 <form method="post" action="/booking/{{ booking.reference }}/confirm" class="card">
-  <input type="hidden" name="_csrf" value="{{ request.cookies.get('towt_csrf', '') }}" />
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}" />
   <div class="field">
     <label>
       <input type="checkbox" name="accept_terms" required />
