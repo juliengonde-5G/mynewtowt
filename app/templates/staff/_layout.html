@@ -8,7 +8,7 @@
         <img src="{{ brand.logo_white }}" alt="{{ brand.nom_court }}" />
       </a>
     </div>
-    <small class="role-label">ERP — {{ user.role }}</small>
+    <small class="role-label">ERP{% if user is defined and user %} — {{ user.role }}{% endif %}</small>
     <nav>
       <div class="group-title">Pilotage</div>
       <ul>

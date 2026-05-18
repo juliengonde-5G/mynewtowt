@@ -46,12 +46,12 @@ GANTT_WINDOW_DAYS = 90
 @router.get(
     "",
     response_class=HTMLResponse,
-    dependencies=[Depends(require_permission("planning", "C"))],
 )
 async def gantt_index(
     request: Request,
     vessel_id: int | None = None,
     db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("planning", "C")),
 ) -> HTMLResponse:
     now = datetime.now(timezone.utc)
     window_start = now - timedelta(days=7)
@@ -91,6 +91,7 @@ async def gantt_index(
         "staff/planning/index.html",
         {
             "request": request,
+            "user": user,
             "vessels": vessels,
             "legs": legs,
             "ports": ports,
@@ -111,11 +112,11 @@ async def gantt_index(
 @router.get(
     "/legs/new",
     response_class=HTMLResponse,
-    dependencies=[Depends(require_permission("planning", "M"))],
 )
 async def new_leg_form(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("planning", "M")),
 ) -> HTMLResponse:
     vessels = list((await db.execute(select(Vessel).order_by(Vessel.code))).scalars().all())
     ports = list((await db.execute(select(Port).order_by(Port.locode))).scalars().all())
@@ -123,6 +124,7 @@ async def new_leg_form(
         "staff/planning/leg_form.html",
         {
             "request": request,
+            "user": user,
             "leg": None,
             "vessels": vessels,
             "ports": ports,
@@ -158,6 +160,7 @@ async def create_leg_action(
             "staff/planning/leg_form.html",
             {
                 "request": request,
+                "user": user,
                 "leg": None,
                 "vessels": vessels,
                 "ports": ports,
@@ -184,12 +187,12 @@ async def create_leg_action(
 @router.get(
     "/legs/{leg_id}",
     response_class=HTMLResponse,
-    dependencies=[Depends(require_permission("planning", "C"))],
 )
 async def leg_detail(
     request: Request,
     leg_id: int,
     db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("planning", "C")),
 ) -> HTMLResponse:
     leg = await _get_leg_or_404(db, leg_id)
     vessel = await db.get(Vessel, leg.vessel_id)
@@ -199,6 +202,7 @@ async def leg_detail(
         "staff/planning/leg_detail.html",
         {
             "request": request,
+            "user": user,
             "leg": leg,
             "vessel": vessel,
             "pol": pol,
@@ -210,12 +214,12 @@ async def leg_detail(
 @router.get(
     "/legs/{leg_id}/edit",
     response_class=HTMLResponse,
-    dependencies=[Depends(require_permission("planning", "M"))],
 )
 async def edit_leg_form(
     request: Request,
     leg_id: int,
     db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("planning", "M")),
 ) -> HTMLResponse:
     leg = await _get_leg_or_404(db, leg_id)
     vessels = list((await db.execute(select(Vessel).order_by(Vessel.code))).scalars().all())
@@ -224,6 +228,7 @@ async def edit_leg_form(
         "staff/planning/leg_form.html",
         {
             "request": request,
+            "user": user,
             "leg": leg,
             "vessels": vessels,
             "ports": ports,
@@ -263,6 +268,7 @@ async def update_leg_action(
             "staff/planning/leg_form.html",
             {
                 "request": request,
+                "user": user,
                 "leg": leg,
                 "vessels": vessels,
                 "ports": ports,
@@ -321,17 +327,17 @@ async def delete_leg_action(
 @router.get(
     "/shares",
     response_class=HTMLResponse,
-    dependencies=[Depends(require_permission("planning", "C"))],
 )
 async def shares_index(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("planning", "C")),
 ) -> HTMLResponse:
     shares = await list_shares(db)
     vessels = list((await db.execute(select(Vessel).order_by(Vessel.code))).scalars().all())
     return templates.TemplateResponse(
         "staff/planning/shares.html",
-        {"request": request, "shares": shares, "vessels": vessels},
+        {"request": request, "user": user, "shares": shares, "vessels": vessels},
     )
 
 
