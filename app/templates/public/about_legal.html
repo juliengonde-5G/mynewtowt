@@ -1,0 +1,41 @@
+{% extends "public/_layout.html" %}
+{% block title %}Mentions légales — NEWTOWT{% endblock %}
+{% block content %}
+
+<div class="container" style="padding-top: var(--space-6); padding-bottom: var(--space-8); max-width: 800px;">
+  <h1>Mentions légales</h1>
+
+  <h2>Éditeur</h2>
+  <p>
+    NEWTOWT SAS<br />
+    Siège social : Fécamp, France<br />
+    RCS : (à compléter)<br />
+    Capital social : (à compléter)<br />
+    Directeur de la publication : (à compléter)
+  </p>
+
+  <h2>Hébergement</h2>
+  <p>OVH SAS — 2 rue Kellermann, 59100 Roubaix, France.</p>
+
+  <h2>Propriété intellectuelle</h2>
+  <p>
+    L'ensemble du contenu de ce site est protégé par le code de la propriété intellectuelle.
+    Toute reproduction est interdite sans autorisation préalable.
+  </p>
+
+  <h2>Cookies</h2>
+  <p>
+    Le site utilise uniquement des cookies techniques nécessaires (session, CSRF, préférences).
+    Aucun cookie publicitaire ni traceur tiers.
+  </p>
+
+  <h2>Politique de divulgation responsable</h2>
+  <p>
+    Pour signaler une vulnérabilité, contactez
+    <a href="mailto:security@newtowt.eu">security@newtowt.eu</a>.
+    Notre fichier <a href="/.well-known/security.txt">/.well-known/security.txt</a> rappelle nos
+    engagements.
+  </p>
+</div>
+
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Connexion staff — NEWTOWT{% endblock %}
+{% block body %}
+<div class="auth-shell">
+  <div class="auth-card">
+    <h2>NEWTOWT — Espace collaborateurs</h2>
+    {% if error %}
+      <div class="alert alert-error" role="alert">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="/login">
+      <input type="hidden" name="_csrf" value="{{ request.cookies.get('towt_csrf', '') }}" />
+      <div class="field">
+        <label for="username">Identifiant</label>
+        <input id="username" name="username" autocomplete="username" required autofocus />
+      </div>
+      <div class="field">
+        <label for="password">Mot de passe</label>
+        <input id="password" type="password" name="password" autocomplete="current-password" required />
+      </div>
+      <button class="btn btn-primary btn-block btn-lg" type="submit">Se connecter</button>
+    </form>
+    <p class="text-center text-muted mt-4 text-sm">
+      Pour la création de compte, contactez l'administrateur.
+    </p>
+  </div>
+</div>
+{% endblock %}

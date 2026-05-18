@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block body %}
+<header class="public-header">
+  <div class="container">
+    <a href="/" class="brand" aria-label="{{ app_name }} — accueil">NEWTOWT</a>
+    <nav aria-label="Navigation principale">
+      <a href="/routes" class="btn btn-ghost">Routes</a>
+      <a href="/about" class="btn btn-ghost">À propos</a>
+      <a href="/me" class="btn btn-secondary">Connexion</a>
+      <a href="/booking/new" class="btn btn-primary">Réserver</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="public-footer">
+  <div class="container flex justify-between" style="flex-wrap:wrap; gap:var(--space-4)">
+    <div>
+      <strong>NEWTOWT</strong> — Transport maritime cargo vélique.<br />
+      <small>&copy; 2026 · Décarboné depuis 2011</small>
+    </div>
+    <nav class="flex gap-4">
+      <a href="/about" class="text-muted">À propos</a>
+      <a href="/about/co2" class="text-muted">Méthodologie CO₂</a>
+      <a href="/about/legal" class="text-muted">Mentions légales</a>
+      <a href="/about/privacy" class="text-muted">Vie privée</a>
+      <a href="/about/terms" class="text-muted">CGV</a>
+      <a href="/api/v1/spec" class="text-muted">API</a>
+    </nav>
+  </div>
+</footer>
+{% endblock %}

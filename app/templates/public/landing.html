@@ -1,0 +1,102 @@
+{% extends "public/_layout.html" %}
+{% block title %}NEWTOWT — Transport maritime vélique{% endblock %}
+{% block content %}
+
+<section class="hero">
+  <div class="container">
+    <h1 class="display">Transportez décarboné. À l'horaire. À la palette.</h1>
+    <p class="lead">
+      Réservez votre espace en cale sur les voiliers cargos NEWTOWT.
+      Réduction CO₂ de 90 %, suivi de bout en bout, certificat décarboné.
+    </p>
+
+    <form class="hero-search" method="get" action="/routes">
+      <div class="field">
+        <label for="from">Départ (pays)</label>
+        <input id="from" name="from" type="text" placeholder="FR" maxlength="2" />
+      </div>
+      <div class="field">
+        <label for="to">Arrivée (pays)</label>
+        <input id="to" name="to" type="text" placeholder="US" maxlength="2" />
+      </div>
+      <div class="field">
+        <label for="from_date">À partir du</label>
+        <input id="from_date" name="from_date" type="date" />
+      </div>
+      <button type="submit" class="btn btn-primary btn-lg">Rechercher →</button>
+    </form>
+  </div>
+</section>
+
+<section class="container" style="margin-top: var(--space-8)">
+  <h2>Pourquoi NEWTOWT ?</h2>
+  <div class="grid grid-3 gap-4 mt-4">
+    <article class="card">
+      <h3>🌱 Décarboné -90 %</h3>
+      <p class="text-muted">1,5 g CO₂/t.km vs 13,7 en cargo conventionnel.</p>
+    </article>
+    <article class="card">
+      <h3>🗓️ Capacité prévisible</h3>
+      <p class="text-muted">Plannings fermes, 4 voiliers cargo en rotation, 850 palettes par navire.</p>
+    </article>
+    <article class="card">
+      <h3>🔎 Suivi bout en bout</h3>
+      <p class="text-muted">Position GPS, status palette, BL signé, certificat CO₂ téléchargeable.</p>
+    </article>
+  </div>
+</section>
+
+<section class="container" style="margin-top: var(--space-8)">
+  <h2>Prochains départs disponibles</h2>
+  {% if upcoming_legs %}
+    <div class="grid grid-2 gap-4 mt-4">
+      {% for item in upcoming_legs %}
+        <article class="booking-card">
+          <div class="header">
+            <span class="leg-code mono">{{ item.leg_code }}</span>
+            <span class="text-muted text-sm">{{ item.vessel_name }}</span>
+          </div>
+          <div class="route">
+            <strong>{{ item.pol.locode if item.pol }}</strong>
+            <span>{{ item.pol.country|flag if item.pol }}</span>
+            <span class="arrow">→</span>
+            <strong>{{ item.pod.locode if item.pod }}</strong>
+            <span>{{ item.pod.country|flag if item.pod }}</span>
+          </div>
+          <div class="meta">
+            <span>ETD <span class="mono">{{ item.etd|date }}</span></span>
+            <span>ETA <span class="mono">{{ item.eta|date }}</span></span>
+          </div>
+          {% set occ = ((item.capacity_palettes - item.available_palettes) * 100 / item.capacity_palettes) if item.capacity_palettes > 0 else 0 %}
+          <div>
+            <small class="text-muted">
+              {{ item.available_palettes }} / {{ item.capacity_palettes }} palettes disponibles
+            </small>
+            <div class="capacity-gauge {% if occ > 85 %}full{% elif occ > 60 %}warn{% endif %}">
+              <div class="fill" style="width: {{ occ }}%"></div>
+            </div>
+          </div>
+          {% if item.price_per_palette %}
+            <div class="text-muted text-sm">À partir de {{ item.price_per_palette|money }} / palette</div>
+          {% endif %}
+          <div class="flex justify-between items-center">
+            <a href="/routes/{{ item.leg_code }}" class="btn btn-ghost">Détails</a>
+            <a href="/booking/new/{{ item.leg_code }}" class="btn btn-primary">Réserver →</a>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="text-muted">Aucun départ ouvert à la réservation actuellement. Revenez bientôt.</p>
+  {% endif %}
+</section>
+
+<section class="container" style="margin-top: var(--space-10); padding-bottom: var(--space-10);">
+  <div class="card text-center" style="background: var(--gradient-ocean); color: var(--bg-0);">
+    <h2 style="color: var(--bg-0)">Vous êtes un client B2B grand compte ?</h2>
+    <p>Intégrez-vous à notre API. Réservations directes, webhooks, reporting CO₂ annuel automatisé.</p>
+    <a href="/api/v1/spec" class="btn btn-secondary" style="background: var(--bg-0); color: var(--text-0);">Voir l'API →</a>
+  </div>
+</section>
+
+{% endblock %}

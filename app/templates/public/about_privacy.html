@@ -1,0 +1,55 @@
+{% extends "public/_layout.html" %}
+{% block title %}Vie privée — NEWTOWT{% endblock %}
+{% block content %}
+
+<div class="container" style="padding-top: var(--space-6); padding-bottom: var(--space-8); max-width: 800px;">
+  <h1>Politique de protection des données personnelles</h1>
+
+  <p class="lead">
+    Conforme au Règlement Général sur la Protection des Données (UE 2016/679).
+  </p>
+
+  <h2>Responsable du traitement</h2>
+  <p>
+    NEWTOWT SAS — DPO joignable à <a href="mailto:dpo@newtowt.eu">dpo@newtowt.eu</a>.
+  </p>
+
+  <h2>Données collectées</h2>
+  <ul>
+    <li>Compte client : email, nom société, contact, pays.</li>
+    <li>Réservations : route, palettes, poids, IMDG, adresses.</li>
+    <li>Facturation : adresse de facturation, numéro TVA, historiques.</li>
+    <li>Connexion : IP, horodatage, parcours (cookies techniques).</li>
+  </ul>
+
+  <h2>Finalités</h2>
+  <ul>
+    <li>Exécution du contrat de transport.</li>
+    <li>Émission documentaire (BL, facture, certificat CO₂).</li>
+    <li>Reporting réglementaire (EU MRV).</li>
+    <li>Amélioration produit (NPS interne).</li>
+  </ul>
+
+  <h2>Durée de conservation</h2>
+  <ul>
+    <li>Comptes : 5 ans après dernier login, puis purge.</li>
+    <li>Factures et BL : 10 ans (obligation légale).</li>
+    <li>Logs applicatifs : 90 jours puis archives 7 ans.</li>
+  </ul>
+
+  <h2>Vos droits</h2>
+  <p>Accès, rectification, portabilité, suppression. Exercés via :</p>
+  <ul>
+    <li><a href="/me/account">Mon compte → Confidentialité</a> (en self-service)</li>
+    <li>Email DPO : <a href="mailto:dpo@newtowt.eu">dpo@newtowt.eu</a></li>
+    <li>Réclamation CNIL : <a href="https://www.cnil.fr">cnil.fr</a></li>
+  </ul>
+
+  <h2>Sécurité</h2>
+  <p>
+    Chiffrement TLS 1.3 en transit, chiffrement at-rest pour les données sensibles
+    (salaires, médical, paiement). MFA obligatoire pour les comptes administrateurs.
+  </p>
+</div>
+
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "staff/_layout.html" %}
+{% block title %}Tableau de bord — NEWTOWT ERP{% endblock %}
+{% block content %}
+
+<header class="flex justify-between items-center mb-5">
+  <div>
+    <h1>Tableau de bord</h1>
+    <p class="text-muted">{{ user.full_name or user.username }} · <span class="mono">{{ user.role }}</span></p>
+  </div>
+</header>
+
+<section class="kpi-strip">
+  <div class="kpi-card">
+    <div class="label">Bookings à confirmer</div>
+    <div class="value">{{ bookings_to_confirm }}</div>
+    <div class="delta text-muted">en statut submitted</div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">Legs à venir</div>
+    <div class="value">{{ legs_upcoming }}</div>
+    <div class="delta text-muted">ETD futur</div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">Tickets P1 ouverts</div>
+    <div class="value">—</div>
+    <div class="delta text-muted">module à venir</div>
+  </div>
+</section>
+
+<section class="card mb-4">
+  <h2>Actions rapides</h2>
+  <div class="flex gap-3" style="flex-wrap:wrap">
+    <a href="/staff/bookings" class="btn btn-primary">📦 Voir les bookings</a>
+    <a href="/planning" class="btn btn-secondary">🗓️ Ouvrir le planning</a>
+    <a href="/escale" class="btn btn-secondary">⚓ Escales du jour</a>
+    <a href="/onboard" class="btn btn-secondary">⛵ Onboard</a>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Bienvenue dans NEWTOWT V3</h2>
+  <p>
+    Cette plateforme couvre désormais :
+  </p>
+  <ul>
+    <li>L'ERP interne complet (planning, cargo, escale, onboard, RH, finance, KPI, MRV, claims).</li>
+    <li>Le portail client (réservations, factures, certificats CO₂, suivi).</li>
+    <li>Une API publique pour les intégrations B2B.</li>
+    <li>Un chatbot Kairos AI pour vous assister au quotidien.</li>
+  </ul>
+  <p>
+    Consultez la <a href="/about">documentation utilisateur</a> ou contactez l'administrateur
+    pour toute question.
+  </p>
+</section>
+
+{% endblock %}

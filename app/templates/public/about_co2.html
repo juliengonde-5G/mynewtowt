@@ -1,0 +1,48 @@
+{% extends "public/_layout.html" %}
+{% block title %}Méthodologie CO₂ — NEWTOWT{% endblock %}
+{% block content %}
+
+<div class="container" style="padding-top: var(--space-6); padding-bottom: var(--space-8); max-width: 800px;">
+  <h1>Comment NEWTOWT calcule les émissions évitées</h1>
+
+  <p class="lead">
+    Méthode transparente, alignée avec le référentiel <strong>EU MRV</strong> (Règlement UE 2015/757)
+    et la GHG Protocol Scope 3 catégorie 4 (Upstream Transportation).
+  </p>
+
+  <h2>Facteurs d'émission</h2>
+  <table>
+    <thead>
+      <tr><th>Mode</th><th>Facteur (g CO₂/t.km)</th><th>Source</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Cargo vélique NEWTOWT</td><td><strong>1,5</strong></td><td>Mesures embarquées + audit DNV</td></tr>
+      <tr><td>Cargo conventionnel</td><td>13,7</td><td>Étude IFP / IMO Fourth Study</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Formule appliquée</h2>
+  <pre class="card mono" style="font-size: var(--text-sm)">CO₂ évité (kg) = (13,7 – 1,5) × tonnage (t) × distance (km) / 1000
+
+distance (km) = distance (NM) × 1,852</pre>
+
+  <h2>Exemple</h2>
+  <p>
+    Une commande de 12 palettes de vin (1,2 t) sur Fécamp → New York (3 200 NM ≈ 5 926 km) évite :
+  </p>
+  <p class="text-accent">
+    (13,7 – 1,5) × 1,2 × 5 926 / 1000 = <strong>86,7 kg CO₂</strong> par rapport à un porte-conteneur.
+  </p>
+
+  <h2>Vérification</h2>
+  <p>
+    Chaque année, nos émissions effectives sont vérifiées par un organisme tiers accrédité dans
+    le cadre du règlement EU MRV. Les rapports vérifiés sont publiés ici dès qu'ils sont émis.
+  </p>
+
+  <p class="text-muted text-sm">
+    Pour télécharger un certificat lié à une expédition, connectez-vous à votre espace client.
+  </p>
+</div>
+
+{% endblock %}

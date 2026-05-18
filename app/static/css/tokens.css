@@ -1,0 +1,124 @@
+/*
+ * NEWTOWT — Kairos design tokens.
+ *
+ * Single source of truth for color, typography, spacing, radius, shadows.
+ * Consumed by kairos.css for component rules. Reference:
+ * docs/design/01-design-handoff.md §2.1
+ */
+:root {
+  /* --- Brand anchor (charte historique) --- */
+  --brand-teal: #0D5966;
+  --brand-vert: #87BD29;
+  --brand-cuivre: #B47148;
+  --brand-sable: #EFE6D6;
+  --brand-marine: #0A2540;
+
+  /* --- Surfaces (dark-first) --- */
+  --bg-0: #08121A;
+  --bg-1: #0F1E27;
+  --bg-2: #1A2D38;
+  --bg-3: #28404E;
+
+  /* --- Text --- */
+  --text-0: #F4F7F9;
+  --text-1: #B8C5CE;
+  --text-2: #7C8B95;
+
+  /* --- Accent & semantic --- */
+  --accent: var(--brand-vert);
+  --accent-hover: #9AD13B;
+  --accent-alt: #4FA6B5;
+  --warn: #E89132;
+  --error: #E14B5A;
+  --ok: var(--brand-vert);
+
+  /* --- Status leg --- */
+  --status-planned: #4FA6B5;
+  --status-inprogress: #E89132;
+  --status-completed: var(--brand-vert);
+  --status-cancelled: #7C8B95;
+
+  /* --- Cargo direction --- */
+  --cargo-import: #4FA6B5;
+  --cargo-export: #E89132;
+
+  /* --- Gradients --- */
+  --gradient-ocean: linear-gradient(135deg, var(--brand-vert) 0%, var(--brand-teal) 100%);
+  --gradient-night: linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
+
+  /* --- Typography --- */
+  --font-display: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body: "Manrope", system-ui, sans-serif;
+  --font-accent: "DM Serif Display", Georgia, serif;
+  --font-mono: "JetBrains Mono", "Fira Mono", monospace;
+
+  --text-xs: 0.75rem;     /* 12 */
+  --text-sm: 0.875rem;    /* 14 */
+  --text-base: 1rem;      /* 16 */
+  --text-lg: 1.25rem;     /* 20 */
+  --text-xl: 1.5rem;      /* 24 */
+  --text-2xl: 2rem;       /* 32 */
+  --text-3xl: 2.5rem;     /* 40 */
+  --text-4xl: 3rem;       /* 48 */
+
+  /* --- Spacing 4px base --- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-8: 3rem;
+  --space-10: 4rem;
+
+  /* --- Radius --- */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* --- Shadows --- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 24px rgba(135, 189, 41, 0.25);
+
+  /* --- Timing --- */
+  --duration-fast: 150ms;
+  --duration-medium: 250ms;
+  --duration-slow: 400ms;
+  --easing-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Light mode override — opt-in via [data-theme="light"] */
+[data-theme="light"] {
+  --bg-0: #FAFBFC;
+  --bg-1: #FFFFFF;
+  --bg-2: #F0F2F5;
+  --bg-3: #E1E5EC;
+  --text-0: #0B0E14;
+  --text-1: #3F4659;
+  --text-2: #7B8395;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg-0: #FAFBFC;
+    --bg-1: #FFFFFF;
+    --bg-2: #F0F2F5;
+    --bg-3: #E1E5EC;
+    --text-0: #0B0E14;
+    --text-1: #3F4659;
+    --text-2: #7B8395;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

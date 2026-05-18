@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Menu client">
+    <h1 class="display">NEWTOWT</h1>
+    <small class="text-muted">Espace client</small>
+    <nav class="mt-4">
+      <ul>
+        <li><a href="/me">📊 Tableau de bord</a></li>
+        <li><a href="/me/bookings">📦 Mes réservations</a></li>
+        <li><a href="/me/invoices">💶 Mes factures</a></li>
+        <li><a href="/me/co2">🌱 Mes certificats CO₂</a></li>
+        <li><a href="/me/account">👤 Mon compte</a></li>
+      </ul>
+      <div class="mt-5">
+        <a href="/booking/new" class="btn btn-primary btn-block">+ Nouvelle réservation</a>
+      </div>
+      <div class="mt-4">
+        <a href="/me/logout" class="btn btn-ghost btn-block">Déconnexion</a>
+      </div>
+    </nav>
+  </aside>
+
+  <main id="main" class="main">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% endblock %}
