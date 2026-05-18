@@ -46,8 +46,8 @@ def test_client_and_staff_tokens_are_separate_serializers() -> None:
 
 def test_expired_token_raises() -> None:
     token = create_staff_session(user_id=42)
-    # itsdangerous treats max_age=0 as "no max_age". Sleep > 1s, decode with
-    # max_age=1s.
-    time.sleep(1.2)
+    # itsdangerous compares integer-seconds timestamps; sleep > 2s to ensure
+    # the token is unambiguously beyond max_age=1.
+    time.sleep(2.1)
     with pytest.raises(AuthExpired):
         _decode(token, _staff_serializer, max_age=1)

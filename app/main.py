@@ -14,7 +14,7 @@ from app.auth import AuthError, AuthExpired, AuthInvalid, AuthRequired
 from app.config import settings
 from app.csrf import CSRFMiddleware
 from app.database import init_db
-from app.middlewares import SecurityHeadersMiddleware
+from app.middlewares import MaintenanceMiddleware, SecurityHeadersMiddleware
 from app.routers import (
     api_v1_router,
     booking_router,
@@ -56,6 +56,7 @@ def create_app() -> FastAPI:
         allow_headers=["*", "HX-Request", "HX-Trigger", "HX-Target", "HX-Current-URL"],
     )
     app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(MaintenanceMiddleware)
     app.add_middleware(CSRFMiddleware)
 
     # --------------------------------------------------------------- Routers

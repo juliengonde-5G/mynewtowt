@@ -54,17 +54,54 @@ Compte par défaut local : `admin@local` / `change-me-now`.
 
 ## 4. Déploiement
 
+Scripts livrés dans `scripts/` :
+
+| Script | Rôle | Détail |
+|--------|------|--------|
+| `deploy.sh` | Déploiement prod ou staging | 9 étapes idempotentes avec gating health + smoke |
+| `rollback.sh` | Restauration snapshot | MTTR cible < 15 min |
+| `smoke-tests.sh` | Vérifications post-deploy | Probes HTTP de 12 endpoints critiques |
+| `maintenance.sh` | Bandeau maintenance | `on` / `off` / `status` |
+
 ```bash
-# Déploiement staging (automatique sur merge main)
-gh workflow run deploy-staging.yml --ref main
+# Déploiement production sur la version HEAD courante
+./scripts/deploy.sh
 
-# Déploiement prod (approbation manuelle requise)
-gh workflow run deploy-prod.yml --ref main \
-    -f version=v3.0.0
+# Déploiement staging d'un tag précis
+./scripts/deploy.sh --env staging --version v3.0.1
 
-# Rollback
-./scripts/rollback.sh v2.9.5
+# Rollback au dernier snapshot pris par deploy.sh
+./scripts/rollback.sh
+
+# Rollback à un snapshot précis
+./scripts/rollback.sh --list
+./scripts/rollback.sh backups/pre-v3.0.0-20260518T160000Z.dump
+
+# Mode maintenance manuel (sans redeploy)
+./scripts/maintenance.sh on
+./scripts/maintenance.sh off
+./scripts/maintenance.sh status
+
+# Tests de fumée externes
+./scripts/smoke-tests.sh https://staging.my.newtowt.eu
 ```
+
+### 4.1 Workflow `deploy.sh`
+
+1. Pre-flight : docker / git / curl présents, `.env` valide, refus
+   prod si SECRET_KEY ou DB password faibles, ≥ 2 GB disque libre.
+2. Snapshot PostgreSQL `pg_dump -Fc` → `backups/pre-<ver>-<ts>.dump`,
+   rotation > `BACKUP_RETENTION_DAYS` (30 j par défaut).
+3. Tag git `release/<ver>-<ts>` (non bloquant).
+4. Build image via `docker compose build app`.
+5. Maintenance ON (bandeau 503 sauf `/health` et `/static/*`).
+6. Alembic `upgrade head` dans un conteneur `run --rm`. Si échec :
+   restore snapshot et exit 1.
+7. Rolling restart `up -d --force-recreate app`.
+8. Wait `/health` pendant `HEALTH_TIMEOUT_SECONDS` (90 s). Échec ⇒
+   rollback + exit 2.
+9. Smoke tests (12 endpoints). Échec ⇒ rollback + exit 2.
+10. Maintenance OFF + report.
 
 ## 5. Backups
 
