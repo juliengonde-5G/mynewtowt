@@ -83,7 +83,7 @@ async def login(
 
     token = create_client_session(user.id)
     redirect = RedirectResponse(url="/me", status_code=303)
-    redirect.set_cookie(value=token, **cookie_kwargs_for_client())
+    redirect.set_cookie(value=token, **cookie_kwargs_for_client(request))
     return redirect
 
 
@@ -153,7 +153,7 @@ async def register(
 
     token = create_client_session(client.id)
     redirect = RedirectResponse(url="/me", status_code=303)
-    redirect.set_cookie(value=token, **cookie_kwargs_for_client())
+    redirect.set_cookie(value=token, **cookie_kwargs_for_client(request))
     return redirect
 
 

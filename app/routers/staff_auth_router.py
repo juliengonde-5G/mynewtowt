@@ -67,7 +67,7 @@ async def login(
     token = create_staff_session(user.id)
     redirect_to = "/admin/my-account/change-password" if user.must_change_password else "/dashboard"
     redirect = RedirectResponse(url=redirect_to, status_code=303)
-    redirect.set_cookie(value=token, **cookie_kwargs_for_staff())
+    redirect.set_cookie(value=token, **cookie_kwargs_for_staff(request))
     return redirect
 
 

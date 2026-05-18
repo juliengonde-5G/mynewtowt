@@ -12,7 +12,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from passlib.context import CryptContext
 from sqlalchemy import select
@@ -176,23 +176,38 @@ async def get_optional_client(
         return None
 
 
-def cookie_kwargs_for_staff() -> dict:
+def _is_https(request: "Request | None") -> bool:
+    """Return True iff the effective scheme is HTTPS.
+
+    Honors X-Forwarded-Proto when set by the reverse proxy (nginx).
+    Falls back to request.url.scheme. Returns False if no request given,
+    which leaves the cookie usable over plain HTTP during bootstrap.
+    """
+    if request is None:
+        return False
+    forwarded = request.headers.get("x-forwarded-proto", "").lower()
+    if forwarded:
+        return forwarded == "https"
+    return request.url.scheme == "https"
+
+
+def cookie_kwargs_for_staff(request: "Request | None" = None) -> dict:
     return {
         "key": STAFF_COOKIE,
         "max_age": settings.access_token_expire_minutes * 60,
         "httponly": True,
-        "secure": settings.app_env != "development",
+        "secure": _is_https(request),
         "samesite": "lax",
         "path": "/",
     }
 
 
-def cookie_kwargs_for_client() -> dict:
+def cookie_kwargs_for_client(request: "Request | None" = None) -> dict:
     return {
         "key": CLIENT_COOKIE,
         "max_age": settings.client_session_days * 86400,
         "httponly": True,
-        "secure": settings.app_env != "development",
+        "secure": _is_https(request),
         "samesite": "lax",
         "path": "/",
     }
