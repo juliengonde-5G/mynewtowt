@@ -105,22 +105,21 @@ class Settings(BaseSettings):
             raise ValueError(
                 "DATABASE_URL must use the async driver: postgresql+asyncpg://"
             )
-        for weak in WEAK_DB_PASSWORDS:
-            if weak in v and not v.startswith("postgresql+asyncpg://towt:change_me_local"):
-                # allow local dev value but warn loudly in prod via _enforce_prod_safety
-                pass
         return v
 
     def _enforce_prod_safety(self) -> None:
         """Hard refusals if running in production with weak config."""
         if self.app_env != "production":
             return
-        for weak in WEAK_DB_PASSWORDS:
-            if weak in self.database_url:
-                raise RuntimeError(
-                    f"Production refusing to start: DATABASE_URL contains weak password "
-                    f"fragment '{weak}'."
-                )
+        from urllib.parse import urlparse
+
+        parsed = urlparse(self.database_url)
+        password = parsed.password or ""
+        if password in WEAK_DB_PASSWORDS:
+            raise RuntimeError(
+                f"Production refusing to start: DATABASE_URL password is in the "
+                f"weak list ({password!r}). Generate a random one."
+            )
         if self.stripe_secret_key and self.stripe_secret_key.startswith("sk_test_"):
             raise RuntimeError(
                 "Production refusing to start: STRIPE_SECRET_KEY is a test key (sk_test_)."
@@ -129,9 +128,12 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    s = Settings()  # type: ignore[call-arg]
-    s._enforce_prod_safety()
-    return s
+    return Settings()  # type: ignore[call-arg]
+
+
+def enforce_production_safety() -> None:
+    """Call this at app startup. Raises RuntimeError on unsafe prod config."""
+    get_settings()._enforce_prod_safety()
 
 
 settings = get_settings()

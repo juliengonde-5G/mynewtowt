@@ -128,6 +128,8 @@ def create_app() -> FastAPI:
     # ----------------------------------------------------------- Lifecycle
     @app.on_event("startup")
     async def _on_startup() -> None:
+        from app.config import enforce_production_safety
+        enforce_production_safety()
         await init_db()
         logger.info("mynewtowt %s started (env=%s)", __version__, settings.app_env)
 
