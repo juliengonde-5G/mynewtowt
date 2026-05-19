@@ -347,18 +347,24 @@ async def _nullify_optional_fks(db: AsyncSession, leg_id: int) -> None:
 
     Ces tables conservent la donnée historique mais perdent le lien
     vers le leg supprimé. Couvre : claims, tickets, onboard_cashboxes,
-    crew_tickets, co2_certificates, rate_grid_lines.
+    crew_tickets, co2_certificates, commercial orders.
+
+    RateGridLine n'est PAS dans la liste — bien que commercial.py le
+    suggère par voisinage, ce modèle n'a pas de FK leg_id (les lignes
+    de grille tarifaire ne sont pas liées à un leg spécifique).
     """
     from sqlalchemy import update
 
     from app.models.claim import Claim
     from app.models.co2_certificate import CO2Certificate
-    from app.models.commercial import RateGridLine
+    from app.models.commercial import Order
     from app.models.crew_ticket import CrewTicket
-    from app.models.onboard_cashbox import OnboardCashbox
+    from app.models.onboard_cashbox import CashboxMovement
     from app.models.ticket import Ticket
 
-    for model in (Claim, Ticket, OnboardCashbox, CrewTicket, CO2Certificate, RateGridLine):
+    # CashboxMovement (pas OnboardCashbox) porte le leg_id : un mouvement
+    # cash est rattaché à un leg, le coffre lui-même non.
+    for model in (Claim, Ticket, CashboxMovement, CrewTicket, CO2Certificate, Order):
         await db.execute(
             update(model).where(model.leg_id == leg_id).values(leg_id=None)
         )
