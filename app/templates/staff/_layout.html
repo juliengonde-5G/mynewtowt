@@ -16,13 +16,6 @@
     </div>
     <small class="role-label">ERP{% if user is defined and user %} — {{ user.role }}{% endif %}</small>
 
-    {# Sidebar clock — UTC / Paris / next port(s) injected by clock.js #}
-    <div class="sidebar-clock" id="sidebar-clock" data-port-tz="UTC">
-      <div class="clock-row"><span class="clock-label">UTC</span><span class="clock-time" id="clock-utc">--:--</span></div>
-      <div class="clock-row"><span class="clock-label">Paris</span><span class="clock-time" id="clock-paris">--:--</span></div>
-      <div id="clock-port-rows"></div>
-    </div>
-
     <nav>
       <div class="nav-group" data-group="pilotage">
         <button class="nav-group-toggle" aria-expanded="true">

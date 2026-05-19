@@ -127,8 +127,9 @@
 
   <h2 class="mt-4">Réservation publique</h2>
   <div class="grid grid-3 gap-3">
-    <div class="field">
-      <label><input type="checkbox" name="is_bookable" {% if leg and leg.is_bookable %}checked{% endif %} /> Ouvrir aux réservations clients</label>
+    <div class="field field-check">
+      <input id="is_bookable" type="checkbox" name="is_bookable" {% if leg and leg.is_bookable %}checked{% endif %} />
+      <label for="is_bookable">Ouvrir aux réservations clients</label>
     </div>
     <div class="field">
       <label for="public_capacity_palettes">Capacité publique (palettes)</label>
@@ -148,8 +149,11 @@
   </div>
 
   {% if leg %}
-    <div class="field" style="background:var(--sable-light); padding:var(--space-3); border-radius:var(--radius-sm); margin-top:var(--space-4);">
-      <label><input type="checkbox" name="cascade" checked /> <strong>Cascade automatique</strong></label>
+    <div class="alert alert-info" style="margin-top:var(--space-4);">
+      <div class="field field-check" style="background:transparent; border:none; padding:0;">
+        <input id="cascade" type="checkbox" name="cascade" checked />
+        <label for="cascade"><strong>Cascade automatique</strong></label>
+      </div>
       <p class="text-muted text-sm" style="margin:var(--space-1) 0 0 0;">
         Décaler l'ETD propage le delta à tous les legs en aval du même navire
         qui ne sont pas encore appareillés.

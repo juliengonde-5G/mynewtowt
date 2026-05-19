@@ -4,7 +4,17 @@
     <i data-lucide="menu" class="nav-icon"></i>
   </button>
 
-  <div class="topbar-title">{% block topbar_title %}Espace client{% endblock %}</div>
+  {%- set _path = request.url.path -%}
+  {%- set _page_labels = {
+        "/me": "Tableau de bord",
+        "/me/bookings": "Mes réservations",
+        "/me/invoices": "Mes factures",
+        "/me/co2": "Mes certificats CO₂",
+        "/me/account": "Mon compte",
+        "/booking/new": "Nouvelle réservation",
+  } -%}
+  {%- set _label = _page_labels.get(_path, "Espace client") -%}
+  <div class="topbar-title">{% block topbar_title %}{{ _label }}{% endblock %}</div>
 
   <div class="topbar-actions">
     <div class="clock-widget" aria-live="off">

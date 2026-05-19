@@ -148,6 +148,7 @@ async def update_leg(
     db: AsyncSession,
     leg: Leg,
     *,
+    vessel_id: int | None = None,
     etd: datetime | None = None,
     eta: datetime | None = None,
     departure_port_id: int | None = None,
@@ -163,17 +164,31 @@ async def update_leg(
     """Update a leg in place. If etd shifts and cascade=True, propagate the
     delta to all downstream legs of the same vessel that haven't sailed yet.
 
-    Returns the CascadeReport (with delta and impacted ids), or None if
-    no cascade was performed.
+    When vessel_id, departure_port_id, arrival_port_id ou etd's year change,
+    the leg_code is recomputed (format {SHIP}{LETTER}{POL}{POD}{YR}) avec
+    une lettre de séquence (A→J) unique pour éviter les collisions.
+
+    Returns the CascadeReport, ou None si aucune cascade n'a été effectuée.
     """
+    from app.models.port import Port
+    from app.models.vessel import Vessel
+
     new_etd = etd or leg.etd
     new_eta = eta or leg.eta
     validate_dates(new_etd, new_eta)
 
     delta = new_etd - leg.etd
+    # Capture old reference points BEFORE applying changes
+    old_vessel_id = leg.vessel_id
+    old_pol_id = leg.departure_port_id
+    old_pod_id = leg.arrival_port_id
+    old_year_digit = str(leg.etd.year)[-1]
+
     leg.etd = new_etd
     leg.eta = new_eta
 
+    if vessel_id is not None:
+        leg.vessel_id = vessel_id
     if departure_port_id is not None:
         leg.departure_port_id = departure_port_id
     if arrival_port_id is not None:
@@ -192,6 +207,34 @@ async def update_leg(
         leg.transit_speed_kn = transit_speed_kn
     if elongation_coef is not None:
         leg.elongation_coef = elongation_coef
+
+    # Recompute leg_code si l'une de ses entrées a changé
+    if (
+        leg.vessel_id != old_vessel_id
+        or leg.departure_port_id != old_pol_id
+        or leg.arrival_port_id != old_pod_id
+        or str(leg.etd.year)[-1] != old_year_digit
+    ):
+        vessel = await db.get(Vessel, leg.vessel_id)
+        pol = await db.get(Port, leg.departure_port_id)
+        pod = await db.get(Port, leg.arrival_port_id)
+        if vessel and pol and pod:
+            for letter in "ABCDEFGHIJ":
+                candidate = _leg_code_for(
+                    vessel.code, pol.country, pod.country, leg.etd, letter,
+                )
+                if candidate == leg.leg_code:
+                    break  # Déjà unique avec cette lettre — on garde
+                existing = (
+                    await db.execute(
+                        select(Leg)
+                        .where(Leg.leg_code == candidate)
+                        .where(Leg.id != leg.id)
+                    )
+                ).scalar_one_or_none()
+                if not existing:
+                    leg.leg_code = candidate
+                    break
 
     if not cascade or delta == timedelta(0):
         await db.flush()

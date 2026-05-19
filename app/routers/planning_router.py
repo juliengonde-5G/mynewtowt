@@ -274,6 +274,7 @@ async def update_leg_action(
         report = await update_leg(
             db,
             leg,
+            vessel_id=_maybe_int(form.get("vessel_id")),
             etd=_parse_dt(form.get("etd"), allow_empty=True),
             eta=_parse_dt(form.get("eta"), allow_empty=True),
             departure_port_id=_maybe_int(form.get("departure_port_id")),

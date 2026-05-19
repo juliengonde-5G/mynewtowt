@@ -9,7 +9,9 @@
 
 html {
   font-family: var(--font-corps);
-  font-size: 16px;
+  /* 14px base — compact ERP density (rem-based tokens scale proportionnellement
+     de -12.5 % vs 16px : xs=10.5, sm=12.25, base=14, md=15.75, lg=21, xl=28, 2xl=38.5). */
+  font-size: 14px;
   background: var(--bg-0);
   color: var(--text-0);
   -webkit-font-smoothing: antialiased;
@@ -321,6 +323,56 @@ form input:focus, form select:focus, form textarea:focus {
   box-shadow: var(--shadow-glow);
 }
 form .field-error { color: var(--danger); font-size: var(--text-xs); margin-top: var(--space-1); }
+
+/* Checkbox + libellé inline — visuellement aligné avec les autres champs.
+ * Usage : <div class="field field-check">
+ *   <input id="only_bookable" type="checkbox" name="only_bookable" />
+ *   <label for="only_bookable">Afficher uniquement les legs réservables</label>
+ * </div>
+ */
+form .field-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--blanc);
+  border: 1px solid var(--gris-clair);
+  border-radius: var(--radius-sm);
+  min-height: calc(var(--text-base) * 1.4 + var(--space-2) * 2 + 2px);
+}
+form .field-check input[type="checkbox"] {
+  width: 16px; height: 16px;
+  margin: 0;
+  accent-color: var(--teal);
+  flex-shrink: 0;
+}
+form .field-check label {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-0);
+  font-weight: var(--fw-regular);
+  cursor: pointer;
+  flex: 1;
+}
+
+/* Toggle pour les .field imbriqués dans un fieldset (pas de margin-bottom) */
+form .field-tight { margin-bottom: 0; }
+
+/* Fieldsets cohérents avec les autres champs */
+form fieldset {
+  border: 1px solid var(--gris-clair);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin: 0 0 var(--space-4) 0;
+}
+form fieldset > legend {
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wider);
+  font-weight: var(--fw-semibold);
+  color: var(--cuivre);
+}
 
 /* ─────────────────────────── Alerts ───────────────────────────────── */
 .alert {
