@@ -85,11 +85,14 @@
           "background:rgba(255,255,255,.92);padding:12px 20px;border-radius:6px;" +
           "font-size:14px;color:#6E6E6E;text-align:center;z-index:5;"
         );
-        note.innerHTML = (
-          "Aucune position enregistrée." +
-          "<br><small>Alimente <code>vessel_positions</code> via le module Tracking " +
-          "(POST /api/tracking/upload avec X-API-Token).</small>"
+        // Texte de fallback configurable via data-no-position-text / data-no-position-detail
+        // injectés par le serveur en fonction de la langue détectée.
+        var mainText = el.dataset.noPositionText || "Aucune position enregistrée.";
+        var detailText = el.dataset.noPositionDetail || (
+          "Alimente <code>vessel_positions</code> via le module Tracking " +
+          "(POST /api/tracking/upload avec X-API-Token)."
         );
+        note.innerHTML = mainText + "<br><small>" + detailText + "</small>";
         el.style.position = "relative";
         el.appendChild(note);
       }

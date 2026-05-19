@@ -1,11 +1,13 @@
 {% extends "public/_layout.html" %}
-{% block title %}{{ share.label or "Planning partagé" }} — {{ brand.nom_court }}{% endblock %}
+{% block title %}{{ share.label or ('Shared planning' if lang == 'en' else 'Planning partagé') }} — {{ brand.nom_court }}{% endblock %}
 {% block content %}
 
 <section class="hero">
   <div class="container">
-    <span class="kicker">Planning partagé</span>
-    <h1 class="display">{{ share.label or "Vue planning" }}</h1>
+    <span class="kicker">{% if lang == 'en' %}Shared planning{% else %}Planning partagé{% endif %}</span>
+    <h1 class="display">
+      {{ share.label or ('Planning view' if lang == 'en' else 'Vue planning') }}
+    </h1>
     {% if share.description %}
       <p class="lead">{{ share.description }}</p>
     {% endif %}
@@ -45,9 +47,15 @@
     </div>
 
     <p class="text-muted text-sm mt-4">
-      Lien de partage en lecture seule. Pour réserver un voyage, passez par
-      <a href="/routes">la recherche de routes</a> ou
-      <a href="mailto:{{ brand.email }}">{{ brand.email }}</a>.
+      {% if lang == 'en' %}
+        Read-only sharing link. To book a voyage, go through
+        <a href="/routes">the route search</a> or
+        <a href="mailto:{{ brand.email }}">{{ brand.email }}</a>.
+      {% else %}
+        Lien de partage en lecture seule. Pour réserver un voyage, passez par
+        <a href="/routes">la recherche de routes</a> ou
+        <a href="mailto:{{ brand.email }}">{{ brand.email }}</a>.
+      {% endif %}
     </p>
   </div>
 </section>

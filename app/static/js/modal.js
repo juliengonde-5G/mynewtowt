@@ -55,7 +55,11 @@
       })
       .then(open)
       .catch(function (err) {
-        if (window.showToast) window.showToast("Erreur de chargement : " + err.message, "error");
+        // Lit la lang depuis <html lang="..."> (positionné par le serveur).
+        var msg = (document.documentElement.lang === 'fr')
+          ? "Erreur de chargement : " + err.message
+          : "Loading error: " + err.message;
+        if (window.showToast) window.showToast(msg, "error");
         else console.error(err);
       });
   }

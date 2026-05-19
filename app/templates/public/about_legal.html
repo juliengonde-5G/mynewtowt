@@ -17,8 +17,10 @@
       {{ brand.adresse }}<br/>
       {% if lang == 'en' %}Phone{% else %}Téléphone{% endif %} : <a href="tel:{{ brand.telephone|replace(' ','') }}">{{ brand.telephone }}</a><br/>
       Email : <a href="mailto:{{ brand.email }}">{{ brand.email }}</a><br/>
-      {% if lang == 'en' %}Publication director{% else %}Directeur de la publication{% endif %} : (à compléter)<br/>
-      {% if lang == 'en' %}Company registration{% else %}RCS / SIREN{% endif %} : (à compléter)
+      {% if lang == 'en' %}Publication director{% else %}Directeur de la publication{% endif %} :
+      {% if lang == 'en' %}(to be filled in){% else %}(à compléter){% endif %}<br/>
+      {% if lang == 'en' %}Company registration{% else %}RCS / SIREN{% endif %} :
+      {% if lang == 'en' %}(to be filled in){% else %}(à compléter){% endif %}
     </p>
 
     <h2 class="section-title">{% if lang == 'en' %}Hosting{% else %}Hébergement{% endif %}</h2>
