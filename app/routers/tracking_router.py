@@ -95,9 +95,22 @@ def _parse_dt(v) -> datetime | None:
     s = str(v).strip()
     if not s:
         return None
-    s = s.replace("Z", "+00:00")
+    # Unix timestamp (10 digits = seconds, 13 digits = ms)
+    if s.isdigit():
+        try:
+            ts = int(s)
+            if ts > 10**12:  # ms
+                ts = ts // 1000
+            if 10**9 <= ts <= 4 * 10**9:  # plausible epoch ~ 2001-2096
+                return datetime.fromtimestamp(ts, tz=timezone.utc)
+        except (ValueError, OverflowError):
+            pass
+    s_iso = s.replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(s)
+        dt = datetime.fromisoformat(s_iso)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
     except ValueError:
         for fmt in (
             "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
@@ -110,6 +123,32 @@ def _parse_dt(v) -> datetime | None:
                 return datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
             except ValueError:
                 continue
+    return None
+
+
+def _get_col(row: dict, *candidates: str) -> object:
+    """Lookup d'une colonne avec tolérance aux variations courantes :
+    - exact match
+    - case-insensitive
+    - en enlevant les suffixes parenthétiques (ex. "SOG (knots)" → "SOG")
+    - en remplaçant espaces par underscores et vice versa
+    """
+    if not row:
+        return None
+    # 1. exact
+    for c in candidates:
+        if c in row and row[c] not in (None, ""):
+            return row[c]
+    # 2. normalize : lower-case + strip parens + strip non-alnum
+    def _norm(s: str) -> str:
+        s = re.sub(r"\([^)]*\)", "", str(s))  # drop "(knots)" etc.
+        s = re.sub(r"[^a-z0-9]+", "", s.lower())
+        return s
+    norm_row = {_norm(k): v for k, v in row.items() if k}
+    for c in candidates:
+        nc = _norm(c)
+        if nc in norm_row and norm_row[nc] not in (None, ""):
+            return norm_row[nc]
     return None
 
 
@@ -234,10 +273,13 @@ def _resolve_vessel(
 ) -> Vessel | None:
     """Tente plusieurs stratégies pour identifier le navire.
 
-    1. Colonne explicite (vessel_code, Vessel, Code, MMSI, IMO)
-    2. Extraction du 1er nombre 4+ chars du nom de fichier (ex. DailyReport-19914-...)
-    3. Mapping TRACKING_VESSEL_MAP (.env) sur l'identifiant brut
+    1. Colonne explicite (vessel_code, Vessel, Code, MMSI, IMO, Name…)
+    2. Recherche du nom du navire dans le filename (ex. "anemos" dans
+       "98abb4ff-20241021100502anemossatcoms.csv")
+    3. Extraction du 1er nombre 4+ chars du filename (ex. "19914") → IMO/mapping
+    4. Mapping TRACKING_VESSEL_MAP (.env) sur l'identifiant brut
     """
+    # 1. Colonnes explicites
     candidates = [
         row.get("vessel_code"), row.get("vessel"), row.get("code"),
         row.get("Vessel"), row.get("Code"), row.get("VESSEL"),
@@ -248,36 +290,42 @@ def _resolve_vessel(
         if c is None or str(c).strip() == "":
             continue
         s = str(c).strip()
-        # Direct hit on code
         if s in vessels:
             return vessels[s]
-        # Mapping override
         mapped = vmap.get(s)
         if mapped and mapped in vessels:
             return vessels[mapped]
-        # By IMO
         for v in vessels.values():
             if v.imo_number and str(v.imo_number) == s:
                 return v
-        # By name (case-insensitive)
         for v in vessels.values():
             if v.name and v.name.lower() == s.lower():
                 return v
 
-    # Fallback : extraire identifiant du nom de fichier
-    if filename:
-        m = _FILENAME_VESSEL_RE.search(filename)
-        if m:
-            ext_id = m.group(1)
-            mapped = vmap.get(ext_id)
-            if mapped and mapped in vessels:
-                return vessels[mapped]
-            if ext_id in vessels:
-                return vessels[ext_id]
-            # Essayer comme IMO
-            for v in vessels.values():
-                if v.imo_number and str(v.imo_number) == ext_id:
-                    return v
+    if not filename:
+        return None
+
+    fname_low = filename.lower()
+
+    # 2. Recherche du nom du navire (substring case-insensitive)
+    # Ex. "98abb4ff-20241021100502anemossatcoms.csv" → matche "anemos" → Anemos
+    for v in vessels.values():
+        if v.name and v.name.lower() in fname_low:
+            return v
+
+    # 3. Identifiant numérique dans le filename
+    m = _FILENAME_VESSEL_RE.search(filename)
+    if m:
+        ext_id = m.group(1)
+        mapped = vmap.get(ext_id)
+        if mapped and mapped in vessels:
+            return vessels[mapped]
+        if ext_id in vessels:
+            return vessels[ext_id]
+        for v in vessels.values():
+            if v.imo_number and str(v.imo_number) == ext_id:
+                return v
+
     return None
 
 
@@ -349,30 +397,27 @@ async def upload_positions(
                 )
             continue
 
-        # Date — accepte une multitude de noms et formats
-        date_val = (
-            row.get("date") or row.get("Date") or row.get("DateTime")
-            or row.get("datetime") or row.get("Datetime") or row.get("Timestamp")
-            or row.get("timestamp") or row.get("recorded_at") or row.get("Recorded_At")
-            or row.get("Time UTC") or row.get("UTC") or row.get("ReportTime")
+        # Date — préfère ISO 8601 (Date / DateTime), fallback Unix Timestamp
+        date_val = _get_col(
+            row, "date", "Date", "DateTime", "datetime", "Datetime",
+            "recorded_at", "Recorded_At", "Time UTC", "UTC", "ReportTime",
         )
+        if not date_val:
+            date_val = _get_col(row, "Timestamp", "timestamp")
         dt = _parse_dt(date_val)
 
-        lat = _parse_float(
-            row.get("lat") or row.get("Lat") or row.get("Latitude") or row.get("latitude")
-            or row.get("LAT")
-        )
-        lon = _parse_float(
-            row.get("lon") or row.get("Lon") or row.get("Longitude") or row.get("longitude")
-            or row.get("lng") or row.get("Long") or row.get("LON") or row.get("LONG")
-        )
+        lat = _parse_float(_get_col(row, "lat", "Lat", "Latitude", "latitude", "LAT"))
+        lon = _parse_float(_get_col(
+            row, "lon", "Lon", "Longitude", "longitude", "lng", "Long", "LON", "LONG"
+        ))
 
         if dt is None or lat is None or lon is None:
             skipped += 1
             if len(errors) < 10:
                 errors.append(
                     f"row {idx}: missing/unparseable date/lat/lon "
-                    f"(date={date_val!r}, lat={row.get('lat')!r}, lon={row.get('lon')!r}, keys={list(row.keys())[:6]})"
+                    f"(date={date_val!r}, lat={_get_col(row, 'lat', 'Latitude')!r}, "
+                    f"lon={_get_col(row, 'lon', 'Longitude')!r}, keys={list(row.keys())[:8]})"
                 )
             continue
 
@@ -385,19 +430,23 @@ async def upload_positions(
             skipped += 1
             continue
 
+        # source : prend "Active interface" (Starlink_xxx) si dispo, sinon "satcom"
+        source_val = _get_col(
+            row, "source", "Source", "Active interface", "ActiveInterface", "interface",
+        ) or "satcom"
+
         db.add(VesselPosition(
             vessel_id=v.id,
             recorded_at=dt,
             latitude=lat,
             longitude=lon,
-            sog_kn=_parse_float(
-                row.get("sog") or row.get("SOG") or row.get("speed") or row.get("Speed")
-            ),
-            cog_deg=_parse_float(
-                row.get("cog") or row.get("COG") or row.get("heading") or row.get("Heading")
-                or row.get("course")
-            ),
-            source=(row.get("source") or "satcom")[:40],
+            sog_kn=_parse_float(_get_col(
+                row, "sog", "SOG", "SOG (knots)", "speed", "Speed", "speed_knots",
+            )),
+            cog_deg=_parse_float(_get_col(
+                row, "cog", "COG", "COG (degree)", "COG (degrees)", "heading", "Heading", "course",
+            )),
+            source=str(source_val)[:40],
         ))
         inserted += 1
 
