@@ -23,6 +23,10 @@ from app.database import get_db
 
 STAFF_COOKIE = "towt_session"
 CLIENT_COOKIE = "towt_client_session"
+# Cookie intermédiaire pose au moment du POST /me/login quand l'utilisateur
+# a MFA activé : courte durée (5 min), redirigé vers /me/login/mfa.
+CLIENT_MFA_PENDING_COOKIE = "towt_client_mfa_pending"
+CLIENT_MFA_PENDING_TTL_SECONDS = 5 * 60
 
 # Durée de session staff par rôle (en minutes). Les marins / commandants
 # embarquent pour 15+ jours sans satcom fiable → leur fenêtre par défaut
@@ -51,6 +55,7 @@ _MAX_STAFF_SESSION_MINUTES = max(
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _staff_serializer = URLSafeTimedSerializer(settings.secret_key, salt="staff-session")
 _client_serializer = URLSafeTimedSerializer(settings.secret_key, salt="client-session")
+_client_mfa_serializer = URLSafeTimedSerializer(settings.secret_key, salt="client-mfa-pending")
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +88,36 @@ def create_staff_session(user_id: int) -> str:
 def create_client_session(client_id: int) -> str:
     payload = {"cid": client_id, "iat": datetime.now(timezone.utc).timestamp()}
     return _client_serializer.dumps(payload)
+
+
+def create_client_mfa_pending(client_id: int) -> str:
+    """Token court (5min) signé pour la phase challenge MFA d'un login client."""
+    payload = {"cid": client_id, "iat": datetime.now(timezone.utc).timestamp()}
+    return _client_mfa_serializer.dumps(payload)
+
+
+def decode_client_mfa_pending(token: str) -> int | None:
+    """Renvoie le client_id si le token est valide & non-expiré, sinon None."""
+    if not token:
+        return None
+    try:
+        payload = _client_mfa_serializer.loads(
+            token, max_age=CLIENT_MFA_PENDING_TTL_SECONDS,
+        )
+    except (BadSignature, SignatureExpired):
+        return None
+    return payload.get("cid")
+
+
+def cookie_kwargs_for_client_mfa_pending(request: "Request | None" = None) -> dict:
+    return {
+        "key": CLIENT_MFA_PENDING_COOKIE,
+        "max_age": CLIENT_MFA_PENDING_TTL_SECONDS,
+        "httponly": True,
+        "secure": _is_https(request),
+        "samesite": "lax",
+        "path": "/",
+    }
 
 
 def _decode(token: str, serializer: URLSafeTimedSerializer, max_age: int) -> dict:

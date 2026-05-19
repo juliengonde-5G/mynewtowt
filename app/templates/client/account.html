@@ -39,8 +39,12 @@
           <span class="pill pill-warn">{% if lang == 'en' %}Not enabled{% else %}Non activée{% endif %}</span>
         {% endif %}
       </p>
-      <a href="#" class="btn btn-secondary">
-        {% if lang == 'en' %}Configure 2FA{% else %}Configurer 2FA{% endif %}
+      <a href="/me/account/mfa" class="btn btn-secondary">
+        {% if client.mfa_enabled %}
+          {% if lang == 'en' %}Manage 2FA{% else %}Gérer la 2FA{% endif %}
+        {% else %}
+          {% if lang == 'en' %}Configure 2FA{% else %}Configurer 2FA{% endif %}
+        {% endif %}
       </a>
     </div>
   </div>

@@ -20,15 +20,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import (
+    CLIENT_COOKIE,
+    CLIENT_MFA_PENDING_COOKIE,
     cookie_kwargs_for_client,
+    cookie_kwargs_for_client_mfa_pending,
+    create_client_mfa_pending,
     create_client_session,
+    decode_client_mfa_pending,
     hash_password,
     verify_password,
-    CLIENT_COOKIE,
 )
 from app.database import get_db
 from app.models.client_account import ClientAccount
-from app.services import rate_limit
+from app.services import mfa, rate_limit
 from app.services.activity import record as activity_record
 from app.templating import templates
 
@@ -109,6 +113,20 @@ async def login(
             status_code=400,
         )
 
+    # Si MFA activé sur ce compte : ne pas poser le cookie session tout
+    # de suite. On signe un token court (5min) "MFA pending" et on
+    # redirige vers /me/login/mfa pour la phase challenge.
+    if getattr(user, "mfa_enabled", False) and user.mfa_secret:
+        await activity_record(
+            db, action="client_login_password_ok_mfa_required",
+            user_name=user.email, module="booking",
+            entity_type="client_account", entity_id=user.id, ip_address=ip,
+        )
+        pending = create_client_mfa_pending(user.id)
+        redirect = RedirectResponse(url="/me/login/mfa", status_code=303)
+        redirect.set_cookie(value=pending, **cookie_kwargs_for_client_mfa_pending(request))
+        return redirect
+
     user.last_login_at = datetime.now(timezone.utc)
     await activity_record(
         db,
@@ -123,6 +141,79 @@ async def login(
     token = create_client_session(user.id)
     redirect = RedirectResponse(url="/me", status_code=303)
     redirect.set_cookie(value=token, **cookie_kwargs_for_client(request))
+    return redirect
+
+
+# ─────────────────────────────────────────────────────────────────────
+#                       MFA challenge (post-password)
+# ─────────────────────────────────────────────────────────────────────
+
+
+@router.get("/me/login/mfa", response_class=HTMLResponse)
+async def mfa_challenge_form(
+    request: Request,
+    mfa_pending: str | None = None,  # cookie injected via dependency below
+) -> HTMLResponse:
+    pending_cookie = request.cookies.get(CLIENT_MFA_PENDING_COOKIE)
+    if not pending_cookie or decode_client_mfa_pending(pending_cookie) is None:
+        return RedirectResponse(url="/me/login", status_code=303)
+    return templates.TemplateResponse(
+        "client/mfa_challenge.html", {"request": request, "error": None},
+    )
+
+
+@router.post("/me/login/mfa", response_class=HTMLResponse)
+async def mfa_challenge_submit(
+    request: Request,
+    code: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    ip = _client_ip(request) or "unknown"
+    pending_cookie = request.cookies.get(CLIENT_MFA_PENDING_COOKIE)
+    client_id = decode_client_mfa_pending(pending_cookie or "")
+    if client_id is None:
+        return RedirectResponse(url="/me/login", status_code=303)
+
+    # Rate-limit dédié pour le challenge MFA (5/5min — anti-bruteforce).
+    if await rate_limit.exceeded(
+        db, scope="client_mfa_ip", identifier=ip,
+        max_attempts=5, window_minutes=5,
+    ):
+        return templates.TemplateResponse(
+            "client/mfa_challenge.html",
+            {"request": request, "error": "Trop de tentatives — patientez 5 minutes."},
+            status_code=429,
+        )
+
+    user = await db.get(ClientAccount, client_id)
+    if user is None or not user.mfa_enabled or not user.mfa_secret:
+        # Edge case : MFA désactivé entre le password OK et le challenge.
+        return RedirectResponse(url="/me/login", status_code=303)
+
+    if not mfa.verify_totp(user.mfa_secret, code):
+        await rate_limit.record(db, scope="client_mfa_ip", identifier=ip)
+        await activity_record(
+            db, action="client_mfa_fail", user_name=user.email,
+            module="booking", entity_type="client_account",
+            entity_id=user.id, ip_address=ip,
+        )
+        await asyncio.sleep(0.05)
+        return templates.TemplateResponse(
+            "client/mfa_challenge.html",
+            {"request": request, "error": "Code TOTP invalide."},
+            status_code=400,
+        )
+
+    user.last_login_at = datetime.now(timezone.utc)
+    await activity_record(
+        db, action="client_login", user_name=user.email,
+        module="booking", entity_type="client_account",
+        entity_id=user.id, detail="mfa_ok", ip_address=ip,
+    )
+    token = create_client_session(user.id)
+    redirect = RedirectResponse(url="/me", status_code=303)
+    redirect.set_cookie(value=token, **cookie_kwargs_for_client(request))
+    redirect.delete_cookie(CLIENT_MFA_PENDING_COOKIE, path="/")
     return redirect
 
 
