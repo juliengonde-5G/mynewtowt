@@ -14,18 +14,21 @@
   <span class="kicker">Planning</span>
   <h1 class="display">Créer un leg sur la carte</h1>
   <p class="text-muted">
-    Clique sur la carte pour positionner d'abord le <strong>port de départ</strong>, puis le <strong>port d'arrivée</strong>.
-    {{ brand.nom_court }} cherche le port le plus proche dans un rayon de 50 km.
-    Le formulaire en bas est rempli automatiquement (distance orthodromique + durée estimée à 8 nœuds).
+    Chaque pastille verte est un port actif. Clique <strong>sur un point</strong>
+    pour le sélectionner (1<sup>er</sup> click = port de départ, 2<sup>e</sup> = port d'arrivée).
+    Tu peux aussi cliquer entre deux ports : {{ brand.nom_court }} prendra
+    automatiquement le port le plus proche dans un rayon de 50 km.
+    Le formulaire est ensuite rempli (distance orthodromique + ETA à 8 nœuds).
   </p>
 </header>
 
 {% if not maptiler_token %}
   <div class="alert alert-warn" role="alert">
-    <strong>MAPTILER_TOKEN absent du <code>.env</code>.</strong>
+    <strong>Token MapTiler absent.</strong>
     La carte utilise un fallback OSM raster (lent, sans vector tiles).
-    Pour activer MapLibre vector tiles, configure
-    <code>MAPBOX_TOKEN=&lt;ta-clé-maptiler&gt;</code> côté serveur puis redéploie.
+    Configure côté serveur soit <code>MAPTILER_TOKEN</code>, soit
+    <code>MAPBOX_TOKEN</code> (alias historique), puis force le recreate
+    du conteneur (<code>docker compose up -d --force-recreate app</code>).
   </div>
 {% endif %}
 

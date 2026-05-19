@@ -38,10 +38,12 @@ async def ports_nearby(
     limit: int = 10,
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
-    """Return ports near a (lat, lon) within radius_km, sorted by distance."""
+    """Return active ports near a (lat, lon) within radius_km, sorted by distance."""
+    from app.models.port import Port
     from app.services.ports import nearby_ports
 
     results = await nearby_ports(db, lat=lat, lon=lon, radius_km=radius_km, limit=limit)
+    # Filter to active ports only (admins can hide entries)
     return [
         {
             "id": p.id,
@@ -53,6 +55,7 @@ async def ports_nearby(
             "distance_km": round(d, 2),
         }
         for p, d in results
+        if getattr(p, "is_active", True)
     ]
 
 
@@ -63,10 +66,14 @@ async def ports_search(
     limit: int = 20,
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
-    """Search ports by name or locode prefix (case-insensitive)."""
+    """Search active ports by name or locode prefix (case-insensitive)."""
     from app.models.port import Port
 
-    stmt = select(Port).where(Port.latitude.is_not(None))
+    stmt = (
+        select(Port)
+        .where(Port.latitude.is_not(None))
+        .where(Port.is_active.is_(True))
+    )
     if q:
         like = f"%{q.lower()}%"
         from sqlalchemy import func
@@ -84,6 +91,44 @@ async def ports_search(
             "latitude": p.latitude, "longitude": p.longitude,
         } for p in rows
     ]
+
+
+@router.get("/ports/bbox")
+async def ports_bbox(
+    min_lat: float, min_lon: float, max_lat: float, max_lon: float,
+    limit: int = 2000,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return active ports inside a bounding box as GeoJSON FeatureCollection.
+
+    Used by the map UI to render clickable port markers within the current
+    viewport.
+    """
+    from app.models.port import Port
+
+    stmt = (
+        select(Port)
+        .where(Port.latitude.is_not(None))
+        .where(Port.longitude.is_not(None))
+        .where(Port.is_active.is_(True))
+        .where(Port.latitude.between(min_lat, max_lat))
+        .where(Port.longitude.between(min_lon, max_lon))
+        .limit(limit)
+    )
+    ports = list((await db.execute(stmt)).scalars().all())
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [p.longitude, p.latitude]},
+                "properties": {
+                    "id": p.id, "locode": p.locode, "name": p.name, "country": p.country,
+                },
+            }
+            for p in ports
+        ],
+    }
 
 
 @router.get("/spec")

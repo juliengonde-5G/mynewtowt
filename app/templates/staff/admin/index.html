@@ -6,8 +6,12 @@
 <section class="kpi-strip">
   <div class="kpi-card"><div class="label">Utilisateurs actifs</div><div class="value">{{ users|selectattr("is_active")|list|length }}</div></div>
   <div class="kpi-card"><div class="label">Navires</div><div class="value">{{ vessels|length }}</div></div>
-  <div class="kpi-card"><div class="label">Feature flags</div><div class="value">{{ flags|length }}</div></div>
-  <div class="kpi-card"><div class="label">Flags ON</div><div class="value text-success">{{ flags|selectattr("enabled")|list|length }}</div></div>
+  <a href="/admin/ports" class="kpi-card" style="text-decoration:none;border-bottom:none;">
+    <div class="label">Ports (actifs / total)</div>
+    <div class="value">{{ active_ports }} <span class="text-muted">/ {{ total_ports }}</span></div>
+    <div class="delta text-muted">→ gérer le référentiel</div>
+  </a>
+  <div class="kpi-card"><div class="label">Feature flags ON</div><div class="value text-success">{{ flags|selectattr("enabled")|list|length }} <span class="text-muted">/ {{ flags|length }}</span></div></div>
 </section>
 
 <div class="grid grid-2 gap-4 mt-4">

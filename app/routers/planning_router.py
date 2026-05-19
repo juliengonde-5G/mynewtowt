@@ -139,7 +139,7 @@ async def new_leg_from_map(
     db: AsyncSession = Depends(get_db),
     user=Depends(require_permission("planning", "M")),
 ) -> HTMLResponse:
-    """Interactive map: click 2 points → snap to closest port → prefill form."""
+    """Interactive map: click a port marker → snap → prefill form."""
     from app.config import settings
 
     vessels = list((await db.execute(select(Vessel).order_by(Vessel.code))).scalars().all())
@@ -149,9 +149,7 @@ async def new_leg_from_map(
             "request": request,
             "user": user,
             "vessels": vessels,
-            # We accept the MapTiler token either via MAPBOX_TOKEN (legacy)
-            # or via a new MAPTILER_TOKEN env var read by config.
-            "maptiler_token": settings.mapbox_token or "",
+            "maptiler_token": settings.map_token,
         },
     )
 

@@ -64,7 +64,14 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     windy_api_key: str | None = None
     mapbox_token: str | None = None
+    maptiler_token: str | None = None
     tracking_api_token: str | None = None
+
+    @property
+    def map_token(self) -> str:
+        """Resolved token for MapLibre tiles. Prefers MAPTILER_TOKEN, falls
+        back to MAPBOX_TOKEN for backward compatibility with earlier .env."""
+        return self.maptiler_token or self.mapbox_token or ""
 
     # Email
     smtp_host: str | None = None

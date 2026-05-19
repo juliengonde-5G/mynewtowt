@@ -565,7 +565,7 @@ async def tracking_index(
         "staff/tracking/index.html",
         {"request": request, "user": user,
          "vessels": vessels, "last_positions": last_positions,
-         "maptiler_token": _settings.mapbox_token or ""},
+         "maptiler_token": _settings.map_token},
     )
 
 
@@ -621,11 +621,117 @@ async def admin_index(
     vessels = list((await db.execute(select(Vessel).order_by(Vessel.code))).scalars().all())
     from app.models.feature_flag import FeatureFlag
     flags = list((await db.execute(select(FeatureFlag).order_by(FeatureFlag.key))).scalars().all())
+    # Aggregate port counts for the admin overview block
+    total_ports = await db.scalar(select(func.count(Port.id)))
+    active_ports = await db.scalar(select(func.count(Port.id)).where(Port.is_active.is_(True)))
     return templates.TemplateResponse(
         "staff/admin/index.html",
         {"request": request, "user": user, "users": users,
-         "vessels": vessels, "flags": flags},
+         "vessels": vessels, "flags": flags,
+         "total_ports": total_ports or 0, "active_ports": active_ports or 0},
     )
+
+
+# ────────────────────────────────────────────────────────────────────
+#                              ADMIN — PORTS
+# ────────────────────────────────────────────────────────────────────
+
+
+@router.get("/admin/ports", response_class=HTMLResponse)
+async def admin_ports(
+    request: Request,
+    q: str | None = None,
+    country: str | None = None,
+    source: str | None = None,
+    show: str = "all",      # 'all' | 'active' | 'inactive'
+    page: int = 1,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("admin", "C")),
+) -> HTMLResponse:
+    per_page = 50
+    stmt = select(Port)
+    if q:
+        like = f"%{q.lower()}%"
+        stmt = stmt.where(
+            (func.lower(Port.name).like(like)) | (func.lower(Port.locode).like(like))
+        )
+    if country:
+        stmt = stmt.where(Port.country == country.upper())
+    if source:
+        stmt = stmt.where(Port.source == source)
+    if show == "active":
+        stmt = stmt.where(Port.is_active.is_(True))
+    elif show == "inactive":
+        stmt = stmt.where(Port.is_active.is_(False))
+    total = (await db.execute(
+        select(func.count()).select_from(stmt.subquery())
+    )).scalar_one()
+    stmt = stmt.order_by(Port.country, Port.locode).limit(per_page).offset((page - 1) * per_page)
+    ports = list((await db.execute(stmt)).scalars().all())
+
+    return templates.TemplateResponse(
+        "staff/admin/ports.html",
+        {
+            "request": request, "user": user,
+            "ports": ports, "page": page, "per_page": per_page,
+            "total": total,
+            "filters": {"q": q or "", "country": country or "", "source": source or "", "show": show},
+        },
+    )
+
+
+@router.post("/admin/ports/{port_id}/toggle")
+async def admin_port_toggle(
+    port_id: int,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("admin", "M")),
+) -> RedirectResponse:
+    port = await db.get(Port, port_id)
+    if not port:
+        raise HTTPException(status_code=404, detail="Port not found")
+    port.is_active = not port.is_active
+    await activity_record(
+        db, action="port_toggle",
+        user_id=user.id, user_name=user.username, user_role=user.role,
+        module="admin", entity_type="port", entity_id=port.id,
+        entity_label=port.locode,
+        detail=f"is_active={port.is_active}",
+    )
+    return RedirectResponse(url=request_ports_back_url(), status_code=303)
+
+
+def request_ports_back_url() -> str:
+    return "/admin/ports"
+
+
+@router.post("/admin/ports/upload")
+async def admin_ports_upload(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("admin", "M")),
+) -> RedirectResponse:
+    """Upload a CSV of ports — same format as parsed by parse_csv()."""
+    from app.services.ports import parse_csv, upsert_ports
+
+    form = await request.form()
+    f = form.get("file")
+    source = (form.get("source") or "user").strip()
+    if f is None or not hasattr(f, "read"):
+        raise HTTPException(status_code=400, detail="No file uploaded")
+    content = await f.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="File is empty")
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 20 MB)")
+    rows = parse_csv(content, source=source)
+    ins, upd = await upsert_ports(db, rows)
+    await activity_record(
+        db, action="ports_upload",
+        user_id=user.id, user_name=user.username, user_role=user.role,
+        module="admin", entity_type="port_batch",
+        detail=f"source={source} parsed={len(rows)} inserted={ins} updated={upd}",
+    )
+    return RedirectResponse(url=f"/admin/ports?show=all", status_code=303)
 
 
 # ────────────────────────────────────────────────────────────────────
