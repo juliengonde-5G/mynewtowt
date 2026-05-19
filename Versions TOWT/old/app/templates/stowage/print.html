@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ "Plan de chargement" if lang == "fr" else "Loading Plan" }} — {{ leg.leg_code }}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Poppins', system-ui, sans-serif; font-size: 9pt; color: #1a3a5c; }
+
+    @page { size: A4; margin: 12mm 10mm; }
+    @media print {
+      .no-print { display: none !important; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+
+    .print-toolbar { background: #1a3a5c; color: white; padding: 8px 16px; display: flex; gap: 12px; align-items: center; }
+    .print-toolbar button { background: white; color: #1a3a5c; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-family: 'Poppins', system-ui; font-weight: 500; }
+    .print-toolbar a { color: white; text-decoration: none; font-size: 0.9rem; }
+
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; border-bottom: 2px solid #1a3a5c; padding-bottom: 6px; }
+    .header h1 { font-size: 14pt; font-weight: 700; }
+    .header-info { text-align: right; font-size: 8pt; color: #6c757d; }
+    .header-info strong { color: #1a3a5c; }
+
+    .stats-bar { display: flex; gap: 20px; margin-bottom: 10px; font-size: 9pt; }
+    .stats-bar strong { color: #1a3a5c; }
+
+    /* Vessel SVG */
+    .vessel-section { margin-bottom: 10px; }
+    .vessel-svg { width: 100%; max-height: 200px; }
+    .vessel-svg .vessel-label { font-size: 9px; }
+    .vessel-svg .deck-label { font-size: 9px; }
+    .vessel-svg .hold-label { font-size: 8px; }
+    .vessel-svg .zone-code-text { font-size: 7px; }
+    .vessel-svg .zone-count { font-size: 11px; }
+    .vessel-svg .zone-weight { font-size: 8px; }
+
+    .vessel-legend { display: flex; gap: 10px; font-size: 7pt; margin-top: 4px; }
+    .legend-item { display: flex; align-items: center; gap: 3px; }
+    .legend-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+    /* Detail table */
+    .detail-section { margin-top: 8px; }
+    .detail-section h2 { font-size: 11pt; margin-bottom: 6px; border-bottom: 1px solid #dee2e6; padding-bottom: 3px; }
+
+    table.print-table { width: 100%; border-collapse: collapse; font-size: 7.5pt; page-break-inside: auto; }
+    table.print-table th { background: #1a3a5c; color: white; padding: 4px 5px; text-align: left; font-weight: 500; font-size: 7pt; }
+    table.print-table td { padding: 3px 5px; border-bottom: 0.5px solid #dee2e6; }
+    table.print-table tr { page-break-inside: avoid; }
+    table.print-table tr:nth-child(even) { background: #f8f9fa; }
+    .badge-dg { background: #dc3545; color: white; padding: 1px 4px; border-radius: 2px; font-size: 6.5pt; font-weight: 600; }
+    .badge-stack { background: #28a745; color: white; padding: 1px 4px; border-radius: 2px; font-size: 6.5pt; }
+
+    .footer { margin-top: 10px; border-top: 1px solid #dee2e6; padding-top: 4px; font-size: 7pt; color: #6c757d; display: flex; justify-content: space-between; }
+  </style>
+</head>
+<body>
+
+<div class="print-toolbar no-print">
+  <button onclick="window.print()">{{ "Imprimer" if lang == "fr" else "Print" }}</button>
+  <a href="/stowage/leg/{{ leg.id }}?lang={{ lang }}">{{ "Retour au plan" if lang == "fr" else "Back to plan" }}</a>
+  {% if lang == "fr" %}
+  <a href="/stowage/leg/{{ leg.id }}/print?lang=en">English version</a>
+  {% else %}
+  <a href="/stowage/leg/{{ leg.id }}/print?lang=fr">Version française</a>
+  {% endif %}
+</div>
+
+<div class="header">
+  <div>
+    <h1>{{ "PLAN DE CHARGEMENT" if lang == "fr" else "LOADING PLAN" }}</h1>
+    <div style="font-size:10pt;margin-top:2px">{{ leg.vessel.name }} — {{ leg.leg_code }}</div>
+  </div>
+  <div class="header-info">
+    <div><strong>{{ "Départ" if lang == "fr" else "Departure" }}:</strong> {{ leg.departure_port_locode }} {% if leg.etd %}— {{ leg.etd.strftime('%d/%m/%Y') }}{% endif %}</div>
+    <div><strong>{{ "Arrivée" if lang == "fr" else "Arrival" }}:</strong> {{ leg.arrival_port_locode }} {% if leg.eta %}— {{ leg.eta.strftime('%d/%m/%Y') }}{% endif %}</div>
+    <div><strong>{{ "Édité le" if lang == "fr" else "Printed" }}:</strong> {{ now().strftime('%d/%m/%Y %H:%M') if now is defined else "" }}</div>
+  </div>
+</div>
+
+<div class="stats-bar">
+  <span><strong>{{ "Palettes:" if lang == "fr" else "Pallets:" }}</strong> {{ total_palettes }} / {{ total_capacity }}</span>
+  <span><strong>{{ "Poids:" if lang == "fr" else "Weight:" }}</strong> {{ "%.1f"|format(total_weight / 1000) }}t</span>
+  <span><strong>{{ "Remplissage:" if lang == "fr" else "Fill rate:" }}</strong> {{ fill_rate }}%</span>
+</div>
+
+{# Vessel schematic #}
+<div class="vessel-section">
+  {% from "stowage/vessel_svg.html" import vessel_lateral, vessel_legend %}
+  {{ vessel_lateral(zones, dangerous_zones, interactive=false, lang=lang) }}
+  {{ vessel_legend(lang) }}
+</div>
+
+{# Detail table #}
+<div class="detail-section">
+  <h2>{{ "Détail du chargement" if lang == "fr" else "Loading Details" }}</h2>
+  <table class="print-table">
+    <thead>
+      <tr>
+        <th>Zone</th>
+        <th>Batch</th>
+        <th>{{ "Client" if lang == "fr" else "Client" }}</th>
+        <th>{{ "Marchandise" if lang == "fr" else "Cargo type" }}</th>
+        <th>{{ "DG" if lang == "fr" else "DG" }}</th>
+        <th>{{ "Nb pal." if lang == "fr" else "Pallets" }}</th>
+        <th>{{ "Type pal." if lang == "fr" else "Pallet type" }}</th>
+        <th>Stack</th>
+        <th>{{ "Poids unit." if lang == "fr" else "Unit wt." }}</th>
+        <th>{{ "Poids total" if lang == "fr" else "Total wt." }}</th>
+        <th>{{ "N° BL" if lang == "fr" else "BL No." }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in all_batches %}
+      <tr>
+        <td><strong>{{ b.zone_code }}</strong></td>
+        <td>#{{ b.batch_number }}</td>
+        <td>{{ b.client_name }}</td>
+        <td>{{ b.type_of_goods }}</td>
+        <td>{% if b.is_dangerous %}<span class="badge-dg">{{ b.imo_class }}</span>{% else %}—{% endif %}</td>
+        <td>{{ b.pallet_quantity }}</td>
+        <td>{{ b.pallet_format }}</td>
+        <td>{% if b.stackable %}<span class="badge-stack">{{ "Oui" if lang == "fr" else "Yes" }}</span>{% else %}{{ "Non" if lang == "fr" else "No" }}{% endif %}</td>
+        <td>{{ b.weight_unit_kg }} kg</td>
+        <td>{{ "%.0f"|format(b.weight_total_kg) }} kg</td>
+        <td>{{ b.bl_number }}</td>
+      </tr>
+      {% endfor %}
+      {% if not all_batches %}
+      <tr><td colspan="11" style="text-align:center;color:#6c757d;padding:12px">{{ "Aucun batch assigné" if lang == "fr" else "No batches assigned" }}</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<div class="footer">
+  <span>TOWT — Transport à la Voile</span>
+  <span>{{ leg.vessel.name }} — {{ leg.leg_code }}</span>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,76 @@
+<div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+    <div class="modal" style="max-width:700px;">
+        <div class="modal-header">
+            <h3>Affecter {{ order.reference }}</h3>
+            <span style="font-size:12px;color:#888;">{{ order.client_name }} · {{ order.quantity_palettes }} pal.</span>
+            <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+        </div>
+        <form method="POST" id="assign-form" action="/commercial/orders/{{ order.id }}/assign">
+            {{ csrf_input(request) }}
+            <div class="modal-body">
+                {% if order.delivery_date_start or order.delivery_date_end %}
+                <div style="background:rgba(96,165,250,0.08);padding:10px 14px;border-radius:8px;font-size:12px;margin-bottom:16px;">
+                    📅 Livraison souhaitée :
+                    {% if order.delivery_date_start %}du <strong>{{ order.delivery_date_start.strftime('%d/%m/%Y') }}</strong>{% endif %}
+                    {% if order.delivery_date_end %}au <strong>{{ order.delivery_date_end.strftime('%d/%m/%Y') }}</strong>{% endif %}
+                    {% if order.departure_locode %} · Départ: <strong>{{ order.departure_locode }}</strong>{% endif %}
+                    {% if order.arrival_locode %} · Arrivée: <strong>{{ order.arrival_locode }}</strong>{% endif %}
+                </div>
+                {% endif %}
+
+                {% if suggested_leg %}
+                <div style="background:rgba(135,189,43,0.1);padding:10px 14px;border-radius:8px;font-size:12px;margin-bottom:16px;border-left:3px solid var(--towt-green);">
+                    💡 <strong>Suggestion :</strong> {{ suggested_leg.leg_code }} — {{ suggested_leg.vessel.name }}
+                    · {{ suggested_leg.departure_port.locode }} → {{ suggested_leg.arrival_port.locode }}
+                    {% if suggested_leg.eta %} · ETA {{ suggested_leg.eta.strftime('%d/%m/%Y') }}{% endif %}
+                </div>
+                {% endif %}
+
+                <div style="max-height:400px;overflow-y:auto;">
+                    {% for leg in legs %}
+                    {% set is_assigned = leg.id in assigned_ids %}
+                    {% set is_suggested = suggested_leg and leg.id == suggested_leg.id %}
+                    {% set date_ok = true %}
+                    {% if order.delivery_date_end and leg.eta %}
+                        {% if leg.eta.date() > order.delivery_date_end %}{% set date_ok = false %}{% endif %}
+                    {% endif %}
+                    <label class="assign-option {% if is_assigned %}selected{% endif %} {% if is_suggested %}suggested{% endif %} {% if not date_ok %}late{% endif %}"
+                           style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;margin-bottom:6px;cursor:pointer;border:1px solid #eee;">
+                        <input type="radio" name="leg_id" value="{{ leg.id }}"
+                               {% if is_assigned %}checked{% endif %}
+                               style="accent-color:var(--towt-green);">
+                        <div style="flex:1;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <strong style="font-family:monospace;font-size:12px;color:var(--towt-blue);">{{ leg.leg_code }}</strong>
+                                <span style="font-size:11px;color:#888;">{{ leg.vessel.name }}</span>
+                                {% if is_suggested %}<span style="background:var(--towt-green);color:white;font-size:9px;padding:1px 6px;border-radius:100px;">Suggéré</span>{% endif %}
+                                {% if not date_ok %}<span style="background:#FEF2F2;color:#DC2626;font-size:9px;padding:1px 6px;border-radius:100px;">Hors délai</span>{% endif %}
+                            </div>
+                            <div style="font-size:11px;color:#666;margin-top:2px;">
+                                {{ leg.departure_port.locode }} → {{ leg.arrival_port.locode }}
+                                {% if leg.eta %} · ETA {{ leg.eta.strftime('%d/%m/%Y') }}{% endif %}
+                            </div>
+                        </div>
+                    </label>
+                    {% endfor %}
+
+                    <label class="assign-option" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;margin-bottom:6px;cursor:pointer;border:1px solid #eee;">
+                        <input type="radio" name="leg_id" value="" {% if not assigned_ids %}checked{% endif %}>
+                        <span style="font-size:12px;color:#888;">Aucune affectation</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+                <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Affecter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .assign-option:hover{background:var(--towt-light) !important;}
+    .assign-option.selected{background:rgba(135,189,43,0.06);border-color:var(--towt-green) !important;}
+    .assign-option.suggested{border-color:var(--towt-green) !important;}
+    .assign-option.late{border-color:#FCA5A5 !important;}
+</style>

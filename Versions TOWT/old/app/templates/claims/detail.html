@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}my_TOWT — {{ claim.reference }}{% endblock %}
+{% block page_title %}⚠️ {{ claim.reference }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/claims" class="btn btn-secondary btn-sm"><i data-lucide="arrow-left"></i> Liste</a>
+<a href="/claims/{{ claim.id }}/declaration/pdf" class="btn btn-primary btn-sm" target="_blank"><i data-lucide="file-text"></i> Déclaration PDF</a>
+{% if claim.leg %}
+<a href="/onboard?vessel={{ claim.vessel.code }}&leg_id={{ claim.leg_id }}" class="btn btn-secondary btn-sm"><i data-lucide="compass"></i> On Board</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="cd-layout">
+<div class="cd-main">
+
+    <!-- STATUS BAR -->
+    <div class="cd-status-bar">
+        <div class="cd-status-steps">
+            {% set steps = ['open','declared','instruction','accepted','closed'] %}
+            {% set current_idx = steps.index(claim.status) if claim.status in steps else -1 %}
+            {% for s in steps %}
+            {% set s_idx = loop.index0 %}
+            <div class="cd-step {% if s == claim.status %}current{% endif %} {% if s_idx < current_idx %}done{% endif %} {% if claim.status == 'refused' and s == 'accepted' %}refused{% endif %}">
+                <span class="cd-step-dot"></span>
+                <span>{% if s == 'open' %}Ouvert{% elif s == 'declared' %}Déclaré{% elif s == 'instruction' %}Instruction{% elif s == 'accepted' %}{% if claim.status == 'refused' %}Refusé{% else %}Accepté{% endif %}{% elif s == 'closed' %}Clôturé{% endif %}</span>
+            </div>
+            {% if not loop.last %}<div class="cd-step-line {% if s_idx < current_idx %}done{% endif %}"></div>{% endif %}
+            {% endfor %}
+        </div>
+        <form method="POST" action="/claims/{{ claim.id }}/status" style="display:flex;gap:6px;align-items:center;">
+            {{ csrf_input(request) }}
+            <select name="status" class="fi-sm">
+                {% for code, label in claim_statuses %}<option value="{{ code }}" {% if claim.status == code %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm">OK</button>
+        </form>
+    </div>
+
+    <!-- INCIDENT -->
+    <div class="cd-card">
+        <h3>📋 Description de l'incident</h3>
+        <div style="font-size:13px;line-height:1.6;color:#333;white-space:pre-wrap;">{{ claim.description }}</div>
+        {% if claim.incident_location %}<div style="margin-top:8px;font-size:12px;color:#888;"><strong>Lieu :</strong> {{ claim.incident_location }}</div>{% endif %}
+        {% if claim.cargo_zone %}<div style="margin-top:8px;font-size:12px;"><strong>Position navire :</strong> <span style="background:var(--towt-blue,#1a3a5c);color:white;padding:2px 8px;border-radius:4px;font-weight:600;">{{ claim.cargo_zone }}</span> <a href="/stowage/leg/{{ claim.leg_id }}" style="font-size:11px;margin-left:8px;">Voir le plan</a></div>{% endif %}
+        {% if claim.notes %}<div style="margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0;font-size:12px;color:#888;">📝 {{ claim.notes }}</div>{% endif %}
+    </div>
+
+    <!-- SUBJECT -->
+    <div class="cd-card">
+        {% if claim.claim_type == 'cargo' and claim.order_assignment %}
+        <h3>📦 Marchandise concernée</h3>
+        {% set o = claim.order_assignment.order %}
+        <div class="cd-cargo-grid">
+            <div class="cd-cargo-item"><span class="cd-cargo-lbl">Réf. commande</span><strong>{{ o.reference }}</strong></div>
+            <div class="cd-cargo-item"><span class="cd-cargo-lbl">Client / Chargeur</span><strong>{{ o.client_name }}</strong></div>
+            <div class="cd-cargo-item"><span class="cd-cargo-lbl">Description</span><strong>{{ o.description or '—' }}</strong></div>
+            <div class="cd-cargo-item"><span class="cd-cargo-lbl">Format palette</span><strong>{{ o.palette_format }}</strong></div>
+            <div class="cd-cargo-item"><span class="cd-cargo-lbl">Quantité</span><strong>{{ o.quantity_palettes }} palettes</strong></div>
+            <div class="cd-cargo-item"><span class="cd-cargo-lbl">Poids total</span><strong>{{ "%.1f"|format(o.total_weight or 0) }} T</strong></div>
+            <div class="cd-cargo-item"><span class="cd-cargo-lbl">Contact</span><strong>{{ o.client_contact or '—' }}</strong></div>
+            <div class="cd-cargo-item"><span class="cd-cargo-lbl">Leg</span><strong style="font-family:'Poppins',sans-serif;">{{ claim.leg.leg_code }}</strong></div>
+        </div>
+        {% elif claim.claim_type == 'crew' %}
+        <h3>👤 Personne concernée</h3>
+        {% if claim.crew_member %}<div style="display:flex;gap:12px;align-items:center;"><span class="cd-badge">Équipage</span><strong>{{ claim.crew_member.full_name }}</strong><span style="font-size:11px;color:#888;">{{ claim.crew_member.role_label }}</span></div>{% endif %}
+        {% elif claim.claim_type == 'hull' %}
+        <h3>🚢 Navire concerné</h3>
+        <div style="display:flex;gap:12px;align-items:center;"><span class="cd-badge" style="background:rgba(220,38,38,0.1);color:#DC2626;">Hull</span><strong>{{ claim.vessel.name }}</strong></div>
+        {% endif %}
+    </div>
+
+    <!-- FINANCIAL -->
+    <div class="cd-card" id="finance">
+        <h3>💰 Suivi financier</h3>
+        <form method="POST" action="/claims/{{ claim.id }}/finance">
+            {{ csrf_input(request) }}
+            <div class="cd-finance-grid">
+                <div class="cd-fin-box"><span class="cd-fin-label">Provision</span><input type="text" name="provision_amount" value="{{ '%.2f'|format(claim.provision_amount|float)|replace('.', ',') if claim.provision_amount else '' }}" class="fi-sm cd-fin-input" placeholder="0,00" oninput="calcFinance()"></div>
+                <div class="cd-fin-box"><span class="cd-fin-label">Franchise</span><input type="text" name="franchise_amount" value="{{ '%.2f'|format(claim.franchise_amount|float)|replace('.', ',') if claim.franchise_amount else '' }}" class="fi-sm cd-fin-input" placeholder="0,00" oninput="calcFinance()"></div>
+                <div class="cd-fin-box cd-fin-green"><span class="cd-fin-label">Prise en charge assureur</span><input type="text" name="indemnity_amount" value="{{ '%.2f'|format(claim.indemnity_amount|float)|replace('.', ',') if claim.indemnity_amount else '' }}" class="fi-sm cd-fin-input" placeholder="0,00" oninput="calcFinance()"></div>
+                <div class="cd-fin-box cd-fin-red"><span class="cd-fin-label">Reste à charge</span><input type="text" name="company_charge" id="fin-company" value="{{ '%.2f'|format(claim.company_charge|float)|replace('.', ',') if claim.company_charge else '' }}" class="fi-sm cd-fin-input cd-fin-result" placeholder="Auto" readonly></div>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:12px;align-items:center;">
+                <div class="fg" style="margin:0;flex:1;"><label>Responsabilité</label><select name="responsibility" class="fi-sm">{% for code, label in claim_responsibility %}<option value="{{ code }}" {% if claim.responsibility == code %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+                <button type="submit" class="btn btn-primary btn-sm" style="margin-top:14px;">💾 Mettre à jour</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- CENTRE DOCUMENTAIRE -->
+    <div class="cd-card" id="documents">
+        <h3>📁 Centre documentaire <span class="cd-count">{{ claim.documents|length }}</span></h3>
+        {% if claim.documents %}
+        <div class="cd-doc-list">
+            {% for d in claim.documents %}
+            <div class="cd-doc-row">
+                <span class="cd-doc-type-badge cd-dt-{{ d.doc_type }}">{{ d.doc_type_label }}</span>
+                <div class="cd-doc-info"><strong>{{ d.title }}</strong>{% if d.notes %}<span>{{ d.notes }}</span>{% endif %}</div>
+                {% if d.file_path %}<a href="/claims/{{ claim.id }}/document/{{ d.id }}/download" class="btn btn-sm btn-secondary">📥 {{ d.filename or 'Fichier' }}</a>{% endif %}
+                <span style="font-size:10px;color:#aaa;">{{ d.uploaded_by or '' }}</span>
+                <button class="btn-icon" hx-delete="/claims/{{ claim.id }}/document/{{ d.id }}" hx-confirm="Supprimer ?" hx-target="closest .cd-doc-row" hx-swap="outerHTML">🗑</button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <details style="margin-top:12px;">
+            <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--towt-blue);">＋ Ajouter un document</summary>
+            <form method="POST" action="/claims/{{ claim.id }}/document" enctype="multipart/form-data" style="margin-top:10px;">
+                {{ csrf_input(request) }}
+                <div class="cd-grid-3"><div class="fg"><label>Type</label><select name="doc_type" class="fi-sm" required>{% for code, label in claim_doc_types %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select></div><div class="fg"><label>Titre</label><input type="text" name="title" class="fi-sm" required placeholder="Ex: Photo avarie cale avant"></div><div class="fg"><label>Pièce jointe</label><input type="file" name="file" class="fi-sm"></div></div>
+                <div class="fg" style="margin-top:6px;"><input type="text" name="notes" class="fi-sm" placeholder="Notes (optionnel)"></div>
+                <button type="submit" class="btn btn-primary btn-sm" style="margin-top:8px;">Ajouter</button>
+            </form>
+        </details>
+        <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f0f0f0;">
+            <h4 style="font-size:12px;color:#888;margin:0 0 8px;">📎 Documents liés</h4>
+            <div class="cd-linked-docs">
+                {% if claim.sof_event %}<a href="/onboard?vessel={{ claim.vessel.code }}&leg_id={{ claim.leg_id }}#sof" class="cd-link-doc"><span>📜</span> SOF — {{ claim.leg.leg_code }}</a>{% endif %}
+                {% if claim.claim_type == 'cargo' and claim.order_assignment %}<a href="/cargo/{{ claim.order_assignment.order.id }}" class="cd-link-doc"><span>📦</span> Cargo — {{ claim.order_assignment.order.reference }}</a>{% endif %}
+                <a href="/escale?vessel={{ claim.vessel.code }}&leg_id={{ claim.leg_id }}" class="cd-link-doc"><span>⚓</span> Escale — {{ claim.leg.leg_code }}</a>
+                {% for tl in claim.timeline if tl.file_path %}<a href="/claims/{{ claim.id }}/timeline/{{ tl.id }}/download" class="cd-link-doc"><span>📎</span> {{ tl.filename or tl.title }}</a>{% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- TIMELINE -->
+    <div class="cd-card" id="timeline">
+        <h3>📅 Historique & Échanges <span class="cd-count">{{ claim.timeline|length }}</span></h3>
+        <form method="POST" action="/claims/{{ claim.id }}/timeline" enctype="multipart/form-data" class="cd-tl-form">
+            {{ csrf_input(request) }}
+            <div class="cd-grid-4"><div class="fg"><label>Action</label><select name="action_type" class="fi-sm" required>{% for code, label in timeline_action_types %}{% if code != 'status_change' %}<option value="{{ code }}">{{ label }}</option>{% endif %}{% endfor %}</select></div><div class="fg"><label>Titre</label><input type="text" name="title" class="fi-sm" required placeholder="Résumé"></div><div class="fg"><label>Date</label><input type="datetime-local" name="action_date" class="fi-sm"></div><div class="fg" style="display:flex;align-items:end;"><button type="submit" class="btn btn-primary btn-sm" style="width:100%;">Ajouter</button></div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;"><input type="text" name="description" class="fi-sm" placeholder="Détails (optionnel)"><input type="file" name="file" class="fi-sm"></div>
+        </form>
+        <div class="cd-timeline">
+            {% for tl in claim.timeline %}
+            <div class="cd-tl-item cd-tl-{{ tl.action_type }}">
+                <div class="cd-tl-dot"></div>
+                <div class="cd-tl-content">
+                    <div class="cd-tl-header"><span class="cd-tl-type">{{ tl.action_type_label }}</span><strong>{{ tl.title }}</strong><span class="cd-tl-time">{{ tl.action_date.strftime('%d/%m/%Y %H:%M') if tl.action_date else '' }}</span></div>
+                    {% if tl.description %}<div class="cd-tl-desc">{{ tl.description }}</div>{% endif %}
+                    {% if tl.file_path %}<a href="/claims/{{ claim.id }}/timeline/{{ tl.id }}/download" class="cd-tl-file">📎 {{ tl.filename or 'Pièce jointe' }}</a>{% endif %}
+                    <div class="cd-tl-actor">{{ tl.actor }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- SIDEBAR -->
+<div class="cd-side">
+    <div class="cd-card"><h3>📋 Claim</h3><div class="cd-info"><span>Référence</span><strong>{{ claim.reference }}</strong></div><div class="cd-info"><span>Type</span><span class="cl-type-badge cl-type-{{ claim.claim_type }}">{{ claim.type_label }}</span></div><div class="cd-info"><span>Statut</span><span class="cl-status cl-st-{{ claim.status }}">{{ claim.status_label }}</span></div><div class="cd-info"><span>Date incident</span><strong>{{ claim.incident_date.strftime('%d/%m/%Y %H:%M') if claim.incident_date else '—' }}</strong></div><div class="cd-info"><span>Créé le</span><strong>{{ claim.created_at.strftime('%d/%m/%Y') if claim.created_at else '' }}</strong></div><div class="cd-info"><span>Par</span><strong>{{ claim.declared_by or '—' }}</strong></div></div>
+    <div class="cd-card"><h3>🚢 Voyage</h3><div class="cd-info"><span>Navire</span><strong>{{ claim.vessel.name }}</strong></div><div class="cd-info"><span>Leg</span><strong style="font-family:'Poppins',sans-serif;">{{ claim.leg.leg_code }}</strong></div><div class="cd-info"><span>Route</span><strong>{{ claim.leg.departure_port.name }} → {{ claim.leg.arrival_port.name }}</strong></div><div class="cd-info"><span>Contexte</span><strong>{{ claim.context_label }}</strong></div></div>
+    <div class="cd-card"><h3>🛡️ Garantie</h3><div class="cd-info"><span>Type</span><span class="cl-guarantee cl-g-{{ claim.guarantee_type }}">{{ claim.guarantee_label }}</span></div>
+        <form method="POST" action="/claims/{{ claim.id }}/guarantee" style="margin-top:8px;display:flex;gap:6px;"><select name="guarantee_type" class="fi-sm" style="flex:1;">{% for code, label in claim_guarantees %}<option value="{{ code }}" {% if claim.guarantee_type == code %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button type="submit" class="btn btn-sm btn-secondary">OK</button></form>
+            {{ csrf_input(request) }}
+        <div class="cd-info" style="margin-top:8px;"><span>Responsabilité</span><strong>{{ claim.responsibility_label }}</strong></div>
+        {% if insurance %}<div style="margin-top:10px;padding-top:8px;border-top:1px solid #f0f0f0;font-size:11px;color:#888;"><strong>{{ insurance.insurer_name }}</strong><br>{% if insurance.insurer_email %}{{ insurance.insurer_email }}<br>{% endif %}{% if insurance.broker_reference %}Courtier : {{ insurance.broker_reference }}{% endif %}</div>{% endif %}
+    </div>
+    {% if claim.sof_event %}<div class="cd-card"><h3>📜 SOF</h3><div style="font-size:12px;color:#555;">{{ claim.sof_event.event_label }}</div><div style="font-size:11px;color:#888;">{{ claim.sof_event.event_date }} {{ claim.sof_event.event_time or '' }}</div></div>{% endif %}
+</div>
+</div>
+
+<style>
+    .cd-layout{display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start}@media(max-width:1000px){.cd-layout{grid-template-columns:1fr}}
+    .cd-main{display:flex;flex-direction:column;gap:16px}.cd-side{display:flex;flex-direction:column;gap:16px}
+    .cd-card{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:16px 20px}.cd-card h3{margin:0 0 12px;font-size:14px}
+    .cd-info{display:flex;justify-content:space-between;padding:5px 0;font-size:12px;border-bottom:1px solid #f8f8f8}.cd-info span:first-child{color:#888}
+    .cd-badge{font-size:11px;padding:3px 10px;border-radius:100px;font-weight:600;background:rgba(9,85,97,0.1);color:var(--towt-blue)}
+    .cd-count{font-size:11px;font-weight:400;color:#888;margin-left:6px}
+    .fi-sm{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:'Poppins',system-ui,sans-serif;width:100%;box-sizing:border-box}.fi-sm:focus{border-color:var(--towt-blue);outline:none}
+    .fg{display:flex;flex-direction:column;gap:2px;margin-bottom:4px}.fg label{font-size:10px;font-weight:600;color:#888;text-transform:uppercase}
+    .cd-cargo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}@media(max-width:700px){.cd-cargo-grid{grid-template-columns:repeat(2,1fr)}}
+    .cd-cargo-item{background:#f8fafb;padding:8px 10px;border-radius:6px}.cd-cargo-lbl{font-size:9px;font-weight:600;color:#888;text-transform:uppercase;display:block}.cd-cargo-item strong{font-size:12px;color:#333}
+    .cd-status-bar{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+    .cd-status-steps{display:flex;align-items:center}.cd-step{display:flex;align-items:center;gap:4px;font-size:11px;color:#bbb}.cd-step.done{color:#87BD2B}.cd-step.current{color:var(--towt-blue);font-weight:700}.cd-step.refused{color:#DC2626;font-weight:700}
+    .cd-step-dot{width:10px;height:10px;border-radius:50%;border:2px solid #ddd;background:white}.cd-step.done .cd-step-dot{background:#87BD2B;border-color:#87BD2B}.cd-step.current .cd-step-dot{background:var(--towt-blue);border-color:var(--towt-blue)}.cd-step.refused .cd-step-dot{background:#DC2626;border-color:#DC2626}
+    .cd-step-line{width:20px;height:2px;background:#eee}.cd-step-line.done{background:#87BD2B}
+    .cd-finance-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}@media(max-width:700px){.cd-finance-grid{grid-template-columns:repeat(2,1fr)}}
+    .cd-fin-box{background:#f8fafb;border-radius:8px;padding:10px;text-align:center}.cd-fin-green{background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.15)}.cd-fin-red{background:rgba(220,38,38,0.04);border:1px solid rgba(220,38,38,0.12)}
+    .cd-fin-label{font-size:10px;font-weight:600;color:#888;text-transform:uppercase;display:block;margin-bottom:4px}
+    .cd-fin-input{text-align:right!important;font-size:15px!important;font-weight:700!important}.cd-fin-result{color:#DC2626!important;background:rgba(220,38,38,0.03)!important}
+    .cd-doc-list{display:flex;flex-direction:column;gap:6px}.cd-doc-row{display:flex;align-items:center;gap:10px;padding:8px 10px;background:#f8fafb;border-radius:6px;font-size:12px}
+    .cd-doc-type-badge{font-size:9px;padding:3px 8px;border-radius:100px;font-weight:600;text-transform:uppercase;white-space:nowrap}.cd-dt-photo{background:rgba(59,130,246,0.1);color:#2563EB}.cd-dt-survey{background:rgba(168,85,247,0.1);color:#A855F7}.cd-dt-correspondence{background:rgba(245,158,11,0.1);color:#D97706}.cd-dt-invoice{background:rgba(34,197,94,0.1);color:#16a34a}.cd-dt-other{background:rgba(107,114,128,0.1);color:#6B7280}
+    .cd-doc-info{flex:1;min-width:0}.cd-doc-info strong{display:block;font-size:12px}.cd-doc-info span{display:block;font-size:10px;color:#888}
+    .cd-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}@media(max-width:600px){.cd-grid-3{grid-template-columns:1fr}}
+    .cd-grid-4{display:grid;grid-template-columns:150px 1fr 160px auto;gap:8px;align-items:end}@media(max-width:700px){.cd-grid-4{grid-template-columns:1fr 1fr}}
+    .btn-icon{background:none;border:none;cursor:pointer;padding:4px;border-radius:4px;font-size:12px}.btn-icon:hover{background:#fee2e2}
+    .cd-linked-docs{display:flex;flex-wrap:wrap;gap:8px}.cd-link-doc{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:#f0f7f8;border:1px solid rgba(9,85,97,0.15);border-radius:6px;font-size:11px;font-weight:500;color:var(--towt-blue);text-decoration:none}.cd-link-doc:hover{background:rgba(9,85,97,0.1)}
+    .cd-tl-form{padding:14px;background:#f8fafb;border-radius:8px;margin-bottom:16px}
+    .cd-timeline{position:relative;padding-left:20px}.cd-timeline::before{content:'';position:absolute;left:6px;top:0;bottom:0;width:2px;background:#eee}
+    .cd-tl-item{position:relative;margin-bottom:16px}.cd-tl-dot{position:absolute;left:-20px;top:4px;width:12px;height:12px;border-radius:50%;border:2px solid #ddd;background:white}
+    .cd-tl-status_change .cd-tl-dot{background:var(--towt-blue);border-color:var(--towt-blue)}.cd-tl-declaration .cd-tl-dot{background:#2563EB;border-color:#2563EB}.cd-tl-expertise .cd-tl-dot{background:#A855F7;border-color:#A855F7}.cd-tl-correspondence_in .cd-tl-dot,.cd-tl-correspondence_out .cd-tl-dot{background:#D97706;border-color:#D97706}.cd-tl-document_added .cd-tl-dot{background:#16a34a;border-color:#16a34a}.cd-tl-financial_update .cd-tl-dot{background:#DC2626;border-color:#DC2626}.cd-tl-note .cd-tl-dot{background:#6B7280;border-color:#6B7280}.cd-tl-client_exchange .cd-tl-dot{background:#0891B2;border-color:#0891B2}
+    .cd-tl-header{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.cd-tl-type{font-size:9px;padding:2px 8px;border-radius:100px;background:#f3f4f6;color:#6B7280;font-weight:600;text-transform:uppercase}.cd-tl-time{font-size:10px;color:#aaa;margin-left:auto}
+    .cd-tl-desc{font-size:12px;color:#555;margin-top:4px;padding:6px 10px;background:#f8fafb;border-radius:6px}
+    .cd-tl-file{display:inline-flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:var(--towt-blue);text-decoration:none;padding:3px 8px;background:rgba(9,85,97,0.06);border-radius:4px}.cd-tl-file:hover{background:rgba(9,85,97,0.12)}
+    .cd-tl-actor{font-size:10px;color:#aaa;margin-top:4px}
+    .cl-type-badge{font-size:10px;padding:3px 10px;border-radius:100px;font-weight:600}.cl-type-cargo{background:rgba(245,158,11,0.1);color:#D97706}.cl-type-crew{background:rgba(99,102,241,0.1);color:#6366F1}.cl-type-hull{background:rgba(220,38,38,0.1);color:#DC2626}
+    .cl-status{font-size:10px;padding:3px 10px;border-radius:100px;font-weight:600}.cl-st-open{background:rgba(245,158,11,0.1);color:#D97706}.cl-st-declared{background:rgba(59,130,246,0.1);color:#2563EB}.cl-st-instruction{background:rgba(168,85,247,0.1);color:#A855F7}.cl-st-accepted{background:rgba(34,197,94,0.1);color:#16a34a}.cl-st-refused{background:rgba(220,38,38,0.1);color:#DC2626}.cl-st-closed{background:rgba(107,114,128,0.1);color:#6B7280}
+    .cl-guarantee{font-size:10px;padding:2px 8px;border-radius:100px;font-weight:500}.cl-g-pi{background:rgba(6,182,212,0.1);color:#0891B2}.cl-g-hull_div{background:rgba(220,38,38,0.08);color:#991B1B}.cl-g-war_risk{background:rgba(107,114,128,0.1);color:#4B5563}
+</style>
+<script>
+function calcFinance(){var p=parseFloat((document.querySelector('[name="provision_amount"]').value||'0').replace(/\s/g,'').replace(',','.'));var f=parseFloat((document.querySelector('[name="franchise_amount"]').value||'0').replace(/\s/g,'').replace(',','.'));var i=parseFloat((document.querySelector('[name="indemnity_amount"]').value||'0').replace(/\s/g,'').replace(',','.'));var c=p-f-i;if(c<0)c=0;document.getElementById('fin-company').value=c.toFixed(2).replace('.',',');}
+window.addEventListener('DOMContentLoaded',calcFinance);
+</script>
+{% endblock %}

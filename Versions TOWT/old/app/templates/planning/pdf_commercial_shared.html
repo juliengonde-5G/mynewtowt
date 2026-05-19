@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:'Poppins',system-ui,-apple-system,sans-serif;font-size:12px;color:#333;padding:20px;max-width:1000px;margin:0 auto;}
+
+        .header{border-bottom:3px solid #095561;padding-bottom:12px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;}
+        .header-left{flex:1;}
+        .header h1{font-size:20px;color:#095561;margin:0;}
+        .header h2{font-size:13px;color:#888;font-weight:400;margin-top:4px;}
+        .header-logo img{height:50px;}
+
+        .live-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:#e8f5e9;color:#2e7d32;border-radius:100px;font-size:11px;font-weight:600;margin-top:6px;}
+        .live-dot{width:8px;height:8px;background:#4caf50;border-radius:50%;animation:pulse 2s infinite;}
+        @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+
+        .section{margin-bottom:28px;page-break-inside:avoid;}
+        .section h3{font-size:14px;color:#095561;border-bottom:2px solid #095561;padding-bottom:4px;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+
+        .summary-box{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
+        .summary-item{background:#f0f7f8;padding:10px 14px;border-radius:6px;text-align:center;}
+        .summary-value{font-size:18px;font-weight:700;color:#095561;}
+        .summary-label{font-size:10px;color:#888;text-transform:uppercase;margin-top:2px;}
+
+        table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px;}
+        th{background:#095561;color:white;padding:7px 10px;text-align:left;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.3px;}
+        td{padding:6px 10px;border-bottom:1px solid #eee;}
+        tr:nth-child(even){background:#f9fafb;}
+        tr:hover{background:#eef4f6;}
+        .port-code{font-family:monospace;font-weight:700;color:#095561;font-size:11px;}
+        .date-cell{white-space:nowrap;}
+        .duration{color:#888;font-size:10px;}
+        .route-arrow{color:#095561;font-weight:700;}
+
+        .footer{margin-top:30px;border-top:1px solid #ddd;padding-top:8px;font-size:10px;color:#999;display:flex;justify-content:space-between;}
+
+        .print-bar{margin-bottom:16px;display:flex;gap:10px;align-items:center;}
+        .print-btn{padding:8px 24px;background:#095561;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;font-family:'Poppins',system-ui;}
+        .print-btn:hover{background:#0a6b79;}
+
+        @media print{
+            .no-print{display:none !important;}
+            body{padding:10px;}
+            .section{page-break-inside:avoid;}
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print print-bar">
+        <button class="print-btn" onclick="window.print()">🖨 {% if lang == 'en' %}Print / Save as PDF{% else %}Imprimer / Enregistrer en PDF{% endif %}</button>
+        <span style="font-size:11px;color:#999;">{{ legs|length }} {% if lang == 'en' %}legs displayed{% else %}legs affichés{% endif %}</span>
+    </div>
+
+    <div class="header">
+        <div class="header-left">
+            <h1>{{ title }}</h1>
+            <h2>{% if lang == 'en' %}Sailing schedule {{ current_year }} — TOWT Sail Cargo{% else %}Planning de navigation {{ current_year }} — TOWT Transport à la voile{% endif %}</h2>
+            <div class="live-badge"><span class="live-dot"></span> {% if lang == 'en' %}Live — auto-updated{% else %}En direct — mis à jour automatiquement{% endif %}</div>
+        </div>
+        <div class="header-logo">
+            <img src="/static/logo_towt.png" alt="TOWT" onerror="this.style.display='none'">
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="summary-box">
+        <div class="summary-item">
+            <div class="summary-value">{{ legs|length }}</div>
+            <div class="summary-label">{% if lang == 'en' %}Crossings{% else %}Traversées{% endif %}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-value">{{ legs_by_vessel|length }}</div>
+            <div class="summary-label">{% if lang == 'en' %}Vessels{% else %}Navires{% endif %}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-value">{{ legs_by_dest|length }}</div>
+            <div class="summary-label">{% if lang == 'en' %}Destinations{% else %}Destinations{% endif %}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-value">{{ legs_by_route|length }}</div>
+            <div class="summary-label">{% if lang == 'en' %}Routes{% else %}Routes{% endif %}</div>
+        </div>
+    </div>
+
+    <!-- Chronological schedule -->
+    <div class="section">
+        <h3>📅 {% if lang == 'en' %}Chronological schedule{% else %}Planning chronologique{% endif %}</h3>
+        <table>
+            <thead><tr>
+                <th>{% if lang == 'en' %}Vessel{% else %}Navire{% endif %}</th>
+                <th>Leg</th>
+                <th>{% if lang == 'en' %}Departure{% else %}Départ{% endif %}</th>
+                <th></th>
+                <th>{% if lang == 'en' %}Arrival{% else %}Arrivée{% endif %}</th>
+                <th>ETD</th><th>ETA</th>
+                <th>{% if lang == 'en' %}Duration{% else %}Durée{% endif %}</th>
+                <th>{% if lang == 'en' %}Port stay{% else %}Escale{% endif %}</th>
+            </tr></thead>
+            <tbody>
+                {% for leg in legs %}
+                <tr>
+                    <td><strong>{{ leg.vessel.name }}</strong></td>
+                    <td><strong style="font-family:monospace;color:#095561;">{{ leg.leg_code }}</strong></td>
+                    <td><span class="port-code">{{ leg.departure_port.country_code|flag }} {{ leg.departure_port.locode }}</span> {{ leg.departure_port.name }}</td>
+                    <td class="route-arrow">→</td>
+                    <td><span class="port-code">{{ leg.arrival_port.country_code|flag }} {{ leg.arrival_port.locode }}</span> {{ leg.arrival_port.name }}</td>
+                    <td class="date-cell">{{ leg.etd.strftime('%d/%m/%Y') if leg.etd else '—' }}</td>
+                    <td class="date-cell">{{ leg.eta.strftime('%d/%m/%Y') if leg.eta else '—' }}</td>
+                    <td class="duration">{{ ((leg.estimated_duration_hours or 0) / 24)|round(0)|int }} {% if lang == 'en' %}d.{% else %}j.{% endif %}</td>
+                    <td class="duration">{{ leg.port_stay_days or 3 }} {% if lang == 'en' %}d.{% else %}j.{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- By route -->
+    {% if legs_by_route|length > 1 %}
+    <div style="page-break-before:always;"></div>
+    <div class="section">
+        <h3>🗺 {% if lang == 'en' %}By route{% else %}Par route{% endif %}</h3>
+        {% for route, rlegs in legs_by_route.items() %}
+        <div style="margin-bottom:16px;">
+            <h3 style="font-size:12px;border-bottom:1px solid #ddd;">{{ route }} <span style="font-weight:400;font-size:11px;color:#888;">({{ rlegs|length }})</span></h3>
+            <table>
+                <thead><tr>
+                    <th>{% if lang == 'en' %}Vessel{% else %}Navire{% endif %}</th>
+                    <th>Leg</th><th>ETD</th><th>ETA</th>
+                    <th>{% if lang == 'en' %}Duration{% else %}Durée{% endif %}</th>
+                </tr></thead>
+                <tbody>
+                    {% for leg in rlegs %}
+                    <tr>
+                        <td><strong>{{ leg.vessel.name }}</strong></td>
+                        <td style="font-family:monospace;color:#095561;">{{ leg.leg_code }}</td>
+                        <td class="date-cell">{{ leg.etd.strftime('%d/%m/%Y') if leg.etd else '—' }}</td>
+                        <td class="date-cell">{{ leg.eta.strftime('%d/%m/%Y') if leg.eta else '—' }}</td>
+                        <td class="duration">{{ ((leg.estimated_duration_hours or 0) / 24)|round(0)|int }} {% if lang == 'en' %}d.{% else %}j.{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        <span>TOWT — {% if lang == 'en' %}Sail Cargo · Decarbonizing maritime freight{% else %}Transport à la voile · Décarboner le fret maritime{% endif %}</span>
+        <span>{% if lang == 'en' %}Updated{% else %}Mis à jour{% endif %} {{ now.strftime('%d/%m/%Y %H:%M') }} UTC · {{ title }}</span>
+    </div>
+</body>
+</html>

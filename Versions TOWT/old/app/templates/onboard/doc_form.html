@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+{% block title %}my_TOWT — {{ doc_label }}{% endblock %}
+{% block page_title %}📄 {{ doc_label }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/onboard?vessel={{ leg.vessel.code }}&leg_id={{ leg.id }}" class="btn btn-secondary btn-sm"><i data-lucide="arrow-left"></i> Retour On Board</a>
+{% if doc %}
+<a href="/onboard/doc/{{ doc.id }}/export/word" class="btn btn-secondary btn-sm"><i data-lucide="file-text"></i> Word</a>
+<a href="/onboard/doc/{{ doc.id }}/export/pdf" class="btn btn-secondary btn-sm"><i data-lucide="file-text"></i> PDF</a>
+{% endif %}
+<button type="submit" form="doc-form" class="btn btn-primary btn-sm">💾 Enregistrer</button>
+{% endblock %}
+
+{% block content %}
+<div class="doc-container">
+    <div class="doc-header-bar">
+        <div>
+            <strong>{{ leg.vessel.name }}</strong> · {{ leg.leg_code }}
+            · {{ leg.departure_port.name }} → {{ leg.arrival_port.name }}
+        </div>
+        <span style="font-size:11px;color:#888;">{{ prefill.date_today }}</span>
+    </div>
+
+    <form method="POST" action="/onboard/doc/{{ leg.id }}/{{ doc_type }}/save" id="doc-form">
+        {{ csrf_input(request) }}
+        {% if doc %}<input type="hidden" name="doc_id" value="{{ doc.id }}">{% endif %}
+
+        <!-- ═══ NOR - Notice of Readiness ═══ -->
+        {% if doc_type == 'NOR' %}
+        <div class="doc-section">
+            <h3>NOTICE OF READINESS</h3>
+            <div class="doc-grid-2">
+                <div class="fg"><label>To (Charterer)</label><input type="text" name="to_charterer" value="{{ doc_data.get('to_charterer', '') }}" class="fi"></div>
+                <div class="fg"><label>Vessel</label><input type="text" name="vessel_name" value="{{ doc_data.get('vessel_name', prefill.vessel_name) }}" class="fi" readonly></div>
+                <div class="fg"><label>Voyage No</label><input type="text" name="voyage_no" value="{{ doc_data.get('voyage_no', prefill.voyage_no) }}" class="fi" readonly></div>
+                <div class="fg"><label>Port</label><input type="text" name="port" value="{{ doc_data.get('port', prefill.current_port) }}" class="fi"></div>
+                <div class="fg"><label>Date of Notice</label><input type="date" name="notice_date" value="{{ doc_data.get('notice_date', prefill.date_today) }}" class="fi"></div>
+                <div class="fg"><label>Time of Notice</label>
+                    <div class="tz-input-wrap">
+                        <input type="time" name="notice_time" value="{{ doc_data.get('notice_time', '') }}" class="fi">
+                        <select name="notice_time_tz" class="tz-select">
+                            {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                            <option value="{{ code }}" {% if code == doc_data.get('notice_time_tz', 'UTC') %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <span class="tz-utc-hint"></span>
+                </div>
+            </div>
+            <div class="fg full"><label>Cargo description</label><textarea name="cargo_desc" class="fi ta">{{ doc_data.get('cargo_desc', '') }}</textarea></div>
+            <div class="fg full"><label>Position (roads/at berth/anchorage)</label><input type="text" name="position" value="{{ doc_data.get('position', '') }}" class="fi" placeholder="roads / at berth / anchorage"></div>
+            <div class="fg full"><label>Additional remarks</label><textarea name="remarks" class="fi ta">{{ doc_data.get('remarks', '') }}</textarea></div>
+            <div class="doc-grid-2">
+                <div class="fg"><label>Master name</label>
+                    <select name="master_name" class="fi">
+                        <option value="">—</option>
+                        {% for ca in crew_onboard %}
+                        <option value="{{ ca.member.full_name }}" {% if doc_data.get('master_name') == ca.member.full_name %}selected{% endif %}>{{ ca.member.full_name }} ({{ ca.member.role_label }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="fg"><label>Agent stamp / signature</label><input type="text" name="agent_stamp" value="{{ doc_data.get('agent_stamp', '') }}" class="fi" placeholder="For terminal use"></div>
+            </div>
+        </div>
+
+        <!-- ═══ NOR_RT - NOR Re-tendered ═══ -->
+        {% elif doc_type == 'NOR_RT' %}
+        <div class="doc-section">
+            <h3>NOTICE OF READINESS RE-TENDERED</h3>
+            <p class="doc-hint">Without prejudice to any previous NOR tendered</p>
+            <div class="doc-grid-2">
+                <div class="fg"><label>To</label><input type="text" name="to_charterer" value="{{ doc_data.get('to_charterer', '') }}" class="fi"></div>
+                <div class="fg"><label>Vessel</label><input type="text" name="vessel_name" value="{{ doc_data.get('vessel_name', prefill.vessel_name) }}" class="fi" readonly></div>
+                <div class="fg"><label>Voyage No</label><input type="text" name="voyage_no" value="{{ doc_data.get('voyage_no', prefill.voyage_no) }}" class="fi" readonly></div>
+                <div class="fg"><label>Port</label><input type="text" name="port" value="{{ doc_data.get('port', prefill.current_port) }}" class="fi"></div>
+            </div>
+            <div class="fg full"><label>Reason for re-tendering</label><textarea name="reason" class="fi ta">{{ doc_data.get('reason', '') }}</textarea></div>
+            <div class="doc-grid-2">
+                <div class="fg"><label>Date</label><input type="date" name="notice_date" value="{{ doc_data.get('notice_date', prefill.date_today) }}" class="fi"></div>
+                <div class="fg"><label>Time</label>
+                    <div class="tz-input-wrap">
+                        <input type="time" name="notice_time" value="{{ doc_data.get('notice_time', '') }}" class="fi">
+                        <select name="notice_time_tz" class="tz-select">
+                            {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                            <option value="{{ code }}" {% if code == doc_data.get('notice_time_tz', 'UTC') %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <span class="tz-utc-hint"></span>
+                </div>
+            </div>
+            <div class="fg"><label>Master name</label>
+                <select name="master_name" class="fi">
+                    <option value="">—</option>
+                    {% for ca in crew_onboard %}
+                    <option value="{{ ca.member.full_name }}" {% if doc_data.get('master_name') == ca.member.full_name %}selected{% endif %}>{{ ca.member.full_name }} ({{ ca.member.role_label }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <!-- ═══ HOLDS_CERT ═══ -->
+        {% elif doc_type == 'HOLDS_CERT' %}
+        <div class="doc-section">
+            <h3>HOLDS READINESS PRIOR LOADING</h3>
+            <div class="doc-grid-2">
+                <div class="fg"><label>To</label><input type="text" name="to" value="{{ doc_data.get('to', '') }}" class="fi"></div>
+                <div class="fg"><label>Vessel</label><input type="text" name="vessel_name" value="{{ doc_data.get('vessel_name', prefill.vessel_name) }}" class="fi" readonly></div>
+                <div class="fg"><label>Voyage No</label><input type="text" name="voyage_no" value="{{ doc_data.get('voyage_no', prefill.voyage_no) }}" class="fi" readonly></div>
+                <div class="fg"><label>Port</label><input type="text" name="port" value="{{ doc_data.get('port', prefill.current_port) }}" class="fi"></div>
+                <div class="fg"><label>Cargo to be loaded</label><input type="text" name="cargo" value="{{ doc_data.get('cargo', '') }}" class="fi"></div>
+                <div class="fg"><label>Date of inspection</label><input type="date" name="inspection_date" value="{{ doc_data.get('inspection_date', prefill.date_today) }}" class="fi"></div>
+            </div>
+            <div class="fg full"><label>Holds inspected (e.g. FWD Hold, AFT Hold)</label><textarea name="holds_list" class="fi ta">{{ doc_data.get('holds_list', '') }}</textarea></div>
+            <div class="fg full"><label>Result / observations</label><textarea name="observations" class="fi ta">{{ doc_data.get('observations', '') }}</textarea></div>
+            <div class="doc-grid-2">
+                <div class="fg"><label>Chief Officer / Master</label>
+                    <select name="officer_name" class="fi">
+                        <option value="">—</option>
+                        {% for ca in crew_onboard %}
+                        <option value="{{ ca.member.full_name }}" {% if doc_data.get('officer_name') == ca.member.full_name %}selected{% endif %}>{{ ca.member.full_name }} ({{ ca.member.role_label }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="fg"><label>Surveyor / Terminal stamp</label><input type="text" name="surveyor" value="{{ doc_data.get('surveyor', '') }}" class="fi"></div>
+            </div>
+        </div>
+
+        <!-- ═══ KEY_MEETING ═══ -->
+        {% elif doc_type == 'KEY_MEETING' %}
+        <div class="doc-section">
+            <h3>KEY TRANSFER MEETING</h3>
+            <div class="doc-grid-2">
+                <div class="fg"><label>Vessel</label><input type="text" name="vessel_name" value="{{ doc_data.get('vessel_name', prefill.vessel_name) }}" class="fi" readonly></div>
+                <div class="fg"><label>Port</label><input type="text" name="port" value="{{ doc_data.get('port', prefill.current_port) }}" class="fi"></div>
+                <div class="fg"><label>Voyage No</label><input type="text" name="voyage_no" value="{{ doc_data.get('voyage_no', prefill.voyage_no) }}" class="fi" readonly></div>
+                <div class="fg"><label>Date</label><input type="date" name="meeting_date" value="{{ doc_data.get('meeting_date', prefill.date_today) }}" class="fi"></div>
+            </div>
+            <div class="fg full"><label>Attendees</label><textarea name="attendees" class="fi ta">{{ doc_data.get('attendees', '') }}</textarea></div>
+            <div class="fg full"><label>Key points discussed</label><textarea name="key_points" class="fi ta" rows="8">{{ doc_data.get('key_points', '') }}</textarea></div>
+            <div class="fg full"><label>Actions / follow-up</label><textarea name="actions" class="fi ta">{{ doc_data.get('actions', '') }}</textarea></div>
+        </div>
+
+        <!-- ═══ PRE_MEETING ═══ -->
+        {% elif doc_type == 'PRE_MEETING' %}
+        <div class="doc-section">
+            <h3>PRE-LOADING / DISCHARGING MEETING</h3>
+            <div class="doc-grid-2">
+                <div class="fg"><label>Vessel</label><input type="text" name="vessel_name" value="{{ doc_data.get('vessel_name', prefill.vessel_name) }}" class="fi" readonly></div>
+                <div class="fg"><label>Port</label><input type="text" name="port" value="{{ doc_data.get('port', prefill.current_port) }}" class="fi"></div>
+                <div class="fg"><label>Voyage No</label><input type="text" name="voyage_no" value="{{ doc_data.get('voyage_no', prefill.voyage_no) }}" class="fi" readonly></div>
+                <div class="fg"><label>Date</label><input type="date" name="meeting_date" value="{{ doc_data.get('meeting_date', prefill.date_today) }}" class="fi"></div>
+            </div>
+            <div class="fg full"><label>Terminal name / Contact</label><input type="text" name="terminal" value="{{ doc_data.get('terminal', '') }}" class="fi"></div>
+            <div class="fg full"><label>Safety precautions</label><textarea name="safety" class="fi ta">{{ doc_data.get('safety', '') }}</textarea></div>
+            <div class="fg full"><label>Loading / Discharging plan</label><textarea name="plan" class="fi ta" rows="6">{{ doc_data.get('plan', '') }}</textarea></div>
+            <div class="fg full"><label>Emergency procedures</label><textarea name="emergency" class="fi ta">{{ doc_data.get('emergency', '') }}</textarea></div>
+        </div>
+
+        <!-- ═══ LOP (all types) ═══ -->
+        {% elif doc_type.startswith('LOP') %}
+        <div class="doc-section">
+            <h3>{{ doc_label|upper }}</h3>
+            <div class="doc-grid-2">
+                <div class="fg"><label>To</label><input type="text" name="to" value="{{ doc_data.get('to', 'TO WHOM IT MAY CONCERN') }}" class="fi"></div>
+                <div class="fg"><label>Vessel</label><input type="text" name="vessel_name" value="{{ doc_data.get('vessel_name', prefill.vessel_name) }}" class="fi" readonly></div>
+                <div class="fg"><label>Voyage No</label><input type="text" name="voyage_no" value="{{ doc_data.get('voyage_no', prefill.voyage_no) }}" class="fi" readonly></div>
+                <div class="fg"><label>Port</label><input type="text" name="port" value="{{ doc_data.get('port', prefill.current_port) }}" class="fi"></div>
+                <div class="fg"><label>Date</label><input type="date" name="lop_date" value="{{ doc_data.get('lop_date', prefill.date_today) }}" class="fi"></div>
+                <div class="fg"><label>Time</label>
+                    <div class="tz-input-wrap">
+                        <input type="time" name="lop_time" value="{{ doc_data.get('lop_time', '') }}" class="fi">
+                        <select name="lop_time_tz" class="tz-select">
+                            {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                            <option value="{{ code }}" {% if code == doc_data.get('lop_time_tz', 'UTC') %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <span class="tz-utc-hint"></span>
+                </div>
+            </div>
+            <div class="fg full"><label>Subject / Description of protest</label><textarea name="subject" class="fi ta" rows="6">{{ doc_data.get('subject', '') }}</textarea></div>
+            <div class="fg full"><label>Details and facts</label><textarea name="details" class="fi ta" rows="8">{{ doc_data.get('details', '') }}</textarea></div>
+            <div class="fg full"><label>Reserve all rights</label><textarea name="reserve" class="fi ta">{{ doc_data.get('reserve', 'We hereby reserve all our rights and those of our owners, charterers, and insurers, and hold you and/or your principals responsible for all consequences, losses and expenses arising therefrom.') }}</textarea></div>
+            <div class="doc-grid-2">
+                <div class="fg"><label>Master name</label>
+                    <select name="master_name" class="fi">
+                        <option value="">—</option>
+                        {% for ca in crew_onboard %}
+                        <option value="{{ ca.member.full_name }}" {% if doc_data.get('master_name') == ca.member.full_name %}selected{% endif %}>{{ ca.member.full_name }} ({{ ca.member.role_label }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="fg"><label>Countersigned by</label><input type="text" name="countersigned" value="{{ doc_data.get('countersigned', '') }}" class="fi" placeholder="For receipt only without prejudice"></div>
+            </div>
+        </div>
+
+        <!-- ═══ MATES_RECEIPT ═══ -->
+        {% elif doc_type == 'MATES_RECEIPT' %}
+        <div class="doc-section">
+            <h3>MATE'S RECEIPT</h3>
+            <div class="doc-grid-2">
+                <div class="fg"><label>Vessel</label><input type="text" name="vessel_name" value="{{ doc_data.get('vessel_name', prefill.vessel_name) }}" class="fi" readonly></div>
+                <div class="fg"><label>Voyage No</label><input type="text" name="voyage_no" value="{{ doc_data.get('voyage_no', prefill.voyage_no) }}" class="fi" readonly></div>
+                <div class="fg"><label>Port of loading</label><input type="text" name="port_loading" value="{{ doc_data.get('port_loading', prefill.current_port) }}" class="fi"></div>
+                <div class="fg"><label>Date</label><input type="date" name="receipt_date" value="{{ doc_data.get('receipt_date', prefill.date_today) }}" class="fi"></div>
+            </div>
+            <div class="fg full"><label>Shipper</label><input type="text" name="shipper" value="{{ doc_data.get('shipper', '') }}" class="fi"></div>
+            <div class="fg full"><label>Cargo description</label><textarea name="cargo_desc" class="fi ta" rows="4">{{ doc_data.get('cargo_desc', '') }}</textarea></div>
+            <div class="doc-grid-2">
+                <div class="fg"><label>Number of packages</label><input type="text" name="packages" value="{{ doc_data.get('packages', '') }}" class="fi"></div>
+                <div class="fg"><label>Gross weight (kg)</label><input type="text" name="weight" value="{{ doc_data.get('weight', '') }}" class="fi"></div>
+            </div>
+            <div class="fg full"><label>Condition / Remarks</label><textarea name="condition" class="fi ta">{{ doc_data.get('condition', 'Received in apparent good order and condition') }}</textarea></div>
+            <div class="fg"><label>Chief Officer</label>
+                <select name="officer_name" class="fi">
+                    <option value="">—</option>
+                    {% for ca in crew_onboard %}
+                    <option value="{{ ca.member.full_name }}" {% if doc_data.get('officer_name') == ca.member.full_name %}selected{% endif %}>{{ ca.member.full_name }} ({{ ca.member.role_label }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <!-- ═══ SOF document ═══ -->
+        {% elif doc_type == 'SOF' %}
+        <div class="doc-section">
+            <h3>STATEMENT OF FACTS</h3>
+            <p class="doc-hint">Les événements SOF sont gérés depuis la page On Board. Utilisez les boutons d'export Excel/PDF.</p>
+            {% if sof_events %}
+            <table class="ob-table" style="margin-top:12px;">
+                <thead><tr><th>Événement</th><th>Date</th><th>Heure</th><th>Remarques</th></tr></thead>
+                <tbody>
+                {% for evt in sof_events %}
+                <tr>
+                    <td>{{ evt.event_label }}</td>
+                    <td>{{ evt.event_date.strftime('%d/%m/%Y') if evt.event_date else '' }}</td>
+                    <td>{{ evt.event_time or '' }}</td>
+                    <td>{{ evt.remarks or '' }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+            <div style="margin-top:12px;">
+                <a href="/onboard/sof/{{ leg.id }}/excel" class="btn btn-primary btn-sm">📥 Export Excel</a>
+            </div>
+        </div>
+
+        <!-- ═══ FALLBACK ═══ -->
+        {% else %}
+        <div class="doc-section">
+            <h3>{{ doc_label }}</h3>
+            <div class="doc-grid-2">
+                <div class="fg"><label>Vessel</label><input type="text" name="vessel_name" value="{{ prefill.vessel_name }}" class="fi" readonly></div>
+                <div class="fg"><label>Voyage No</label><input type="text" name="voyage_no" value="{{ prefill.voyage_no }}" class="fi" readonly></div>
+                <div class="fg"><label>Port</label><input type="text" name="port" value="{{ prefill.port }}" class="fi"></div>
+                <div class="fg"><label>Date</label><input type="date" name="doc_date" value="{{ prefill.date_today }}" class="fi"></div>
+            </div>
+            <div class="fg full"><label>Content</label><textarea name="content" class="fi ta" rows="12">{{ doc_data.get('content', '') }}</textarea></div>
+        </div>
+        {% endif %}
+    </form>
+
+    <!-- ═══ PIÈCES JOINTES DU DOCUMENT ═══ -->
+    {% if doc %}
+    <div class="doc-section" id="doc-attachments">
+        <h3>📎 Photos & Documents joints <span style="font-size:12px;font-weight:400;color:#888;">({{ doc_attachments|length }})</span></h3>
+
+        {% if doc_attachments %}
+        <div class="doc-att-grid">
+            {% for att in doc_attachments %}
+            <div class="doc-att-item" id="doc-att-{{ att.id }}">
+                <div class="doc-att-icon">
+                    {% if att.mime_type and att.mime_type.startswith('image/') %}
+                    <i data-lucide="image" style="width:20px;height:20px;color:#6366F1;"></i>
+                    {% elif att.mime_type == 'application/pdf' %}
+                    <i data-lucide="file-text" style="width:20px;height:20px;color:#dc2626;"></i>
+                    {% else %}
+                    <i data-lucide="file" style="width:20px;height:20px;color:var(--towt-blue);"></i>
+                    {% endif %}
+                </div>
+                <div class="doc-att-info">
+                    <strong>{{ att.title }}</strong>
+                    <span class="doc-att-meta">
+                        {{ att.filename }} · {{ (att.file_size / 1024)|round(0)|int }} Ko
+                        · {{ att.uploaded_by }} · {{ att.created_at.strftime('%d/%m/%Y %H:%M') }}
+                    </span>
+                </div>
+                <div class="doc-att-actions">
+                    <a href="/onboard/doc/attachments/{{ att.id }}/download" class="btn-icon" title="Télécharger"><i data-lucide="download" style="width:14px;height:14px;color:var(--towt-blue);"></i></a>
+                    <button class="btn-icon" hx-delete="/onboard/doc/attachments/{{ att.id }}" hx-confirm="Supprimer ce fichier ?" hx-target="#doc-att-{{ att.id }}" hx-swap="outerHTML"><i data-lucide="trash-2" style="width:14px;height:14px;color:#dc2626;"></i></button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p style="font-size:12px;color:#aaa;margin:8px 0;">Aucune pièce jointe pour ce document.</p>
+        {% endif %}
+
+        <form method="POST" action="/onboard/doc/{{ doc.id }}/attachments/upload" enctype="multipart/form-data" class="doc-att-upload">
+            {{ csrf_input(request) }}
+            <div class="doc-grid-2">
+                <div class="fg">
+                    <label>Fichier (photo, PDF, document...)</label>
+                    <input type="file" name="file" required class="fi" accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.csv,.txt,.heic,.webp">
+                </div>
+                <div class="fg">
+                    <label>Titre (optionnel)</label>
+                    <input type="text" name="title" class="fi" placeholder="ex: Photo cale avant">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-secondary btn-sm" style="margin-top:8px;"><i data-lucide="upload"></i> Ajouter une pièce jointe</button>
+        </form>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:12px;font-size:12px;color:#888;">
+        💡 Enregistrez le document d'abord pour pouvoir y joindre des photos ou fichiers.
+    </div>
+    {% endif %}
+
+    {% if doc %}
+    <div class="doc-export-bar">
+        <span style="font-size:12px;color:#888;">Exporter ce document :</span>
+        <a href="/onboard/doc/{{ doc.id }}/export/word" class="btn btn-secondary btn-sm"><i data-lucide="file-text"></i> Télécharger Word (.docx)</a>
+        <a href="/onboard/doc/{{ doc.id }}/export/pdf" class="btn btn-secondary btn-sm"><i data-lucide="file-text"></i> Télécharger PDF</a>
+        <span style="font-size:10px;color:#aaa;margin-left:8px;">L'export sera historisé dans le SOF.</span>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:12px;font-size:12px;color:#888;">
+        💡 Enregistrez le document d'abord pour pouvoir l'exporter en Word ou PDF.
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .doc-container{max-width:900px;margin:0 auto}
+    .doc-header-bar{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:12px 20px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;font-size:13px}
+    .doc-section{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px;margin-bottom:16px}
+    .doc-section h3{margin:0 0 16px;font-size:16px;color:var(--towt-blue);border-bottom:2px solid var(--towt-blue);padding-bottom:8px}
+    .doc-hint{font-size:12px;color:#888;margin:-8px 0 16px}
+    .doc-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+    @media(max-width:600px){.doc-grid-2{grid-template-columns:1fr}}
+    .fg{display:flex;flex-direction:column;gap:3px;margin-bottom:4px}
+    .fg.full{grid-column:1/-1}
+    .fg label{font-size:11px;font-weight:600;color:#666;text-transform:uppercase}
+    .fi{padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:'Poppins',system-ui,sans-serif}
+    .fi:focus{border-color:var(--towt-blue);outline:none}
+    .fi[readonly]{background:#f8f9fa;color:#555}
+    .ta{resize:vertical;min-height:60px}
+    .doc-export-bar{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:14px 20px;margin-top:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .ob-table{width:100%;border-collapse:collapse;font-size:12px}
+    .ob-table th{text-align:left;padding:6px 8px;font-size:10px;text-transform:uppercase;color:#888;border-bottom:2px solid #f0f0f0}
+    .ob-table td{padding:6px 8px;border-bottom:1px solid #f8f8f8}
+    .doc-att-grid{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+    .doc-att-item{display:flex;align-items:center;gap:12px;padding:10px 14px;background:#f8fafb;border-radius:8px;border:1px solid #eee}
+    .doc-att-icon{flex-shrink:0}
+    .doc-att-info{flex:1;min-width:0}
+    .doc-att-info strong{font-size:13px;display:block}
+    .doc-att-meta{font-size:11px;color:#888}
+    .doc-att-actions{display:flex;gap:6px;flex-shrink:0}
+    .doc-att-upload{margin-top:12px;padding-top:12px;border-top:1px solid #f0f0f0}
+</style>
+{% endblock %}

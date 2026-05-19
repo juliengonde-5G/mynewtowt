@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Gestion documentaire{% endblock %}
+{% block page_title %}Gestion documentaire cargo{% endblock %}
+
+{% block content %}
+<div class="cargo-page">
+    <div class="status-tabs" style="margin-bottom:16px;display:flex;gap:6px;flex-wrap:wrap;">
+        <a href="/cargo" class="status-tab {% if not selected_status %}active{% endif %}">Toutes</a>
+        <a href="/cargo?status=draft" class="status-tab {% if selected_status == 'draft' %}active{% endif %}">🔵 Brouillon</a>
+        <a href="/cargo?status=submitted" class="status-tab {% if selected_status == 'submitted' %}active{% endif %}">🟡 Soumis</a>
+        <a href="/cargo?status=locked" class="status-tab {% if selected_status == 'locked' %}active{% endif %}">🟢 Verrouillé</a>
+    </div>
+
+    {% if packing_lists %}
+    <div class="table-container">
+        <table class="data-table">
+            <thead><tr>
+                <th>Commande</th><th>Client</th><th>Voyage</th><th>Route</th>
+                <th>Batchs</th><th>Complétude</th><th>Statut</th><th>Lien client</th>
+                <th style="text-align:right;">Actions</th>
+            </tr></thead>
+            <tbody>
+                {% for pl in packing_lists %}
+                <tr>
+                    <td><strong style="font-family:monospace;color:var(--towt-blue);">{{ pl.order.reference }}</strong></td>
+                    <td>{{ pl.order.client_name }}</td>
+                    <td>
+                        {% if pl.order.leg %}
+                        <span style="font-family:monospace;">{{ pl.order.leg.leg_code }}</span>
+                        <br><span style="font-size:10px;color:#888;">{{ pl.order.leg.vessel.name }}</span>
+                        {% else %}<span style="color:#ccc;">—</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if pl.order.leg %}
+                        {{ pl.order.leg.departure_port.country_code|flag }} {{ pl.order.leg.departure_port.locode }}
+                        → {{ pl.order.leg.arrival_port.country_code|flag }} {{ pl.order.leg.arrival_port.locode }}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td><span class="batch-count">{{ pl.batch_count }}</span></td>
+                    <td>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width:{{ pl.completion_pct }}%"></div>
+                            <span class="progress-text">{{ pl.completion_pct }}%</span>
+                        </div>
+                    </td>
+                    <td>
+                        {% if pl.status == 'draft' %}<span class="badge badge-draft">Brouillon</span>
+                        {% elif pl.status == 'submitted' %}<span class="badge badge-submitted">Soumis</span>
+                        {% elif pl.status == 'locked' %}<span class="badge badge-locked">Verrouillé</span>{% endif %}
+                    </td>
+                    <td>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <input type="text" value="{{ site_url }}/p/{{ pl.token }}"
+                                   class="form-input" style="font-size:10px;padding:4px 6px;width:180px;" readonly
+                                   id="link-{{ pl.id }}" onclick="this.select()">
+                            <button class="btn btn-sm btn-secondary" onclick="copyLink({{ pl.id }})" title="Copier"><i data-lucide="copy" style="width:12px;height:12px;"></i></button>
+                        </div>
+                    </td>
+                    <td style="text-align:right;">
+                        <div style="display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap;">
+                            <a href="/cargo/{{ pl.id }}" class="btn btn-sm btn-secondary" title="Détail"><i data-lucide="eye"></i></a>
+                            <a href="/cargo/{{ pl.id }}/excel" class="btn btn-sm btn-secondary" title="Excel"><i data-lucide="file-spreadsheet"></i></a>
+                            <a href="/cargo/{{ pl.id }}/bol" class="btn btn-sm btn-secondary" target="_blank" title="Bill of Lading (DOCX)"><i data-lucide="file-text"></i></a>
+                            <a href="/cargo/{{ pl.id }}/arrival-notice" class="btn btn-sm btn-secondary" target="_blank" title="Arrival Notice"><i data-lucide="ship"></i></a>
+                            <button class="btn btn-sm btn-danger" hx-delete="/cargo/{{ pl.id }}" hx-confirm="Supprimer la packing list {{ pl.order.reference }} ?"><i data-lucide="trash-2"></i></button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i data-lucide="package-open" style="width:48px;height:48px;color:var(--towt-sky);"></i>
+        <h3>Aucune packing list</h3>
+        <p style="color:#888;font-size:13px;">Créez une packing list depuis le module Commercial sur une commande affectée.</p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .status-tab{padding:6px 16px;border-radius:100px;font-size:12px;font-weight:500;color:#888;border:1px solid #eee;background:white;}
+    .status-tab:hover{border-color:var(--towt-sky);}.status-tab.active{background:var(--towt-blue);color:white;border-color:var(--towt-blue);}
+    .batch-count{background:var(--towt-light);padding:2px 10px;border-radius:100px;font-size:12px;font-weight:600;}
+    .progress-bar{position:relative;height:20px;background:#f0f0f0;border-radius:100px;overflow:hidden;min-width:80px;}
+    .progress-fill{height:100%;background:linear-gradient(90deg,var(--towt-blue),var(--towt-green));border-radius:100px;transition:width 0.3s;}
+    .progress-text{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:10px;font-weight:700;color:#333;}
+    .badge-draft{background:rgba(96,165,250,0.12);color:#2563EB;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;}
+    .badge-submitted{background:rgba(245,158,11,0.12);color:#D97706;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;}
+    .badge-locked{background:rgba(34,197,94,0.12);color:#16a34a;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;}
+</style>
+
+<script>
+function copyLink(id) {
+    var input = document.getElementById('link-' + id);
+    input.select();
+    document.execCommand('copy');
+    input.style.background = '#ecfdf5';
+    setTimeout(function(){ input.style.background = ''; }, 1000);
+}
+</script>
+{% endblock %}

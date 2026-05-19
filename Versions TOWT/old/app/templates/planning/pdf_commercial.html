@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:'Poppins',system-ui,-apple-system,sans-serif;font-size:12px;color:#333;padding:20px;max-width:1000px;margin:0 auto;}
+
+        .no-print{margin-bottom:20px;background:#f8f9fa;padding:16px;border-radius:8px;border:1px solid #e0e0e0;}
+        .no-print h3{margin-bottom:12px;color:#095561;font-size:14px;display:flex;align-items:center;justify-content:space-between;}
+        .filters-panel{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;padding:12px;background:white;border-radius:6px;border:1px solid #eee;}
+        .filter-group{display:flex;flex-direction:column;gap:3px;}
+        .filter-group label{font-size:10px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.5px;}
+        .filter-group select{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px;min-width:160px;background:white;}
+        .filter-group select:focus{border-color:#095561;outline:none;}
+        .filter-apply-btn{padding:7px 20px;background:#095561;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;}
+        .filter-apply-btn:hover{background:#0a6b79;}
+        .filter-reset-btn{padding:7px 14px;border:1px solid #ddd;border-radius:6px;font-size:11px;color:#888;text-decoration:none;white-space:nowrap;}
+        .filter-reset-btn:hover{border-color:#dc2626;color:#dc2626;}
+        .active-filters{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+        .filter-tag{padding:3px 10px;background:rgba(9,85,97,0.08);color:#095561;border-radius:100px;font-size:11px;font-weight:500;}
+        .filter-tag.result{background:rgba(135,189,43,0.12);color:#5a8010;font-weight:700;}
+        .custom-selector{margin-top:6px;border:1px solid #eee;border-radius:6px;background:white;}
+        .custom-toggle{padding:10px 14px;cursor:pointer;font-size:12px;font-weight:600;color:#095561;list-style:none;user-select:none;}
+        .custom-toggle::-webkit-details-marker{display:none;}
+        .custom-toggle::before{content:'▶ ';font-size:10px;}
+        details[open] .custom-toggle::before{content:'▼ ';}
+        .custom-count{font-weight:400;color:#87BD2B;font-size:11px;}
+        .template-selector{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+        .tpl-btn{padding:8px 16px;border:2px solid #e0e0e0;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:white;color:#555;text-decoration:none;display:inline-flex;align-items:center;gap:4px;}
+        .tpl-btn:hover{border-color:#095561;color:#095561;}
+        .tpl-btn.active{border-color:#095561;background:#095561;color:white;}
+        .lang-toggle{display:inline-flex;gap:4px;margin-left:12px;}
+        .lang-btn{padding:4px 12px;border:1px solid #ddd;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;color:#555;}
+        .lang-btn.active{background:#095561;color:white;border-color:#095561;}
+        .filter-row{display:flex;gap:12px;align-items:center;margin-top:8px;}
+        .filter-row select{padding:6px 12px;border:1px solid #ddd;border-radius:4px;font-size:12px;}
+        .print-btn{padding:8px 24px;background:#095561;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;}
+        .print-btn:hover{background:#0a6b79;}
+
+        .custom-selector{margin-top:12px;}
+        .leg-checkboxes{max-height:400px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:6px;padding:8px;background:white;}
+        .leg-vessel-header{padding:6px 8px;background:#f0f7f8;border-radius:4px;margin:4px 0 2px;font-size:12px;}
+        .leg-checkbox{display:flex;align-items:center;gap:8px;padding:4px 8px 4px 20px;font-size:11px;cursor:pointer;border-bottom:1px solid #f5f5f5;}
+        .leg-checkbox:hover{background:#fafafa;}
+        .leg-checkbox input{accent-color:#095561;}
+        .leg-code{font-family:monospace;font-weight:700;color:#095561;min-width:90px;}
+        .leg-route{flex:1;color:#555;}
+        .leg-date{color:#888;min-width:70px;text-align:right;}
+        .mini-btn{padding:4px 12px;border:1px solid #ddd;border-radius:4px;font-size:11px;cursor:pointer;background:white;color:#555;}
+        .mini-btn:hover{border-color:#095561;color:#095561;}
+
+        .header{border-bottom:3px solid #095561;padding-bottom:12px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;}
+        .header-left{flex:1;}
+        .header h1{font-size:20px;color:#095561;margin:0;}
+        .header h2{font-size:13px;color:#888;font-weight:400;margin-top:4px;}
+        .header-logo img{height:50px;}
+
+        .section{margin-bottom:28px;page-break-inside:avoid;}
+        .section h3{font-size:14px;color:#095561;border-bottom:2px solid #095561;padding-bottom:4px;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+        .vessel-icon{display:inline-block;width:20px;height:20px;border-radius:50%;color:white;font-size:10px;font-weight:700;text-align:center;line-height:20px;}
+
+        table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px;}
+        th{background:#095561;color:white;padding:7px 10px;text-align:left;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.3px;}
+        td{padding:6px 10px;border-bottom:1px solid #eee;}
+        tr:nth-child(even){background:#f9fafb;}
+        tr:hover{background:#eef4f6;}
+        .port-code{font-family:monospace;font-weight:700;color:#095561;font-size:11px;}
+        .date-cell{white-space:nowrap;}
+        .duration{color:#888;font-size:10px;}
+        .route-arrow{color:#095561;font-weight:700;}
+
+        .summary-box{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
+        .summary-item{background:#f0f7f8;padding:10px 14px;border-radius:6px;text-align:center;}
+        .summary-value{font-size:18px;font-weight:700;color:#095561;}
+        .summary-label{font-size:10px;color:#888;text-transform:uppercase;margin-top:2px;}
+
+        .footer{margin-top:30px;border-top:1px solid #ddd;padding-top:8px;font-size:10px;color:#999;display:flex;justify-content:space-between;}
+
+        @media print{
+            .no-print{display:none !important;}
+            body{padding:10px;}
+            .section{page-break-inside:avoid;}
+        }
+    </style>
+</head>
+<body>
+    <!-- Template selector (not printed) -->
+    <!-- Template selector (not printed) -->
+    <div class="no-print">
+        <h3>📄 {% if lang == 'en' %}Commercial brochure generator{% else %}Générateur de support commercial{% endif %}
+            <span class="lang-toggle">
+                <a href="javascript:void(0)" onclick="updateLang('fr')" class="lang-btn {% if lang == 'fr' %}active{% endif %}">🇫🇷 FR</a>
+                <a href="javascript:void(0)" onclick="updateLang('en')" class="lang-btn {% if lang == 'en' %}active{% endif %}">🇬🇧 EN</a>
+            </span>
+        </h3>
+
+        <!-- FILTERS BAR -->
+        <div class="filters-panel">
+            <div class="filter-group">
+                <label>{% if lang == 'en' %}Vessel{% else %}Navire{% endif %}</label>
+                <select id="filter-vessel">
+                    <option value="">{% if lang == 'en' %}All vessels{% else %}Tous les navires{% endif %}</option>
+                    {% for v in vessels %}
+                    <option value="{{ v.code }}" {% if selected_vessel == v.code %}selected{% endif %}>{{ v.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>{% if lang == 'en' %}Origin{% else %}Origine{% endif %}</label>
+                <select id="filter-origin">
+                    <option value="">{% if lang == 'en' %}All origins{% else %}Toutes les origines{% endif %}</option>
+                    {% for locode, name in all_origins %}
+                    <option value="{{ locode }}" {% if selected_origin == locode %}selected{% endif %}>{{ name }} ({{ locode }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>{% if lang == 'en' %}Destination{% else %}Destination{% endif %}</label>
+                <select id="filter-destination">
+                    <option value="">{% if lang == 'en' %}All destinations{% else %}Toutes les destinations{% endif %}</option>
+                    {% for locode, name in all_destinations %}
+                    <option value="{{ locode }}" {% if selected_destination == locode %}selected{% endif %}>{{ name }} ({{ locode }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button class="filter-apply-btn" onclick="applyFilters()">🔍 {% if lang == 'en' %}Apply filters{% else %}Appliquer les filtres{% endif %}</button>
+            {% if selected_vessel or selected_origin or selected_destination %}
+            <a href="/planning/pdf/commercial?year={{ current_year }}&lang={{ lang }}" class="filter-reset-btn">✕ {% if lang == 'en' %}Reset{% else %}Réinitialiser{% endif %}</a>
+            {% endif %}
+        </div>
+
+        <!-- Active filters display -->
+        {% if selected_vessel or selected_origin or selected_destination %}
+        <div class="active-filters">
+            <span style="font-size:11px;color:#888;margin-right:6px;">{% if lang == 'en' %}Active filters:{% else %}Filtres actifs :{% endif %}</span>
+            {% if selected_vessel %}<span class="filter-tag">🚢 {% for v in vessels %}{% if v.code == selected_vessel %}{{ v.name }}{% endif %}{% endfor %}</span>{% endif %}
+            {% if selected_origin %}<span class="filter-tag">📍 {% for locode, name in all_origins %}{% if locode == selected_origin %}{{ name }}{% endif %}{% endfor %}</span>{% endif %}
+            {% if selected_destination %}<span class="filter-tag">🎯 {% for locode, name in all_destinations %}{% if locode == selected_destination %}{{ name }}{% endif %}{% endfor %}</span>{% endif %}
+            <span class="filter-tag result">{{ legs|length }} {% if lang == 'en' %}legs{% else %}legs{% endif %}</span>
+        </div>
+        {% endif %}
+
+        <!-- CUSTOM LEG SELECTOR (collapsible) -->
+        <details class="custom-selector" {% if selected_leg_ids %}open{% endif %}>
+            <summary class="custom-toggle">✏️ {% if lang == 'en' %}Select specific legs{% else %}Sélectionner des legs spécifiques{% endif %} {% if selected_leg_ids %}<span class="custom-count">({{ selected_leg_ids|length }} {% if lang == 'en' %}selected{% else %}sélectionnés{% endif %})</span>{% endif %}</summary>
+            <div style="margin-top:10px;">
+                <div style="margin-bottom:8px;display:flex;gap:6px;">
+                    <button type="button" class="mini-btn" onclick="toggleAll(true)">{% if lang == 'en' %}Select all{% else %}Tout cocher{% endif %}</button>
+                    <button type="button" class="mini-btn" onclick="toggleAll(false)">{% if lang == 'en' %}Deselect all{% else %}Tout décocher{% endif %}</button>
+                </div>
+                <div class="leg-checkboxes">
+                    {% set ns = namespace(current_vessel='') %}
+                    {% for leg in all_legs_for_selector %}
+                    {% if leg.vessel.name != ns.current_vessel %}
+                        {% set ns.current_vessel = leg.vessel.name %}
+                        <div class="leg-vessel-header">
+                            <label style="cursor:pointer;">
+                                <input type="checkbox" class="vessel-toggle" data-vessel="{{ leg.vessel.name }}" checked onchange="toggleVessel(this)"> <strong>⛵ {{ leg.vessel.name }}</strong>
+                            </label>
+                        </div>
+                    {% endif %}
+                    <label class="leg-checkbox" data-vessel="{{ leg.vessel.name }}">
+                        <input type="checkbox" name="leg" value="{{ leg.id }}" {% if not selected_leg_ids or leg.id in selected_leg_ids %}checked{% endif %}>
+                        <span class="leg-code">{{ leg.leg_code }}</span>
+                        <span class="leg-route">{{ leg.departure_port.name }} → {{ leg.arrival_port.name }}</span>
+                        <span class="leg-date">{{ leg.etd.strftime('%d/%m/%Y') if leg.etd else '—' }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                <button class="print-btn" onclick="applyCustomSelection()" style="margin-top:12px;">📄 {% if lang == 'en' %}Generate with selection{% else %}Générer avec la sélection{% endif %}</button>
+            </div>
+        </details>
+
+        <!-- PRINT + SHARE BUTTONS -->
+        <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <button class="print-btn" onclick="window.print()">🖨 {% if lang == 'en' %}Print / Save as PDF{% else %}Imprimer / Enregistrer en PDF{% endif %}</button>
+            <button class="print-btn" style="background:#87BD2B;" onclick="document.getElementById('share-form').style.display='block'">🔗 {% if lang == 'en' %}Generate shareable link{% else %}Générer un lien partageable{% endif %}</button>
+            <a href="/planning/pdf/commercial/shares" class="filter-reset-btn" style="text-decoration:none;">📋 {% if lang == 'en' %}Link history{% else %}Historique des liens{% endif %}</a>
+            <span style="font-size:11px;color:#999;">{{ legs|length }} {% if lang == 'en' %}legs displayed{% else %}legs affichés{% endif %}</span>
+        </div>
+
+        <!-- Share form -->
+        <div id="share-form" style="display:none;margin-top:10px;padding:16px;background:white;border-radius:8px;border:1px solid #ddd;">
+            <h4 style="font-size:13px;color:#095561;margin-bottom:12px;">🔗 {% if lang == 'en' %}Share this planning{% else %}Partager ce planning{% endif %}</h4>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div class="filter-group">
+                    <label>{% if lang == 'en' %}Recipient name{% else %}Nom du destinataire{% endif %} *</label>
+                    <input type="text" id="share-recipient-name" placeholder="{% if lang == 'en' %}e.g. Jean Dupont{% else %}ex. Jean Dupont{% endif %}" style="padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px;">
+                </div>
+                <div class="filter-group">
+                    <label>{% if lang == 'en' %}Company{% else %}Société{% endif %}</label>
+                    <input type="text" id="share-recipient-company" placeholder="{% if lang == 'en' %}e.g. Logistics Co.{% else %}ex. Transit Maritime SA{% endif %}" style="padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px;">
+                </div>
+                <div class="filter-group">
+                    <label>{% if lang == 'en' %}Email{% else %}Email{% endif %}</label>
+                    <input type="email" id="share-recipient-email" placeholder="contact@example.com" style="padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px;">
+                </div>
+                <div class="filter-group">
+                    <label>{% if lang == 'en' %}Label{% else %}Libellé{% endif %}</label>
+                    <input type="text" id="share-label" placeholder="{% if lang == 'en' %}e.g. Q2 planning Brazil{% else %}ex. Planning Q2 Brésil{% endif %}" style="padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px;">
+                </div>
+            </div>
+            <div class="filter-group" style="margin-top:10px;">
+                <label>{% if lang == 'en' %}Notes{% else %}Notes{% endif %}</label>
+                <textarea id="share-notes" rows="2" placeholder="{% if lang == 'en' %}Internal notes about this share...{% else %}Notes internes sur ce partage...{% endif %}" style="width:100%;padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:'Poppins',system-ui;resize:vertical;"></textarea>
+            </div>
+            <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
+                <button class="filter-apply-btn" onclick="createShareLink()">🔗 {% if lang == 'en' %}Generate link{% else %}Générer le lien{% endif %}</button>
+                <button class="filter-reset-btn" onclick="document.getElementById('share-form').style.display='none'">{% if lang == 'en' %}Cancel{% else %}Annuler{% endif %}</button>
+            </div>
+        </div>
+
+        <!-- Share link result -->
+        <div id="share-result" style="display:none;margin-top:10px;padding:12px;background:#e8f5e9;border-radius:6px;border:1px solid #c8e6c9;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span style="font-size:12px;font-weight:600;color:#2e7d32;">🔗 {% if lang == 'en' %}Shareable link:{% else %}Lien partageable :{% endif %}</span>
+                <input id="share-url" type="text" readonly style="flex:1;min-width:200px;padding:6px 10px;border:1px solid #c8e6c9;border-radius:4px;font-size:12px;font-family:monospace;background:white;">
+                <button onclick="copyShareUrl()" style="padding:6px 14px;background:#095561;color:white;border:none;border-radius:4px;font-size:12px;cursor:pointer;font-family:'Poppins',system-ui;">📋 {% if lang == 'en' %}Copy{% else %}Copier{% endif %}</button>
+            </div>
+            <p style="margin-top:6px;font-size:11px;color:#555;">{% if lang == 'en' %}This link can be shared with clients and freight forwarders. The content updates automatically when the planning changes.{% else %}Ce lien peut être partagé avec les clients et transitaires. Le contenu se met à jour automatiquement lorsque le planning change.{% endif %}</p>
+        </div>
+    </div>
+
+    <!-- Printable content -->
+    <div class="header">
+        <div class="header-left">
+            <h1>{{ title }}</h1>
+            <h2>{% if lang == 'en' %}Sailing schedule {{ current_year }} — TOWT Sail Cargo{% else %}Calendrier de navigation {{ current_year }} — TOWT Transport à la voile{% endif %}</h2>
+        </div>
+        <div class="header-logo">
+            <img src="/static/logo_towt.png" alt="TOWT" onerror="this.style.display='none'">
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="summary-box">
+        <div class="summary-item">
+            <div class="summary-value">{{ legs|length }}</div>
+            <div class="summary-label">{% if lang == 'en' %}Crossings{% else %}Traversées{% endif %}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-value">{{ legs_by_vessel|length }}</div>
+            <div class="summary-label">{% if lang == 'en' %}Vessels{% else %}Navires{% endif %}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-value">{{ legs_by_dest|length }}</div>
+            <div class="summary-label">{% if lang == 'en' %}Destinations{% else %}Destinations{% endif %}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-value">{{ legs_by_route|length }}</div>
+            <div class="summary-label">{% if lang == 'en' %}Routes{% else %}Routes{% endif %}</div>
+        </div>
+    </div>
+
+    <!-- Chronological schedule -->
+    <div class="section">
+        <h3>📅 {% if lang == 'en' %}Chronological schedule{% else %}Planning chronologique{% endif %}</h3>
+        <table>
+            <thead><tr>
+                <th>{% if lang == 'en' %}Vessel{% else %}Navire{% endif %}</th>
+                <th>Leg</th>
+                <th>{% if lang == 'en' %}Departure{% else %}Départ{% endif %}</th>
+                <th></th>
+                <th>{% if lang == 'en' %}Arrival{% else %}Arrivée{% endif %}</th>
+                <th>ETD</th><th>ETA</th>
+                <th>{% if lang == 'en' %}Duration{% else %}Durée{% endif %}</th>
+                <th>{% if lang == 'en' %}Port stay{% else %}Escale{% endif %}</th>
+            </tr></thead>
+            <tbody>
+                {% for leg in legs %}
+                <tr>
+                    <td><strong>{{ leg.vessel.name }}</strong></td>
+                    <td><strong style="font-family:monospace;color:#095561;">{{ leg.leg_code }}</strong></td>
+                    <td><span class="port-code">{{ leg.departure_port.country_code|flag }} {{ leg.departure_port.locode }}</span> {{ leg.departure_port.name }}</td>
+                    <td class="route-arrow">→</td>
+                    <td><span class="port-code">{{ leg.arrival_port.country_code|flag }} {{ leg.arrival_port.locode }}</span> {{ leg.arrival_port.name }}</td>
+                    <td class="date-cell">{{ leg.etd.strftime('%d/%m/%Y') if leg.etd else '—' }}</td>
+                    <td class="date-cell">{{ leg.eta.strftime('%d/%m/%Y') if leg.eta else '—' }}</td>
+                    <td class="duration">{{ ((leg.estimated_duration_hours or 0) / 24)|round(0)|int }} {% if lang == 'en' %}d.{% else %}j.{% endif %}</td>
+                    <td class="duration">{{ leg.port_stay_days or 3 }} {% if lang == 'en' %}d.{% else %}j.{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- By route -->
+    {% if template_type == 'all' %}
+    <div style="page-break-before:always;"></div>
+    <div class="header" style="margin-top:0;">
+        <div class="header-left">
+            <h1>{% if lang == 'en' %}Schedule by route{% else %}Calendrier par route{% endif %}</h1>
+            <h2>{{ current_year }} — TOWT</h2>
+        </div>
+        <div class="header-logo"><img src="/static/logo_towt.png" alt="TOWT" style="height:40px;" onerror="this.style.display='none'"></div>
+    </div>
+    {% for route, rlegs in legs_by_route.items() %}
+    <div class="section">
+        <h3>🗺 {{ route }} <span style="font-weight:400;font-size:11px;color:#888;margin-left:8px;">({{ rlegs|length }} {% if lang == 'en' %}crossing{{ 's' if rlegs|length > 1 }}{% else %}traversée{{ 's' if rlegs|length > 1 }}{% endif %})</span></h3>
+        <table>
+            <thead><tr>
+                <th>{% if lang == 'en' %}Vessel{% else %}Navire{% endif %}</th>
+                <th>Leg</th><th>ETD</th><th>ETA</th>
+                <th>{% if lang == 'en' %}Duration{% else %}Durée{% endif %}</th>
+            </tr></thead>
+            <tbody>
+                {% for leg in rlegs %}
+                <tr>
+                    <td><strong>{{ leg.vessel.name }}</strong></td>
+                    <td style="font-family:monospace;color:#095561;">{{ leg.leg_code }}</td>
+                    <td class="date-cell">{{ leg.etd.strftime('%d/%m/%Y') if leg.etd else '—' }}</td>
+                    <td class="date-cell">{{ leg.eta.strftime('%d/%m/%Y') if leg.eta else '—' }}</td>
+                    <td class="duration">{{ ((leg.estimated_duration_hours or 0) / 24)|round(0)|int }} {% if lang == 'en' %}d.{% else %}j.{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- By destination -->
+    {% if template_type in ['all', 'destination'] and legs_by_dest|length > 1 %}
+    {% if template_type == 'all' %}<div style="page-break-before:always;"></div>{% endif %}
+    <div class="header" style="margin-top:0;">
+        <div class="header-left">
+            <h1>{% if lang == 'en' %}Schedule by destination{% else %}Calendrier par destination{% endif %}</h1>
+            <h2>{{ current_year }} — TOWT</h2>
+        </div>
+        <div class="header-logo"><img src="/static/logo_towt.png" alt="TOWT" style="height:40px;" onerror="this.style.display='none'"></div>
+    </div>
+    {% for dest, dlegs in legs_by_dest.items() %}
+    <div class="section">
+        <h3>🎯 {{ dest }} <span style="font-weight:400;font-size:11px;color:#888;margin-left:8px;">({{ dlegs|length }} {% if lang == 'en' %}arrival{{ 's' if dlegs|length > 1 }}{% else %}arrivée{{ 's' if dlegs|length > 1 }}{% endif %})</span></h3>
+        <table>
+            <thead><tr>
+                <th>{% if lang == 'en' %}Vessel{% else %}Navire{% endif %}</th>
+                <th>Leg</th>
+                <th>{% if lang == 'en' %}From{% else %}Depuis{% endif %}</th>
+                <th>ETD</th><th>ETA</th>
+                <th>{% if lang == 'en' %}Duration{% else %}Durée{% endif %}</th>
+            </tr></thead>
+            <tbody>
+                {% for leg in dlegs %}
+                <tr>
+                    <td><strong>{{ leg.vessel.name }}</strong></td>
+                    <td style="font-family:monospace;color:#095561;">{{ leg.leg_code }}</td>
+                    <td><span class="port-code">{{ leg.departure_port.country_code|flag }} {{ leg.departure_port.locode }}</span> {{ leg.departure_port.name }}</td>
+                    <td class="date-cell">{{ leg.etd.strftime('%d/%m/%Y') if leg.etd else '—' }}</td>
+                    <td class="date-cell">{{ leg.eta.strftime('%d/%m/%Y') if leg.eta else '—' }}</td>
+                    <td class="duration">{{ ((leg.estimated_duration_hours or 0) / 24)|round(0)|int }} {% if lang == 'en' %}d.{% else %}j.{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <div class="footer">
+        <span>TOWT — {% if lang == 'en' %}Sail Cargo · Decarbonizing maritime freight{% else %}Transport à la voile · Décarboner le fret maritime{% endif %}</span>
+        <span>{{ title }} · {{ current_year }}</span>
+    </div>
+
+<script>
+function buildUrl(params) {
+    var base = '/planning/pdf/commercial?year={{ current_year }}';
+    for (var k in params) {
+        if (params[k]) base += '&' + k + '=' + encodeURIComponent(params[k]);
+    }
+    return base;
+}
+function getFilterParams() {
+    return {
+        vessel: document.getElementById('filter-vessel').value,
+        origin: document.getElementById('filter-origin').value,
+        destination: document.getElementById('filter-destination').value,
+        lang: '{{ lang }}'
+    };
+}
+function applyFilters() {
+    window.location.href = buildUrl(getFilterParams());
+}
+function updateLang(lang) {
+    var p = getFilterParams();
+    p.lang = lang;
+    {% if selected_leg_ids %}
+    p.legs_ids = '{{ selected_leg_ids|join(",") }}';
+    {% endif %}
+    window.location.href = buildUrl(p);
+}
+function toggleVessel(checkbox) {
+    var vessel = checkbox.getAttribute('data-vessel');
+    var checked = checkbox.checked;
+    document.querySelectorAll('.leg-checkbox[data-vessel="'+vessel+'"] input[type="checkbox"]').forEach(function(cb) {
+        cb.checked = checked;
+    });
+}
+function toggleAll(state) {
+    document.querySelectorAll('.leg-checkboxes input[type="checkbox"]').forEach(function(cb) {
+        cb.checked = state;
+    });
+}
+function applyCustomSelection() {
+    var ids = [];
+    document.querySelectorAll('.leg-checkbox input[name="leg"]:checked').forEach(function(cb) {
+        ids.push(cb.value);
+    });
+    if (ids.length === 0) {
+        alert('{% if lang == "en" %}Please select at least one leg.{% else %}Veuillez sélectionner au moins un itinéraire.{% endif %}');
+        return;
+    }
+    var p = getFilterParams();
+    p.legs_ids = ids.join(',');
+    window.location.href = buildUrl(p);
+}
+// Auto-submit on filter change (optional — can use the button instead)
+// document.querySelectorAll('.filter-group select').forEach(function(s){s.addEventListener('change', applyFilters);});
+
+function createShareLink() {
+    var name = document.getElementById('share-recipient-name').value.trim();
+    if (!name) {
+        alert('{% if lang == "en" %}Please enter the recipient name.{% else %}Veuillez saisir le nom du destinataire.{% endif %}');
+        document.getElementById('share-recipient-name').focus();
+        return;
+    }
+    var formData = new FormData();
+    formData.append('year', '{{ current_year }}');
+    formData.append('vessel', document.getElementById('filter-vessel').value);
+    formData.append('origin', document.getElementById('filter-origin').value);
+    formData.append('destination', document.getElementById('filter-destination').value);
+    formData.append('lang', '{{ lang }}');
+    formData.append('recipient_name', name);
+    formData.append('recipient_company', document.getElementById('share-recipient-company').value.trim());
+    formData.append('recipient_email', document.getElementById('share-recipient-email').value.trim());
+    formData.append('label', document.getElementById('share-label').value.trim());
+    formData.append('notes', document.getElementById('share-notes').value.trim());
+    {% if selected_leg_ids %}
+    formData.append('legs_ids', '{{ selected_leg_ids|join(",") }}');
+    {% endif %}
+    fetch('/planning/pdf/commercial/share', {method:'POST', body: formData})
+        .then(function(r){return r.json();})
+        .then(function(data){
+            var fullUrl = window.location.origin + data.url;
+            document.getElementById('share-url').value = fullUrl;
+            document.getElementById('share-result').style.display = 'block';
+            document.getElementById('share-form').style.display = 'none';
+        })
+        .catch(function(err){
+            alert('{% if lang == "en" %}Error creating link{% else %}Erreur lors de la création du lien{% endif %}');
+        });
+}
+function copyShareUrl() {
+    var input = document.getElementById('share-url');
+    input.select();
+    document.execCommand('copy');
+    var btn = event.target;
+    btn.textContent = '{% if lang == "en" %}Copied!{% else %}Copié !{% endif %}';
+    setTimeout(function(){btn.textContent = '📋 {% if lang == "en" %}Copy{% else %}Copier{% endif %}';}, 2000);
+}
+</script>
+
+<!-- Footer with link history (not printed) -->
+<div class="no-print" style="margin-top:40px;padding:16px 20px;border-top:1px solid #e0e0e0;text-align:center;">
+    <a href="/planning/pdf/commercial/shares" style="font-size:12px;color:#095561;text-decoration:none;font-family:'Poppins',system-ui;">
+        📋 {% if lang == 'en' %}View shared links history{% else %}Voir l'historique des liens partagés{% endif %}
+    </a>
+</div>
+</body>
+</html>

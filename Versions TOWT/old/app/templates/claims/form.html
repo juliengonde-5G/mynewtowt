@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}my_TOWT — Nouveau Claim{% endblock %}
+{% block page_title %}⚠️ {{ t('page_new_claim', lang) }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/claims" class="btn btn-secondary btn-sm"><i data-lucide="arrow-left"></i> Retour</a>
+<button type="submit" form="claim-form" class="btn btn-primary btn-sm">💾 Créer le claim</button>
+{% endblock %}
+
+{% block content %}
+<form method="POST" action="/claims/create" id="claim-form" style="max-width:900px;margin:0 auto;">
+    {{ csrf_input(request) }}
+
+    <!-- TYPE -->
+    <div class="cf-section">
+        <h3>Type de claim <span style="font-size:11px;color:#dc2626;font-weight:400;">* obligatoire</span></h3>
+        <div class="cf-type-picker">
+            {% for code, label in claim_types %}
+            <label class="cf-type-option">
+                <input type="radio" name="claim_type" value="{{ code }}" required onchange="toggleFields()">
+                <div class="cf-type-card cf-tc-{{ code }}">
+                    <span class="cf-type-icon">{% if code == 'cargo' %}📦{% elif code == 'crew' %}👤{% else %}🚢{% endif %}</span>
+                    <strong>{{ label }}</strong>
+                    <span>{% if code == 'cargo' %}Marchandise{% elif code == 'crew' %}Personnel / Passager{% else %}Navire{% endif %}</span>
+                </div>
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- VESSEL + LEG -->
+    <div class="cf-section">
+        <h3>🚢 Navire & Traversée *</h3>
+        <div class="cf-grid">
+            <div class="fg">
+                <label>Navire *</label>
+                <select name="vessel_id" id="sel-vessel" class="fi" required onchange="filterLegs()">
+                    <option value="">— Choisir —</option>
+                    {% for v in vessels %}
+                    <option value="{{ v.id }}" data-code="{{ v.code }}">{{ v.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="fg">
+                <label>Leg *</label>
+                <select name="leg_id" id="sel-leg" class="fi" required>
+                    <option value="">— Choisir un navire d'abord —</option>
+                    {% for l in legs %}
+                    <option value="{{ l.id }}" data-vessel="{{ l.vessel_id }}" style="display:none;">
+                        {{ l.leg_code }} — {{ l.departure_port.name }} → {{ l.arrival_port.name }}{% if l.etd %} ({{ l.etd.strftime('%d/%m/%Y') }}){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTEXT -->
+    <div class="cf-section">
+        <h3>📍 Contexte de l'incident</h3>
+        <div class="cf-grid">
+            <div class="fg">
+                <label>Contexte</label>
+                <select name="context" class="fi">
+                    <option value="">— Non précisé —</option>
+                    {% for code, label in claim_contexts %}
+                    <option value="{{ code }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="fg">
+                <label>Date de l'incident</label>
+                <div class="tz-input-wrap">
+                    <input type="datetime-local" name="incident_date" class="fi">
+                    <select name="incident_date_tz" class="tz-select">
+                        {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                        <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <span class="tz-utc-hint"></span>
+            </div>
+            <div class="fg full">
+                <label>Lieu</label>
+                <input type="text" name="incident_location" class="fi" placeholder="Ex: Cale avant, pont principal, quai de Fécamp...">
+            </div>
+            <div class="fg full">
+                <label>Description de l'incident *</label>
+                <textarea name="description" class="fi ta" rows="4" required placeholder="Décrivez l'incident en détail..."></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- CARGO SPECIFIC -->
+    <div class="cf-section cf-cargo-only" id="sec-cargo" style="display:none;">
+        <h3>📦 Marchandise concernée</h3>
+        <div class="fg">
+            <label>Commande affectée au leg</label>
+            <select name="order_assignment_id" id="sel-oa" class="fi">
+                <option value="">— Choisir —</option>
+                {% for oa in order_assignments %}
+                <option value="{{ oa.id }}" data-leg="{{ oa.leg_id }}">
+                    {{ oa.order.reference }} — {{ oa.order.client_name }} (Leg {{ oa.leg.leg_code if oa.leg else '?' }})
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- CREW SPECIFIC -->
+    <div class="cf-section cf-crew-only" id="sec-crew" style="display:none;">
+        <h3>👤 Personne concernée</h3>
+        <div class="cf-grid">
+            <div class="fg">
+                <label>Membre d'équipage</label>
+                <select name="crew_member_id" class="fi">
+                    <option value="">— Aucun —</option>
+                    {% for cm in crew_members %}
+                    <option value="{{ cm.id }}">{{ cm.full_name }} ({{ cm.role_label }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- GUARANTEE & FINANCE -->
+    <div class="cf-section">
+        <h3>🛡️ Garantie & Estimation financière</h3>
+        <div class="cf-grid">
+            <div class="fg">
+                <label>Type de garantie</label>
+                <select name="guarantee_type" id="sel-guarantee" class="fi">
+                    <option value="">— Auto selon type —</option>
+                    {% for code, label in claim_guarantees %}
+                    <option value="{{ code }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="fg">
+                <label>Responsabilité</label>
+                <select name="responsibility" class="fi">
+                    {% for code, label in claim_responsibility %}
+                    <option value="{{ code }}" {% if code == 'pending' %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="fg">
+                <label>Provision estimée (€)</label>
+                <input type="text" name="provision_amount" class="fi" placeholder="0.00" style="text-align:right;">
+            </div>
+            <div class="fg">
+                <label>Franchise (€)</label>
+                <input type="text" name="franchise_amount" class="fi" placeholder="0.00" style="text-align:right;">
+            </div>
+        </div>
+    </div>
+
+    <!-- NOTES -->
+    <div class="cf-section">
+        <h3>📝 Notes</h3>
+        <textarea name="notes" class="fi ta" rows="3" placeholder="Notes internes..."></textarea>
+    </div>
+</form>
+
+<style>
+    .cf-section{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px;margin-bottom:16px}
+    .cf-section h3{margin:0 0 16px;font-size:14px;color:var(--towt-blue);border-bottom:1px solid #f0f0f0;padding-bottom:8px}
+    .cf-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media(max-width:600px){.cf-grid{grid-template-columns:1fr}}
+    .fg{display:flex;flex-direction:column;gap:3px}.fg.full{grid-column:1/-1}
+    .fg label{font-size:11px;font-weight:600;color:#666;text-transform:uppercase}
+    .fi{padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:'Poppins',system-ui,sans-serif;width:100%;box-sizing:border-box}
+    .fi:focus{border-color:var(--towt-blue);outline:none}
+    .ta{resize:vertical;min-height:60px}
+    .cf-type-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+    .cf-type-option{cursor:pointer}.cf-type-option input{display:none}
+    .cf-type-card{border:2px solid #eee;border-radius:10px;padding:20px;text-align:center;transition:all 0.15s}
+    .cf-type-option:hover .cf-type-card{border-color:#ccc}
+    .cf-type-option input:checked + .cf-type-card{box-shadow:0 0 0 3px rgba(9,85,97,0.15)}
+    .cf-type-option input:checked + .cf-tc-cargo{border-color:#D97706;background:rgba(245,158,11,0.04)}
+    .cf-type-option input:checked + .cf-tc-crew{border-color:#6366F1;background:rgba(99,102,241,0.04)}
+    .cf-type-option input:checked + .cf-tc-hull{border-color:#DC2626;background:rgba(220,38,38,0.04)}
+    .cf-type-icon{font-size:28px;display:block;margin-bottom:6px}
+    .cf-type-card strong{display:block;font-size:14px;color:var(--towt-blue)}
+    .cf-type-card span{display:block;font-size:11px;color:#888;margin-top:2px}
+</style>
+
+<script>
+function toggleFields() {
+    var type = document.querySelector('input[name="claim_type"]:checked');
+    if (!type) return;
+    document.getElementById('sec-cargo').style.display = type.value === 'cargo' ? 'block' : 'none';
+    document.getElementById('sec-crew').style.display = type.value === 'crew' ? 'block' : 'none';
+    // Auto-set guarantee
+    var gSel = document.getElementById('sel-guarantee');
+    if (gSel.value === '') {
+        if (type.value === 'cargo') gSel.value = 'pi';
+        else if (type.value === 'crew') gSel.value = 'pi';
+        else if (type.value === 'hull') gSel.value = 'hull_div';
+    }
+}
+
+function filterLegs() {
+    var vesselId = document.getElementById('sel-vessel').value;
+    var legSel = document.getElementById('sel-leg');
+    var opts = legSel.querySelectorAll('option[data-vessel]');
+    opts.forEach(function(o) {
+        o.style.display = (o.getAttribute('data-vessel') === vesselId) ? '' : 'none';
+    });
+    legSel.value = '';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,1138 @@
+{% extends "base.html" %}
+{% block title %}my_newtowt — On Board{% endblock %}
+{% block page_title %}🚢 On Board{% if vessel_obj %} — {{ vessel_obj.name }}{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+{% if current_leg %}
+<a href="/cargo/voyage/{{ current_leg.id }}/excel" class="btn btn-secondary btn-sm"><i data-lucide="package"></i> Packing List</a>
+<a href="/crew/border-police/{{ current_leg.vessel_id }}" class="btn btn-secondary btn-sm" target="_blank"><i data-lucide="users"></i> Crew List</a>
+<a href="/escale?vessel={{ selected_vessel }}&leg_id={{ current_leg.id }}" class="btn btn-secondary btn-sm"><i data-lucide="anchor"></i> Escale</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<!-- VESSEL SELECTOR -->
+<div class="ob-vessel-bar">
+    {% for v in vessels %}
+    <a href="/onboard?vessel={{ v.code }}" class="ob-vessel-pill {% if selected_vessel == v.code %}active{% endif %}">
+        <i data-lucide="ship" style="width:14px;height:14px;"></i> {{ v.name }}
+    </a>
+    {% endfor %}
+</div>
+
+<!-- LEG SELECTOR -->
+{% if legs %}
+<div class="ob-leg-bar">
+    {% for l in legs %}
+    {% set is_current = current_leg and current_leg.id == l.id %}
+    {% set is_active_leg = l.ata and not l.atd %}
+    <a href="/onboard?vessel={{ selected_vessel }}&leg_id={{ l.id }}"
+       class="ob-leg-chip {% if is_current %}active{% endif %} {% if l.atd %}past{% endif %} {% if is_active_leg %}in-port{% endif %}">
+        <strong>{{ l.leg_code }}</strong>
+        <span>{{ l.departure_port.locode }} → {{ l.arrival_port.locode }}</span>
+        {% if is_active_leg %}<span class="ob-leg-live">● EN ESCALE</span>{% endif %}
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+
+{# Conversation is vessel-scoped — shown even if no leg is selected #}
+{% if vessel_obj %}
+<div class="ob-section conv-section" id="conversation">
+    <div class="ob-section-header">
+        <h3>💬 Conversation — {{ vessel_obj.name }} <span class="ob-badge">{{ conversation_messages|length }}</span></h3>
+        <span style="font-size:11px;color:#888;">Échanges entre l'équipe à terre et l'équipage. Mentionnez avec <code>@nomdutilisateur</code>.</span>
+    </div>
+
+    <div class="conv-thread" id="conv-thread">
+        {% if conversation_messages %}
+        {% for m in conversation_messages %}
+        <div class="conv-msg {% if m.is_bot %}conv-msg-bot{% endif %} {% if m.is_system %}conv-msg-system{% endif %}" id="conv-msg-{{ m.id }}">
+            <div class="conv-avatar">
+                {% if m.is_bot %}
+                <span title="my_TOWT bot" class="conv-avatar-bot">🤖</span>
+                {% else %}
+                <span class="conv-avatar-user">{{ (m.author_name or '?')[:1]|upper }}</span>
+                {% endif %}
+            </div>
+            <div class="conv-bubble">
+                <div class="conv-meta">
+                    <strong>{{ m.author_name }}</strong>
+                    {% if m.author_username %}<span class="conv-handle">@{{ m.author_username }}</span>{% endif %}
+                    {% if m.is_bot %}<span class="conv-tag conv-tag-bot">bot</span>{% endif %}
+                    {% if m.is_system %}<span class="conv-tag conv-tag-sys">action</span>{% endif %}
+                    <span class="conv-time">{{ m.created_at.strftime('%d/%m %H:%M') }}</span>
+                    {% if m.leg_id %}
+                        {% for l in legs %}{% if l.id == m.leg_id %}
+                        <span class="conv-tag conv-tag-leg">{{ l.leg_code }}</span>
+                        {% endif %}{% endfor %}
+                    {% endif %}
+                    {% if (m.author_user_id == user.id) or (user.role == 'administrateur') %}
+                    <form method="POST" action="/onboard/messages/{{ m.id }}/delete" style="display:inline;margin-left:auto;">
+                        {{ csrf_input(request) }}
+                        <button type="submit" class="conv-del" title="Supprimer" onclick="return confirm('Supprimer ce message ?')">✕</button>
+                    </form>
+                    {% endif %}
+                </div>
+                <div class="conv-body">{{ m.body|e|replace('\n', '<br>')|safe }}</div>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="conv-empty">
+            Pas encore de message. Ouvrez la discussion entre l'équipe à terre et l'équipage.
+            Mentionnez <code>@{{ mytowt_bot_username }}</code> pour interagir avec le bot.
+        </div>
+        {% endif %}
+    </div>
+
+    <form method="POST" action="/onboard/messages/post" class="conv-form" id="conv-form">
+        {{ csrf_input(request) }}
+        <input type="hidden" name="vessel_id" value="{{ vessel_obj.id }}">
+        {% if current_leg %}<input type="hidden" name="leg_id" value="{{ current_leg.id }}">{% endif %}
+        <div class="conv-input-wrap">
+            <textarea name="body" id="conv-input" rows="2" maxlength="4000" required
+                      placeholder="Écrire un message… (Entrée pour envoyer, Maj+Entrée pour aller à la ligne, @ pour mentionner)"></textarea>
+            <div id="conv-mention-popup" class="conv-mention-popup" hidden></div>
+        </div>
+        <div class="conv-form-actions">
+            <span style="font-size:10px;color:#888;">{{ conversation_messages|length }} message(s) — limite 4000 caractères</span>
+            <button type="submit" class="btn btn-primary btn-sm">Envoyer</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+{% if not current_leg %}
+<div style="text-align:center;padding:60px;color:#888;font-size:14px;">Aucun leg sélectionné. Choisissez un navire et un leg ci-dessus.</div>
+{% else %}
+
+<!-- LEG HEADER -->
+<div class="ob-header">
+    <div class="ob-leg-info">
+        <h2>{{ current_leg.leg_code }}</h2>
+        <span>{{ current_leg.departure_port.country_code|flag }} {{ current_leg.departure_port.name }} → {{ current_leg.arrival_port.country_code|flag }} {{ current_leg.arrival_port.name }}</span>
+        <span class="ob-dates">ETD {{ current_leg.etd.strftime('%d/%m/%Y') if current_leg.etd else '—' }} · ETA {{ current_leg.eta.strftime('%d/%m/%Y') if current_leg.eta else '—' }}</span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+        {% if last_sof %}
+        <div class="ob-last-sof">
+            <span class="ob-sof-label">Dernier SOF</span>
+            <strong>{{ last_sof.event_label }}</strong>
+            <span>{{ last_sof.event_date.strftime('%d/%m') if last_sof.event_date else '' }} {{ last_sof.event_time or '' }}</span>
+        </div>
+        {% endif %}
+        <a href="/stowage/onboard/{{ current_leg.id }}" class="ob-escale-btn" style="background:var(--towt-green,#28a745);">
+            <i data-lucide="package" style="width:16px;height:16px;"></i> Plan chargement
+        </a>
+        {% if next_leg %}
+        <a href="/stowage/onboard/{{ next_leg.id }}" class="ob-escale-btn" style="background:#fd7e14;">
+            <i data-lucide="package-open" style="width:16px;height:16px;"></i> Plan dechargement
+        </a>
+        {% endif %}
+        <a href="/stowage/leg/{{ current_leg.id }}" class="ob-escale-btn" style="background:var(--towt-sky-dark,#2980b9);">
+            <i data-lucide="layout-grid" style="width:16px;height:16px;"></i> Gestion plan
+        </a>
+        <a href="/escale?vessel={{ selected_vessel }}&leg_id={{ current_leg.id }}" class="ob-escale-btn">
+            <i data-lucide="anchor" style="width:16px;height:16px;"></i> Voir l'escale
+        </a>
+    </div>
+</div>
+
+<!-- ATA / ATD SECTION -->
+<div class="ob-section" id="ata-atd">
+    <div class="ob-section-header">
+        <h3>&#9875; Arrivee / Depart effectif</h3>
+    </div>
+
+    {% if request.query_params.get('ata_ok') %}<div class="alert alert-success" style="margin-bottom:12px;padding:10px 14px;font-size:13px;">ATA enregistree avec succes</div>{% endif %}
+    {% if request.query_params.get('atd_ok') %}<div class="alert alert-success" style="margin-bottom:12px;padding:10px 14px;font-size:13px;">ATD enregistre avec succes</div>{% endif %}
+
+    <div class="ata-atd-grid">
+        <div class="ata-card ata-card-arrival">
+            <div class="field-label">ATA — Arrivee reelle</div>
+            <p style="font-size:14px;margin:0 0 10px;color:var(--towt-blue);">
+                {% if current_leg.ata %}
+                <strong>{{ current_leg.ata.strftime('%d/%m/%Y %H:%M') }}</strong>
+                {% else %}
+                <em style="color:#aaa;">Non enregistree</em>
+                {% endif %}
+            </p>
+            <form method="POST" action="/onboard/set-ata" style="display:flex;gap:6px;align-items:end;flex-wrap:wrap;">
+                {{ csrf_input(request) }}
+                <input type="hidden" name="leg_id" value="{{ current_leg.id }}">
+                <div style="flex:1;min-width:180px;">
+                    <input type="datetime-local" name="ata_date" id="ata-input" class="form-input" style="width:100%;font-size:13px;padding:8px 10px;"
+                           value="{{ current_leg.ata.strftime('%Y-%m-%dT%H:%M') if current_leg.ata else '' }}">
+                </div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('ata-input').value=new Date().toISOString().slice(0,16)">Maintenant</button>
+                <button type="submit" class="btn btn-sm btn-success">{{ "Modifier" if current_leg.ata else "Confirmer" }}</button>
+            </form>
+        </div>
+
+        <div class="ata-card ata-card-departure">
+            <div class="field-label">ATD — Depart reel</div>
+            <p style="font-size:14px;margin:0 0 10px;color:var(--towt-blue);">
+                {% if current_leg.atd %}
+                <strong>{{ current_leg.atd.strftime('%d/%m/%Y %H:%M') }}</strong>
+                {% else %}
+                <em style="color:#aaa;">Non enregistre</em>
+                {% endif %}
+            </p>
+            <form method="POST" action="/onboard/set-atd" style="display:flex;gap:6px;align-items:end;flex-wrap:wrap;">
+                {{ csrf_input(request) }}
+                <input type="hidden" name="leg_id" value="{{ current_leg.id }}">
+                <div style="flex:1;min-width:180px;">
+                    <input type="datetime-local" name="atd_date" id="atd-input" class="form-input" style="width:100%;font-size:13px;padding:8px 10px;"
+                           value="{{ current_leg.atd.strftime('%Y-%m-%dT%H:%M') if current_leg.atd else '' }}">
+                </div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('atd-input').value=new Date().toISOString().slice(0,16)">Maintenant</button>
+                <button type="submit" class="btn btn-sm btn-danger">{{ "Modifier" if current_leg.atd else "Confirmer" }}</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ETA SHIFT SECTION -->
+<div class="ob-section" id="eta-shifts">
+    <div class="ob-section-header">
+        <h3>&#128336; Decalage ETA</h3>
+    </div>
+
+    <!-- ETA Shift Form -->
+    <div class="eta-shift-form-wrap">
+        <p class="eta-shift-current">
+            ETA actuelle : <strong>{{ current_leg.eta.strftime('%d/%m/%Y %H:%M') if current_leg.eta else '— non definie —' }}</strong>
+            {% if current_leg.etd %} · ETD : <strong>{{ current_leg.etd.strftime('%d/%m/%Y %H:%M') }}</strong>{% endif %}
+        </p>
+        <form method="POST" action="/onboard/eta-shift" class="eta-shift-form">
+            {{ csrf_input(request) }}
+            <input type="hidden" name="leg_id" value="{{ current_leg.id }}">
+            <div class="eta-shift-grid">
+                <div class="fg">
+                    <label class="field-label">Nouvelle ETA</label>
+                    <div class="tz-input-wrap">
+                        <input type="datetime-local" name="new_eta" required class="fi"
+                               value="{{ current_leg.eta.strftime('%Y-%m-%dT%H:%M') if current_leg.eta else '' }}">
+                        <select name="new_eta_tz" class="tz-select">
+                            {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                            <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <span class="tz-utc-hint"></span>
+                </div>
+                <div class="fg">
+                    <label class="field-label">Raison</label>
+                    <select name="reason" required class="fi">
+                        <option value="">— Sélectionner —</option>
+                        {% for code, label in eta_shift_reasons %}
+                        <option value="{{ code }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="fg fg-wide">
+                    <label class="field-label">Justification (obligatoire)</label>
+                    <textarea name="justification" required rows="2" class="fi" placeholder="Détaillez la raison du décalage..."></textarea>
+                </div>
+                <div class="fg" style="align-self:end;">
+                    <button type="submit" class="btn btn-primary btn-sm">Déclarer le décalage</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- ETA Shifts History -->
+    {% set leg_shifts = eta_shifts|selectattr('leg_id', 'equalto', current_leg.id)|list %}
+    {% if leg_shifts %}
+    <div class="eta-shift-history">
+        <h4>Historique des décalages — {{ current_leg.leg_code }}</h4>
+        <table class="ob-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Ancienne ETA</th>
+                    <th>Nouvelle ETA</th>
+                    <th>Décalage</th>
+                    <th>Raison</th>
+                    <th>Justification</th>
+                    <th>Par</th>
+                    <th>Impact</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for s in leg_shifts %}
+            <tr class="{% if s.shift_hours > 0 %}eta-delay{% else %}eta-advance{% endif %}">
+                <td>{{ s.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                <td style="font-size:11px;">{{ s.old_value.strftime('%d/%m %H:%M') if s.old_value else '—' }}</td>
+                <td style="font-size:11px;">{{ s.new_value.strftime('%d/%m %H:%M') if s.new_value else '—' }}</td>
+                <td>
+                    {% if s.shift_hours > 0 %}
+                    <span class="eta-badge eta-badge-delay">+{{ "%.1f"|format(s.shift_hours) }}h</span>
+                    {% else %}
+                    <span class="eta-badge eta-badge-advance">{{ "%.1f"|format(s.shift_hours) }}h</span>
+                    {% endif %}
+                </td>
+                <td style="font-size:11px;">{{ s.reason }}</td>
+                <td style="font-size:11px;max-width:200px;">{{ s.justification }}</td>
+                <td style="font-size:11px;color:#888;">{{ s.created_by }}</td>
+                <td style="font-size:11px;">
+                    {% if s.legs_affected > 0 %}
+                    <span class="eta-cascade-badge">{{ s.legs_affected }} leg(s)</span>
+                    {% else %}—{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Full vessel history (all legs) -->
+    {% set other_shifts = eta_shifts|rejectattr('leg_id', 'equalto', current_leg.id)|list %}
+    {% if other_shifts %}
+    <details class="eta-shift-all" style="margin-top:12px;">
+        <summary style="cursor:pointer;font-size:12px;font-weight:600;color:#888;">Historique complet du navire ({{ eta_shifts|length }} évolution{{ 's' if eta_shifts|length > 1 }})</summary>
+        <table class="ob-table" style="margin-top:8px;">
+            <thead>
+                <tr><th>Leg</th><th>Date</th><th>Ancienne</th><th>Nouvelle</th><th>Décalage</th><th>Raison</th><th>Par</th></tr>
+            </thead>
+            <tbody>
+            {% for s in eta_shifts %}
+            <tr class="{% if s.shift_hours > 0 %}eta-delay{% else %}eta-advance{% endif %}">
+                <td style="font-size:11px;font-weight:600;color:var(--towt-blue);">
+                    {% for l in legs %}{% if l.id == s.leg_id %}{{ l.leg_code }}{% endif %}{% endfor %}
+                </td>
+                <td>{{ s.created_at.strftime('%d/%m %H:%M') }}</td>
+                <td style="font-size:11px;">{{ s.old_value.strftime('%d/%m %H:%M') if s.old_value else '—' }}</td>
+                <td style="font-size:11px;">{{ s.new_value.strftime('%d/%m %H:%M') if s.new_value else '—' }}</td>
+                <td>
+                    {% if s.shift_hours > 0 %}
+                    <span class="eta-badge eta-badge-delay">+{{ "%.1f"|format(s.shift_hours) }}h</span>
+                    {% else %}
+                    <span class="eta-badge eta-badge-advance">{{ "%.1f"|format(s.shift_hours) }}h</span>
+                    {% endif %}
+                </td>
+                <td style="font-size:11px;">{{ s.reason }}</td>
+                <td style="font-size:11px;color:#888;">{{ s.created_by }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </details>
+    {% endif %}
+</div>
+
+<!-- NOTIFICATIONS -->
+{% set unread = notifications|selectattr('is_read', 'false')|list %}
+{% if unread|length > 0 %}
+<div class="ob-notif-zone">
+    <div class="ob-notif-header">
+        🔔 {{ unread|length }} notification{{ 's' if unread|length > 1 }}
+        <form method="POST" action="/onboard/notifications/dismiss-all" style="display:inline;">
+            {{ csrf_input(request) }}
+            <input type="hidden" name="leg_id" value="{{ current_leg.id }}">
+            <button type="submit" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 10px;">Tout marquer lu</button>
+        </form>
+    </div>
+    {% for n in unread[:10] %}
+    <div class="ob-notif-item ob-notif-{{ n.category }}">
+        <span class="ob-notif-cat">{{ n.category }}</span>
+        <strong>{{ n.title }}</strong>
+        {% if n.detail %}<span class="ob-notif-detail">{{ n.detail }}</span>{% endif %}
+        <span class="ob-notif-time">{{ n.created_at.strftime('%d/%m %H:%M') }}</span>
+        <button class="ob-notif-dismiss" hx-post="/onboard/notifications/{{ n.id }}/dismiss" hx-swap="outerHTML" hx-target="closest .ob-notif-item">✕</button>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- SECTIONS GRID -->
+<div class="ob-grid">
+    <div class="ob-card">
+        <h3>👥 Équipage <span class="ob-badge">{{ crew_onboard|length }}</span></h3>
+        {% if crew_onboard %}
+        <table class="ob-table">
+            <thead><tr><th>Nom</th><th>Rôle</th><th>Embarqué</th></tr></thead>
+            <tbody>
+            {% for ca in crew_onboard %}
+            <tr>
+                <td><strong>{{ ca.member.full_name }}</strong>{% if ca.member.is_foreign %} <span class="ob-foreign-badge">Étranger</span>{% endif %}</td>
+                <td><span class="role-badge role-{{ ca.member.role }}">{{ ca.member.role_label }}</span></td>
+                <td style="font-size:11px;color:#888;">{{ ca.embark_date.strftime('%d/%m/%Y') if ca.embark_date else '—' }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="ob-empty">Aucun équipage assigné.</p>
+        {% endif %}
+    </div>
+
+    <div class="ob-card">
+        <h3>📦 Cargo — Import ({{ current_leg.arrival_port.name if current_leg.arrival_port else '' }}) <span class="ob-badge">{{ cargo_summary.get('orders', 0) }} cmd.</span></h3>
+        {% if cargo_summary.get('orders', 0) > 0 %}
+        <div class="ob-stats-grid">
+            <div class="ob-stat"><span class="ob-stat-val">{{ cargo_summary.palettes_ordered }}</span><span class="ob-stat-lbl">Pal. cmdées</span></div>
+            <div class="ob-stat"><span class="ob-stat-val">{{ cargo_summary.palettes_batches }}</span><span class="ob-stat-lbl">Pal. batchs</span></div>
+            <div class="ob-stat"><span class="ob-stat-val">{{ "%.0f"|format(cargo_summary.weight_kg) }} kg</span><span class="ob-stat-lbl">Poids total</span></div>
+            <div class="ob-stat"><span class="ob-stat-val">{{ cargo_summary.batches_count }}</span><span class="ob-stat-lbl">Batchs</span></div>
+        </div>
+        {% if cargo_summary.goods_types %}
+        <div style="margin-top:8px;font-size:11px;color:#666;"><strong>Nature :</strong> {{ cargo_summary.goods_types|join(', ') }}</div>
+        {% endif %}
+        {% else %}
+        <p class="ob-empty">Aucune commande assignée.</p>
+        {% endif %}
+    </div>
+
+    {% if next_leg %}
+    <div class="ob-card" style="border-left:3px solid #fd7e14;">
+        <h3>📦 Cargo — Export ({{ next_leg.departure_port.name if next_leg.departure_port else '' }} → {{ next_leg.arrival_port.name if next_leg.arrival_port else '' }}) <span class="ob-badge" style="background:rgba(253,126,20,0.1);color:#fd7e14;">{{ next_leg.leg_code }}</span></h3>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+            <a href="/stowage/leg/{{ next_leg.id }}" class="btn btn-sm btn-secondary">Voir le plan de chargement</a>
+            <a href="/cargo/voyage/{{ next_leg.id }}/excel" class="btn btn-sm btn-secondary">Packing List Excel</a>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- SOF -->
+{% set is_locked = current_leg.status == 'completed' %}
+<div class="ob-section" id="sof">
+    <div class="ob-section-header">
+        <h3>📋 Statement of Facts (SOF)
+            {% if is_locked %}<span class="sof-lock-badge">🔒 Escale clôturée</span>{% endif %}
+        </h3>
+        <div style="display:flex;gap:6px;">
+            <a href="/onboard/sof/{{ current_leg.id }}/excel" class="btn btn-secondary btn-sm"><i data-lucide="file-spreadsheet"></i> Excel</a>
+            <a href="/onboard/sof/{{ current_leg.id }}/pdf" class="btn btn-secondary btn-sm"><i data-lucide="file-text"></i> PDF</a>
+        </div>
+    </div>
+
+    {% if sof_events %}
+    <table class="ob-table sof-table">
+        <thead><tr><th style="width:35%;">Événement</th><th>Date</th><th>Heure</th><th>Fuseau</th><th>Remarques</th><th></th></tr></thead>
+        <tbody>
+        {% for evt in sof_events %}
+        <!-- Display row -->
+        <tr class="sof-row {% if not is_locked %}sof-row-editable{% endif %}" id="sof-display-{{ evt.id }}"
+            {% if not is_locked %}onclick="sofToggleEdit({{ evt.id }})"{% endif %}>
+            <td><strong>{{ evt.event_label }}</strong></td>
+            <td>{{ evt.event_date.strftime('%d/%m/%Y') if evt.event_date else '' }}</td>
+            <td>{{ evt.event_time or '' }}</td>
+            <td style="font-size:10px;color:#888;">{{ evt.event_time_tz or 'UTC' }}</td>
+            <td style="font-size:11px;color:#666;">{{ evt.remarks or '' }}</td>
+            <td style="white-space:nowrap;" onclick="event.stopPropagation();">
+                {% if not is_locked %}
+                <button class="btn-icon" title="Modifier" onclick="event.stopPropagation();sofToggleEdit({{ evt.id }})"><i data-lucide="pencil" style="width:13px;height:13px;color:var(--towt-blue);"></i></button>
+                <button class="btn-icon" hx-delete="/onboard/sof/{{ evt.id }}" hx-confirm="Supprimer ?" hx-target="#sof-display-{{ evt.id }}" hx-swap="outerHTML"><i data-lucide="trash-2" style="width:13px;height:13px;color:#dc2626;"></i></button>
+                {% endif %}
+            </td>
+        </tr>
+        <!-- Edit row (hidden by default) -->
+        {% if not is_locked %}
+        <tr class="sof-edit-row" id="sof-edit-{{ evt.id }}" style="display:none;">
+            <td colspan="6">
+                <form method="POST" action="/onboard/sof/{{ evt.id }}/edit" class="sof-inline-edit">
+                    {{ csrf_input(request) }}
+                    <div class="sof-edit-grid">
+                        <input type="text" name="event_label" value="{{ evt.event_label }}" class="sof-edit-fi" placeholder="Libellé">
+                        <input type="date" name="event_date" value="{{ evt.event_date.strftime('%Y-%m-%d') if evt.event_date else '' }}" class="sof-edit-fi">
+                        <div class="tz-input-wrap">
+                            <input type="time" name="event_time" value="{{ evt.event_time or '' }}" class="sof-edit-fi">
+                            <select name="event_time_tz" class="tz-select">
+                                {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                                <option value="{{ code }}" {% if code == (evt.event_time_tz or 'UTC') %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <input type="text" name="remarks" value="{{ evt.remarks or '' }}" class="sof-edit-fi" placeholder="Remarques">
+                        <div class="sof-edit-actions">
+                            <button type="submit" class="btn btn-primary btn-sm">Enregistrer</button>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="sofToggleEdit({{ evt.id }})">Annuler</button>
+                        </div>
+                    </div>
+                </form>
+            </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="ob-empty">Aucun événement SOF enregistré.</p>
+    {% endif %}
+
+    {% if not is_locked %}
+    <form method="POST" action="/onboard/sof/add" class="sof-add-form">
+        {{ csrf_input(request) }}
+        <input type="hidden" name="leg_id" value="{{ current_leg.id }}">
+        <div class="sof-add-grid">
+            <select name="event_type" id="sof-type" required onchange="var o=this.options[this.selectedIndex]; document.getElementById('sof-label').value=o.text;">
+                <option value="">— Événement —</option>
+                <optgroup label="🚢 Navigation & Pilotage">
+                {% for code, label in sof_event_types %}
+                {% if code in ('EOSP','SOSP','FREE_PRATIQUE','NOR_RETENDERED','PILOT_ONBOARD','PILOT_OFF','TUG_FAST','TUG_CAST_OFF','TUG_FREE','FIRST_LINE','ALL_FAST','COMMENCE_UNMOORING','ALL_CLEAR','ANCHORED','ANCHOR_AWEIGH','GANGWAY_RIGGED') %}
+                <option value="{{ code }}">{{ label }}</option>
+                {% endif %}
+                {% endfor %}
+                </optgroup>
+                <optgroup label="📦 Cargo Operations">
+                {% for code, label in sof_event_types %}
+                {% if code in ('HOLDS_INSPECTION','HATCH_OPEN_CLOSE','COMMENCE_LOADING','COMPLETED_LOADING','LOADING_SUSPENDED','LOADING_RESUMED') %}
+                <option value="{{ code }}">{{ label }}</option>
+                {% endif %}
+                {% endfor %}
+                </optgroup>
+                <option value="CUSTOM">Autre (texte libre)</option>
+            </select>
+            <input type="text" name="event_label" id="sof-label" placeholder="Libellé (auto ou libre)">
+            <input type="date" name="event_date" id="sof-date">
+            <div class="tz-input-wrap">
+                <input type="time" name="event_time" id="sof-time">
+                <select name="event_time_tz" class="tz-select">
+                    {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                    <option value="{{ code }}">{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <input type="text" name="remarks" placeholder="Remarques">
+            <button type="submit" class="btn btn-primary btn-sm">＋</button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+
+<!-- DOCUMENTS CARGO -->
+<div class="ob-section">
+    <div class="ob-section-header">
+        <h3>📄 Documents cargo</h3>
+    </div>
+    <div class="ob-doc-grid">
+        {% for code, label in cargo_doc_types %}
+        <a href="/onboard/doc/{{ current_leg.id }}/{{ code }}" class="ob-doc-btn">
+            <span class="ob-doc-icon">📄</span>
+            <span class="ob-doc-name">{{ label }}</span>
+            <span class="ob-doc-actions">
+                <i data-lucide="pencil" style="width:12px;height:12px;"></i>
+            </span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- FICHIERS & PHOTOS -->
+<div class="ob-section" id="attachments">
+    <div class="ob-section-header">
+        <h3>📎 Fichiers & Photos <span class="ob-badge">{{ attachments|length }}</span></h3>
+    </div>
+
+    {% if attachments %}
+    <div class="att-grid">
+        {% for att in attachments %}
+        <div class="att-item" id="att-{{ att.id }}">
+            <div class="att-icon">
+                {% if att.mime_type and att.mime_type.startswith('image/') %}
+                <i data-lucide="image" style="width:20px;height:20px;color:#6366F1;"></i>
+                {% else %}
+                <i data-lucide="file" style="width:20px;height:20px;color:var(--towt-blue);"></i>
+                {% endif %}
+            </div>
+            <div class="att-info">
+                <strong>{{ att.title }}</strong>
+                <span class="att-meta">
+                    <span class="att-cat-badge att-cat-{{ att.category }}">{{ att.category }}</span>
+                    · {{ att.filename }}
+                    {% if att.file_size %}· {{ "%.1f"|format(att.file_size / 1024) }} Ko{% endif %}
+                    · {{ att.uploaded_by }}
+                    · {{ att.created_at.strftime('%d/%m %H:%M') }}
+                </span>
+                {% if att.description %}<span class="att-desc">{{ att.description }}</span>{% endif %}
+            </div>
+            <div class="att-actions">
+                <a href="/onboard/attachments/{{ att.id }}/download" class="btn-icon" title="Télécharger"><i data-lucide="download" style="width:14px;height:14px;color:var(--towt-blue);"></i></a>
+                {% if not is_locked %}
+                <button class="btn-icon" hx-delete="/onboard/attachments/{{ att.id }}" hx-confirm="Supprimer ce fichier ?" hx-target="#att-{{ att.id }}" hx-swap="outerHTML"><i data-lucide="trash-2" style="width:14px;height:14px;color:#dc2626;"></i></button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="ob-empty">Aucun fichier joint pour cette escale.</p>
+    {% endif %}
+
+    {% if not is_locked %}
+    <form method="POST" action="/onboard/attachments/upload" enctype="multipart/form-data" class="att-upload-form">
+        {{ csrf_input(request) }}
+        <input type="hidden" name="leg_id" value="{{ current_leg.id }}">
+        <div class="att-upload-grid">
+            <div class="fg">
+                <label class="field-label">Fichier</label>
+                <input type="file" name="file" required class="fi" accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.csv,.txt,.heic,.webp">
+            </div>
+            <div class="fg">
+                <label class="field-label">Titre</label>
+                <input type="text" name="title" class="fi" placeholder="Titre (optionnel)">
+            </div>
+            <div class="fg">
+                <label class="field-label">Catégorie</label>
+                <select name="category" class="fi">
+                    {% for code, label in attachment_categories %}
+                    <option value="{{ code }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="fg">
+                <label class="field-label">Description</label>
+                <input type="text" name="description" class="fi" placeholder="Description (optionnel)">
+            </div>
+            <div class="fg" style="align-self:end;">
+                <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="upload" style="width:14px;height:14px;"></i> Uploader</button>
+            </div>
+        </div>
+    </form>
+    {% endif %}
+</div>
+
+<!-- DOCUMENTS AGENT D'ESCALE -->
+<div class="ob-section" id="port-agent-docs">
+    <div class="ob-section-header">
+        <h3>🏢 Documents agent d'escale <span class="ob-badge">{{ port_agent_attachments|length }}</span></h3>
+    </div>
+    <p style="font-size:11px;color:#888;margin-bottom:10px;">Documents reçus de l'agent d'escale local : BL signés, lettres de protestation, constats, protocoles…</p>
+
+    {% if port_agent_attachments %}
+    <div class="att-grid">
+        {% for att in port_agent_attachments %}
+        <div class="att-item" style="border-left:3px solid #D97706;">
+            <div class="att-icon">
+                <i data-lucide="file-check" style="width:20px;height:20px;color:#D97706;"></i>
+            </div>
+            <div class="att-info">
+                <strong>{{ att.title }}</strong>
+                <span class="att-meta">
+                    <span class="att-cat-badge att-cat-{{ att.category }}">{{ att.category|replace('_', ' ') }}</span>
+                    · {{ att.filename }}
+                    {% if att.file_size %}· {{ "%.1f"|format(att.file_size / 1024) }} Ko{% endif %}
+                    · {{ att.uploaded_by }}
+                    · {{ att.created_at.strftime('%d/%m %H:%M') }}
+                </span>
+                {% if att.description %}<span class="att-desc">{{ att.description }}</span>{% endif %}
+            </div>
+            <div class="att-actions">
+                <a href="/onboard/attachments/{{ att.id }}/download" class="btn-icon" title="Télécharger"><i data-lucide="download" style="width:14px;height:14px;color:var(--towt-blue);"></i></a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="ob-empty">Aucun document d'agent d'escale.</p>
+    {% endif %}
+
+    {% if not is_locked %}
+    <form method="POST" action="/onboard/attachments/upload" enctype="multipart/form-data" style="margin-top:12px;padding-top:12px;border-top:1px solid #f0f0f0;">
+        {{ csrf_input(request) }}
+        <input type="hidden" name="leg_id" value="{{ current_leg.id }}">
+        <div class="att-upload-grid">
+            <div class="fg">
+                <label class="field-label">Document de l'agent</label>
+                <input type="file" name="file" required class="fi" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+            </div>
+            <div class="fg">
+                <label class="field-label">Titre</label>
+                <input type="text" name="title" class="fi" placeholder="Ex: BL signé lot 42">
+            </div>
+            <div class="fg">
+                <label class="field-label">Type</label>
+                <select name="category" class="fi">
+                    <option value="port_agent">Document agent d'escale</option>
+                    <option value="bl_signed">BL signé</option>
+                    <option value="letter_protest">Lettre de protestation</option>
+                </select>
+            </div>
+            <div class="fg">
+                <label class="field-label">Description</label>
+                <input type="text" name="description" class="fi" placeholder="Notes (optionnel)">
+            </div>
+            <div class="fg" style="align-self:end;">
+                <button type="submit" class="btn btn-sm" style="background:#D97706;color:white;"><i data-lucide="upload" style="width:14px;height:14px;"></i> Ajouter</button>
+            </div>
+        </div>
+    </form>
+    {% endif %}
+</div>
+
+<!-- CLÔTURE D'ESCALE -->
+{% set closure = current_leg.closure_status or 'open' %}
+<div class="ob-section closure-section" id="closure">
+    <div class="ob-section-header">
+        <h3>🔒 Clôture d'escale</h3>
+        {% if closure == 'locked' and current_leg.closure_pdf_path %}
+        <a href="/onboard/closure/{{ current_leg.id }}/pdf" class="btn btn-secondary btn-sm"><i data-lucide="file-text"></i> Télécharger PDF</a>
+        {% endif %}
+    </div>
+
+    <!-- Workflow progress bar -->
+    <div class="closure-workflow">
+        <div class="closure-step {% if closure in ('open', 'review', 'approved', 'locked') %}done{% endif %}">
+            <div class="closure-step-dot">1</div>
+            <div class="closure-step-label">Ouverte</div>
+        </div>
+        <div class="closure-step-line {% if closure in ('review', 'approved', 'locked') %}done{% endif %}"></div>
+        <div class="closure-step {% if closure in ('review', 'approved', 'locked') %}done{% endif %} {% if closure == 'review' %}current{% endif %}">
+            <div class="closure-step-dot">2</div>
+            <div class="closure-step-label">En revue</div>
+        </div>
+        <div class="closure-step-line {% if closure in ('approved', 'locked') %}done{% endif %}"></div>
+        <div class="closure-step {% if closure in ('approved', 'locked') %}done{% endif %} {% if closure == 'approved' %}current{% endif %}">
+            <div class="closure-step-dot">3</div>
+            <div class="closure-step-label">Approuvée</div>
+        </div>
+        <div class="closure-step-line {% if closure == 'locked' %}done{% endif %}"></div>
+        <div class="closure-step {% if closure == 'locked' %}done{% endif %} {% if closure == 'locked' %}current{% endif %}">
+            <div class="closure-step-dot">4</div>
+            <div class="closure-step-label">Verrouillée</div>
+        </div>
+    </div>
+
+    <!-- Document checklist -->
+    <div style="margin:16px 0;">
+        <h4 style="font-size:12px;color:#555;text-transform:uppercase;margin-bottom:8px;">Checklist documentaire</h4>
+        <div class="closure-check-grid">
+            {% set doc_types_done = cargo_documents|map(attribute='doc_type')|list %}
+            {% for code, label in cargo_doc_types %}
+            <div class="closure-check-item {% if code in doc_types_done %}check-ok{% else %}check-missing{% endif %}">
+                {% if code in doc_types_done %}✅{% else %}⬜{% endif %}
+                {{ label }}
+            </div>
+            {% endfor %}
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:#888;">
+            {{ cargo_documents|length }} / {{ cargo_doc_types|length }} documents créés ·
+            {{ port_agent_attachments|length }} documents agent d'escale ·
+            {{ attachments|length }} pièces jointes totales
+        </div>
+    </div>
+
+    <!-- Closure details -->
+    {% if current_leg.closure_reviewed_by %}
+    <div style="font-size:12px;color:#555;margin:8px 0;">
+        📋 Revue par <strong>{{ current_leg.closure_reviewed_by }}</strong>
+        {% if current_leg.closure_reviewed_at %} le {{ current_leg.closure_reviewed_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+    </div>
+    {% endif %}
+    {% if current_leg.closure_approved_by %}
+    <div style="font-size:12px;color:#555;margin:8px 0;">
+        ✅ Approuvé par <strong>{{ current_leg.closure_approved_by }}</strong>
+        {% if current_leg.closure_approved_at %} le {{ current_leg.closure_approved_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+    </div>
+    {% endif %}
+    {% if current_leg.closure_notes %}
+    <div style="font-size:12px;color:#666;margin:8px 0;padding:8px 12px;background:#f8fafb;border-radius:6px;">
+        <strong>Notes :</strong> {{ current_leg.closure_notes }}
+    </div>
+    {% endif %}
+
+    <!-- Action buttons -->
+    {% if closure == 'open' %}
+    <form method="POST" action="/onboard/closure/{{ current_leg.id }}/submit-review" style="margin-top:12px;">
+        {{ csrf_input(request) }}
+        <div class="fg" style="margin-bottom:8px;">
+            <label class="field-label">Notes de revue (optionnel)</label>
+            <textarea name="closure_notes" class="fi" rows="2" placeholder="Remarques, documents manquants…" style="resize:vertical;min-height:40px;font-family:'Poppins',system-ui,sans-serif;"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Soumettre l\'escale pour revue du commandant ?')">
+            <i data-lucide="send" style="width:14px;height:14px;"></i> Soumettre pour revue
+        </button>
+    </form>
+
+    {% elif closure == 'review' %}
+    <div style="display:flex;gap:8px;margin-top:12px;">
+        <form method="POST" action="/onboard/closure/{{ current_leg.id }}/approve">
+            {{ csrf_input(request) }}
+            <button type="submit" class="btn btn-sm" style="background:#16a34a;color:white;" onclick="return confirm('Approuver la clôture d\'escale ?')">
+                <i data-lucide="check" style="width:14px;height:14px;"></i> Approuver (Commandant)
+            </button>
+        </form>
+        <form method="POST" action="/onboard/closure/{{ current_leg.id }}/reopen">
+            {{ csrf_input(request) }}
+            <button type="submit" class="btn btn-secondary btn-sm" onclick="return confirm('Rouvrir l\'escale ?')">
+                <i data-lucide="rotate-ccw" style="width:14px;height:14px;"></i> Rouvrir
+            </button>
+        </form>
+    </div>
+
+    {% elif closure == 'approved' %}
+    <div style="display:flex;gap:8px;margin-top:12px;">
+        <form method="POST" action="/onboard/closure/{{ current_leg.id }}/lock">
+            {{ csrf_input(request) }}
+            <button type="submit" class="btn btn-sm" style="background:#DC2626;color:white;" onclick="return confirm('Verrouiller définitivement l\'escale ? Un PDF récapitulatif sera généré. Cette action est irréversible.')">
+                <i data-lucide="lock" style="width:14px;height:14px;"></i> Verrouiller définitivement + PDF
+            </button>
+        </form>
+        <form method="POST" action="/onboard/closure/{{ current_leg.id }}/reopen">
+            {{ csrf_input(request) }}
+            <button type="submit" class="btn btn-secondary btn-sm" onclick="return confirm('Rouvrir l\'escale ?')">
+                <i data-lucide="rotate-ccw" style="width:14px;height:14px;"></i> Rouvrir
+            </button>
+        </form>
+    </div>
+
+    {% elif closure == 'locked' %}
+    <div style="margin-top:12px;padding:12px 16px;background:rgba(107,114,128,0.06);border:1px solid rgba(107,114,128,0.15);border-radius:8px;display:flex;align-items:center;gap:10px;">
+        <span style="font-size:24px;">🔒</span>
+        <div>
+            <strong style="color:#374151;font-size:13px;">Escale définitivement clôturée</strong>
+            <p style="font-size:11px;color:#888;margin:2px 0 0;">Aucune modification possible. Le PDF récapitulatif est disponible en téléchargement.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% endif %}
+
+<style>
+    .ob-vessel-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;padding:6px;background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow)}
+    .ob-vessel-pill{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;color:var(--towt-gray);text-decoration:none;border:1px solid transparent;transition:all 0.15s}
+    .ob-vessel-pill:hover{background:var(--towt-light);border-color:#ddd}
+    .ob-vessel-pill.active{background:var(--towt-blue);color:white;border-color:var(--towt-blue)}
+    .ob-leg-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;padding:6px;background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);overflow-x:auto}
+    .ob-leg-chip{display:flex;flex-direction:column;padding:8px 14px;border-radius:var(--radius);font-size:11px;color:#555;text-decoration:none;border:1px solid #eee;transition:all 0.15s;min-width:100px}
+    .ob-leg-chip strong{font-size:12px;font-weight:700;color:var(--towt-blue)}
+    .ob-leg-chip span{color:#888}
+    .ob-leg-chip:hover{border-color:var(--towt-blue);background:#f0f7f8}
+    .ob-leg-chip.active{background:var(--towt-blue);border-color:var(--towt-blue);color:white}
+    .ob-leg-chip.active strong,.ob-leg-chip.active span{color:white}
+    .ob-leg-chip.past{opacity:0.5}.ob-leg-chip.past:hover{opacity:0.8}
+    .ob-leg-chip.in-port{border-left:3px solid #87BD2B}
+    .ob-leg-live{font-size:9px;font-weight:700;color:#87BD2B}
+    .ob-leg-chip.active .ob-leg-live{color:#d4ff88}
+    .ob-header{display:flex;justify-content:space-between;align-items:center;background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:16px 20px;margin-bottom:16px}
+    .ob-leg-info h2{margin:0;font-size:18px;color:var(--towt-blue);font-weight:700}
+    .ob-leg-info span{font-size:13px;color:#555;display:block;margin-top:2px}.ob-dates{font-size:11px !important;color:#888 !important}
+    .ob-last-sof{text-align:right;font-size:12px;background:rgba(9,85,97,0.06);padding:10px 14px;border-radius:8px}
+    .ob-last-sof .ob-sof-label{font-size:10px;color:#888;text-transform:uppercase;display:block}
+    .ob-last-sof strong{color:var(--towt-blue);display:block}
+    .ob-escale-btn{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;background:rgba(135,189,43,0.1);border:1px solid rgba(135,189,43,0.3);border-radius:8px;color:#5a8010;font-size:12px;font-weight:600;text-decoration:none}
+    .ob-escale-btn:hover{background:rgba(135,189,43,0.2)}
+    .ob-notif-zone{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:12px 16px;margin-bottom:16px;border-left:4px solid #F59E0B}
+    .ob-notif-header{font-size:13px;font-weight:600;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+    .ob-notif-item{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:12px;position:relative}
+    .ob-notif-cat{font-size:9px;padding:2px 6px;border-radius:100px;font-weight:600;text-transform:uppercase;flex-shrink:0}
+    .ob-notif-crew .ob-notif-cat{background:rgba(99,102,241,0.1);color:#6366F1}
+    .ob-notif-escale .ob-notif-cat{background:rgba(245,158,11,0.1);color:#D97706}
+    .ob-notif-cargo .ob-notif-cat{background:rgba(34,197,94,0.1);color:#16a34a}
+    .ob-notif-detail{color:#888;flex:1}.ob-notif-time{color:#aaa;font-size:10px;flex-shrink:0}
+    .ob-notif-dismiss{background:none;border:none;cursor:pointer;color:#ccc;font-size:14px;padding:2px 6px}.ob-notif-dismiss:hover{color:#dc2626}
+    .ob-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+    @media(max-width:1100px){.ob-grid{grid-template-columns:1fr}}
+    .ob-card{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:16px 20px}
+    .ob-card h3{font-size:14px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+    .ob-card-muted{opacity:0.5}
+    .ob-card-pax{grid-column:1/-1}
+    .ob-cabin-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:4px}
+    @media(max-width:800px){.ob-cabin-grid{grid-template-columns:repeat(2,1fr)}}
+    .ob-cabin{border:1px solid #eee;border-radius:8px;padding:8px 10px;font-size:11px}
+    .ob-cabin.occupied{border-color:rgba(9,85,97,0.2);background:rgba(9,85,97,0.02)}
+    .ob-cabin-hdr{margin-bottom:4px}.ob-cabin-hdr strong{color:var(--towt-blue);font-size:12px}.ob-cabin-hdr span{font-size:10px;color:#888;display:block}
+    .ob-cabin-pax{padding:2px 0;display:flex;justify-content:space-between;align-items:center}
+    .ob-cabin-pax.empty{color:#ccc;font-style:italic}
+    .ob-pax-nat{font-size:9px;color:#888;background:#f5f5f5;padding:1px 6px;border-radius:100px}
+    .ob-doc-bar{width:50px;height:5px;background:#f0f0f0;border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle}
+    .ob-doc-fill{height:100%;background:#87BD2B;border-radius:3px}
+    .cabin-badge{font-size:10px;padding:2px 8px;border-radius:100px;font-weight:600}
+    .cabin-1,.cabin-2{background:rgba(168,85,247,0.1);color:#A855F7}
+    .cabin-3,.cabin-4{background:rgba(96,165,250,0.1);color:#2563EB}
+    .status-pill{font-size:9px;padding:2px 6px;border-radius:100px;font-weight:600}
+    .st-draft{background:#f3f4f6;color:#6B7280}.st-confirmed{background:rgba(59,130,246,0.1);color:#2563EB}
+    .st-paid{background:rgba(34,197,94,0.1);color:#16a34a}.st-embarked{background:rgba(135,189,43,0.1);color:#5a8010}
+    .ob-badge{font-size:11px;background:rgba(9,85,97,0.1);color:var(--towt-blue);padding:2px 8px;border-radius:100px;font-weight:500}
+    .ob-table{width:100%;border-collapse:collapse;font-size:12px}
+    .ob-table th{text-align:left;padding:6px 8px;font-size:10px;text-transform:uppercase;color:#888;border-bottom:2px solid #f0f0f0}
+    .ob-table td{padding:6px 8px;border-bottom:1px solid #f8f8f8}
+    .ob-empty{font-size:12px;color:#aaa;text-align:center;padding:20px}
+    .role-badge{font-size:10px;padding:2px 8px;border-radius:100px;font-weight:600}
+    .role-capitaine{background:rgba(220,38,38,0.1);color:#DC2626}.role-second{background:rgba(99,102,241,0.1);color:#6366F1}
+    .role-chef_mecanicien{background:rgba(245,158,11,0.1);color:#D97706}.role-cook{background:rgba(34,197,94,0.1);color:#16a34a}
+    .role-lieutenant{background:rgba(96,165,250,0.1);color:#2563EB}.role-bosco{background:rgba(168,85,247,0.1);color:#A855F7}
+    .role-marin{background:rgba(107,114,128,0.1);color:#6B7280}
+    .role-eleve_officier{background:rgba(251,191,36,0.15);color:#B45309}
+    .ob-foreign-badge{font-size:9px;padding:1px 6px;border-radius:100px;font-weight:600;background:rgba(239,68,68,0.1);color:#DC2626}
+    .ob-stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+    .ob-stat{background:#f8fafb;padding:10px;border-radius:8px;text-align:center}
+    .ob-stat-val{font-size:18px;font-weight:700;color:var(--towt-blue);display:block}
+    .ob-stat-lbl{font-size:10px;color:#888;text-transform:uppercase}
+    .ob-section{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:16px 20px;margin-bottom:16px}
+    .ob-section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .ob-section-header h3{margin:0;font-size:15px}
+    .sof-table td:first-child{font-weight:500}
+    .sof-add-form{margin-top:12px;padding-top:12px;border-top:1px solid #f0f0f0}
+    .sof-add-grid{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .sof-add-grid select,.sof-add-grid input{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px}
+    .sof-add-grid select{min-width:200px}.sof-add-grid input[type="text"]{flex:1;min-width:100px}
+    .sof-add-grid input[type="date"],.sof-add-grid input[type="time"]{width:130px}
+    .ob-doc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+    .ob-doc-btn{display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f8fafb;border:1px solid #eee;border-radius:8px;text-decoration:none;color:#333;font-size:12px;font-weight:500;transition:all 0.15s}
+    .ob-doc-btn:hover{background:#eef4f6;border-color:var(--towt-blue)}
+    .ob-doc-icon{font-size:18px;flex-shrink:0}.ob-doc-name{flex:1}
+    .ob-doc-actions{color:#aaa;flex-shrink:0}.ob-doc-btn:hover .ob-doc-actions{color:var(--towt-blue)}
+    .btn-icon{background:none;border:none;cursor:pointer;padding:4px;border-radius:4px}.btn-icon:hover{background:#fee2e2}
+    /* SOF editable */
+    .sof-row-editable{cursor:pointer;transition:background 0.1s}
+    .sof-row-editable:hover{background:rgba(9,85,97,0.04)}
+    .sof-lock-badge{font-size:10px;padding:2px 8px;border-radius:100px;background:rgba(107,114,128,0.1);color:#6B7280;font-weight:500;margin-left:8px}
+    .sof-edit-row td{background:#f8fafb;padding:10px !important}
+    .sof-inline-edit{margin:0}
+    .sof-edit-grid{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .sof-edit-fi{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:Poppins,system-ui,sans-serif}
+    .sof-edit-fi:first-child{flex:2;min-width:180px}
+    .sof-edit-fi:nth-child(4){flex:1;min-width:100px}
+    .sof-edit-actions{display:flex;gap:4px}
+    /* Attachments */
+    .att-grid{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+    .att-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafb;border:1px solid #eee;border-radius:8px}
+    .att-icon{flex-shrink:0}
+    .att-info{flex:1;min-width:0}
+    .att-info strong{font-size:12px;display:block;color:#333}
+    .att-meta{font-size:10px;color:#888;display:block;margin-top:2px}
+    .att-desc{font-size:11px;color:#666;display:block;margin-top:2px}
+    .att-actions{display:flex;gap:4px;flex-shrink:0}
+    .att-cat-badge{font-size:9px;padding:1px 6px;border-radius:100px;font-weight:600;text-transform:uppercase}
+    .att-cat-photo{background:rgba(168,85,247,0.1);color:#A855F7}
+    .att-cat-document{background:rgba(9,85,97,0.1);color:var(--towt-blue)}
+    .att-cat-report{background:rgba(245,158,11,0.1);color:#D97706}
+    .att-cat-certificate{background:rgba(34,197,94,0.1);color:#16a34a}
+    .att-cat-other{background:rgba(107,114,128,0.1);color:#6B7280}
+    .att-upload-form{margin-top:12px;padding-top:12px;border-top:1px solid #f0f0f0}
+    .att-upload-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:start}
+    @media(max-width:900px){.att-upload-grid{grid-template-columns:1fr 1fr}}
+    .att-upload-grid .fg{display:flex;flex-direction:column;gap:3px}
+    .att-upload-grid .fi{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:Poppins,system-ui,sans-serif}
+    /* ETA Shift */
+    .eta-shift-form-wrap{padding-bottom:12px;border-bottom:1px solid #f0f0f0;margin-bottom:12px}
+    .eta-shift-current{font-size:13px;color:#555;margin:0 0 10px}
+    .eta-shift-current strong{color:var(--towt-blue);font-weight:700}
+    .eta-shift-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .eta-shift-grid .fg-wide{grid-column:1/-1}
+    .eta-shift-grid .fg{display:flex;flex-direction:column;gap:3px}
+    .eta-shift-grid .fi{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:Poppins,system-ui,sans-serif}
+    .eta-shift-grid textarea.fi{resize:vertical;min-height:42px}
+    .eta-shift-history{margin-top:12px}
+    .eta-shift-history h4{font-size:12px;color:#555;margin:0 0 8px;text-transform:uppercase;letter-spacing:0.5px}
+    .eta-delay{border-left:3px solid #DC2626}
+    .eta-advance{border-left:3px solid #16a34a}
+    .eta-badge{font-size:10px;padding:2px 8px;border-radius:100px;font-weight:700}
+    .eta-badge-delay{background:rgba(220,38,38,0.1);color:#DC2626}
+    .eta-badge-advance{background:rgba(22,163,106,0.1);color:#16a34a}
+    .eta-cascade-badge{font-size:10px;padding:2px 6px;border-radius:100px;background:rgba(245,158,11,0.1);color:#D97706;font-weight:600}
+    /* ATA/ATD responsive grid */
+    .ata-atd-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px}
+    .ata-card{background:var(--towt-light,#f2f6f7);border-radius:var(--radius,8px);padding:14px}
+    .ata-card-arrival{border-left:4px solid var(--towt-green,#87BD2B)}
+    .ata-card-departure{border-left:4px solid #fd7e14}
+    @media(max-width:700px){.ata-atd-grid{grid-template-columns:1fr}}
+    /* Port agent attachment categories */
+    .att-cat-port_agent{background:rgba(245,158,11,0.1);color:#D97706}
+    .att-cat-bl_signed{background:rgba(59,130,246,0.1);color:#2563EB}
+    .att-cat-letter_protest{background:rgba(220,38,38,0.1);color:#DC2626}
+    /* Closure workflow */
+    .closure-workflow{display:flex;align-items:center;gap:0;padding:16px 0;justify-content:center}
+    .closure-step{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:80px}
+    .closure-step-dot{width:32px;height:32px;border-radius:50%;border:2px solid #ddd;background:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#aaa;transition:all 0.2s}
+    .closure-step.done .closure-step-dot{background:var(--towt-blue);border-color:var(--towt-blue);color:white}
+    .closure-step.current .closure-step-dot{background:#87BD2B;border-color:#87BD2B;color:white;box-shadow:0 0 0 4px rgba(135,189,43,0.2)}
+    .closure-step-label{font-size:10px;color:#888;font-weight:500;text-align:center}
+    .closure-step.done .closure-step-label{color:var(--towt-blue);font-weight:600}
+    .closure-step.current .closure-step-label{color:#5a8010;font-weight:700}
+    .closure-step-line{width:40px;height:2px;background:#ddd;margin-bottom:18px}
+    .closure-step-line.done{background:var(--towt-blue)}
+    .closure-check-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px}
+    .closure-check-item{font-size:11px;padding:4px 8px;border-radius:4px}
+    .check-ok{color:#16a34a;background:rgba(34,197,94,0.06)}
+    .check-missing{color:#aaa;background:#fafafa}
+    /* ─── Conversation ─── */
+    .conv-section .ob-section-header{flex-wrap:wrap;gap:6px}
+    .conv-thread{max-height:480px;overflow-y:auto;padding:10px 4px;display:flex;flex-direction:column;gap:10px;border-top:1px solid #f0f0f0;border-bottom:1px solid #f0f0f0;background:#fafbfc;border-radius:6px;margin-bottom:10px}
+    .conv-msg{display:flex;gap:10px;align-items:flex-start;padding:0 8px}
+    .conv-avatar{flex-shrink:0;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:white;background:var(--towt-blue)}
+    .conv-avatar-bot{font-size:18px;background:linear-gradient(135deg,#6366F1,#8B5CF6);width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+    .conv-bubble{flex:1;min-width:0;background:white;border:1px solid #eee;border-radius:8px;padding:8px 12px;box-shadow:0 1px 2px rgba(0,0,0,0.03)}
+    .conv-msg-bot .conv-bubble{background:linear-gradient(180deg,#f8f7ff,#ffffff);border-color:rgba(99,102,241,0.25)}
+    .conv-msg-system .conv-bubble{background:linear-gradient(180deg,#fdfaf3,#ffffff);border-color:rgba(245,158,11,0.25)}
+    .conv-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;color:#666;margin-bottom:4px}
+    .conv-meta strong{color:#222;font-size:12px}
+    .conv-handle{color:#888}
+    .conv-tag{font-size:9px;padding:1px 6px;border-radius:100px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px}
+    .conv-tag-bot{background:rgba(99,102,241,0.12);color:#6366F1}
+    .conv-tag-sys{background:rgba(245,158,11,0.12);color:#D97706}
+    .conv-tag-leg{background:rgba(9,85,97,0.08);color:var(--towt-blue)}
+    .conv-time{margin-left:auto;color:#aaa;font-size:10px}
+    .conv-msg-system .conv-time, .conv-msg-bot .conv-time{margin-left:0}
+    .conv-del{background:none;border:none;color:#ccc;cursor:pointer;font-size:13px;padding:0 4px;margin-left:auto}
+    .conv-del:hover{color:#dc2626}
+    .conv-body{font-size:13px;color:#222;line-height:1.5;word-wrap:break-word;white-space:pre-wrap}
+    .conv-body .conv-mention{background:rgba(9,85,97,0.08);color:var(--towt-blue);padding:1px 6px;border-radius:100px;font-weight:600;font-size:12px}
+    .conv-body .conv-mention-bot{background:rgba(99,102,241,0.12);color:#6366F1}
+    .conv-body .conv-mention-self{background:rgba(245,158,11,0.18);color:#B45309}
+    .conv-empty{text-align:center;color:#888;padding:30px 12px;font-size:12px}
+    .conv-empty code{background:#f1f3f5;padding:1px 6px;border-radius:4px;font-size:11px}
+    .conv-form{position:relative;display:flex;flex-direction:column;gap:6px}
+    .conv-input-wrap{position:relative}
+    .conv-form textarea{width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-family:Poppins,system-ui,sans-serif;font-size:13px;resize:vertical;min-height:50px;box-sizing:border-box}
+    .conv-form textarea:focus{outline:none;border-color:var(--towt-blue);box-shadow:0 0 0 3px rgba(9,85,97,0.08)}
+    .conv-form-actions{display:flex;justify-content:space-between;align-items:center}
+    .conv-mention-popup{position:absolute;background:white;border:1px solid #ddd;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,0.10);padding:4px;max-height:220px;overflow-y:auto;z-index:30;min-width:240px}
+    .conv-mention-item{padding:6px 10px;font-size:12px;cursor:pointer;border-radius:6px;display:flex;justify-content:space-between;gap:10px}
+    .conv-mention-item:hover, .conv-mention-item.active{background:#f0f7f8}
+    .conv-mention-item .mp-name{font-weight:600;color:#222}
+    .conv-mention-item .mp-handle{color:#888;font-size:11px}
+    .conv-mention-item.is-bot{background:rgba(99,102,241,0.04)}
+</style>
+<script>
+// Pre-fill SOF date and time with current values
+(function(){
+    var now = new Date();
+    var d = document.getElementById('sof-date');
+    var t = document.getElementById('sof-time');
+    if(d) d.value = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+    if(t) t.value = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+})();
+
+// ─── Conversation: mention autocomplete + send-on-Enter + highlight ───
+(function(){
+    var users = {{ mentionable_users|default([])|tojson }};
+    var currentUsername = {{ user.username|tojson }};
+    var botUsername = {{ mytowt_bot_username|default('mytowt_bot')|tojson }};
+    var input = document.getElementById('conv-input');
+    var popup = document.getElementById('conv-mention-popup');
+    var form = document.getElementById('conv-form');
+    var thread = document.getElementById('conv-thread');
+    if (thread) thread.scrollTop = thread.scrollHeight;
+
+    if (!input || !popup) return;
+
+    var activeIdx = 0;
+    var matches = [];
+    var mentionStart = -1;
+
+    function findMentionContext(){
+        var pos = input.selectionStart;
+        var before = input.value.substring(0, pos);
+        var m = before.match(/@([A-Za-z0-9_.\-]*)$/);
+        if (!m) return null;
+        return {start: pos - m[0].length, query: m[1].toLowerCase()};
+    }
+
+    function renderPopup(){
+        if (!matches.length) { popup.hidden = true; popup.innerHTML = ''; return; }
+        popup.innerHTML = matches.map(function(u, i){
+            var cls = 'conv-mention-item' + (i === activeIdx ? ' active' : '') + (u.is_bot ? ' is-bot' : '');
+            return '<div class="' + cls + '" data-idx="' + i + '">' +
+                   '<span class="mp-name">' + escapeHtml(u.full_name) + (u.is_bot ? ' 🤖' : '') + '</span>' +
+                   '<span class="mp-handle">@' + escapeHtml(u.username) + '</span>' +
+                   '</div>';
+        }).join('');
+        popup.hidden = false;
+        // Position below textarea (simple: top:100% relative to wrap)
+        popup.style.top = (input.offsetHeight + 4) + 'px';
+        popup.style.left = '8px';
+    }
+
+    function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];}); }
+
+    function applyMention(u){
+        if (!u || mentionStart < 0) return;
+        var pos = input.selectionStart;
+        var before = input.value.substring(0, mentionStart);
+        var after = input.value.substring(pos);
+        var insertion = '@' + u.username + ' ';
+        input.value = before + insertion + after;
+        var newPos = (before + insertion).length;
+        input.setSelectionRange(newPos, newPos);
+        popup.hidden = true; matches = []; mentionStart = -1;
+        input.focus();
+    }
+
+    input.addEventListener('input', function(){
+        var ctx = findMentionContext();
+        if (!ctx) { popup.hidden = true; matches = []; mentionStart = -1; return; }
+        mentionStart = ctx.start;
+        matches = users.filter(function(u){
+            return u.username.toLowerCase().indexOf(ctx.query) === 0
+                || (u.full_name||'').toLowerCase().indexOf(ctx.query) >= 0;
+        }).slice(0, 8);
+        activeIdx = 0;
+        renderPopup();
+    });
+
+    input.addEventListener('keydown', function(e){
+        if (!popup.hidden && matches.length){
+            if (e.key === 'ArrowDown'){ activeIdx = (activeIdx + 1) % matches.length; renderPopup(); e.preventDefault(); return; }
+            if (e.key === 'ArrowUp'){ activeIdx = (activeIdx - 1 + matches.length) % matches.length; renderPopup(); e.preventDefault(); return; }
+            if (e.key === 'Enter' || e.key === 'Tab'){ applyMention(matches[activeIdx]); e.preventDefault(); return; }
+            if (e.key === 'Escape'){ popup.hidden = true; matches = []; e.preventDefault(); return; }
+        }
+        // Enter without Shift submits
+        if (e.key === 'Enter' && !e.shiftKey){
+            e.preventDefault();
+            if (input.value.trim() && form){ form.submit(); }
+        }
+    });
+
+    popup.addEventListener('mousedown', function(e){
+        var item = e.target.closest('.conv-mention-item');
+        if (!item) return;
+        e.preventDefault();
+        var i = parseInt(item.getAttribute('data-idx'), 10);
+        applyMention(matches[i]);
+    });
+
+    document.addEventListener('click', function(e){
+        if (e.target !== input) { popup.hidden = true; }
+    });
+
+    // ─── Highlight @mentions inside rendered messages ───
+    var mentionRe = /@([A-Za-z0-9_.\-]+)/g;
+    document.querySelectorAll('.conv-body').forEach(function(node){
+        // Walk text nodes only (avoid double-escape and preserve <br>)
+        var html = node.innerHTML;
+        html = html.replace(mentionRe, function(_, uname){
+            var lower = uname.toLowerCase();
+            var cls = 'conv-mention';
+            if (lower === botUsername.toLowerCase()) cls += ' conv-mention-bot';
+            else if (lower === (currentUsername||'').toLowerCase()) cls += ' conv-mention-self';
+            return '<span class="' + cls + '">@' + uname + '</span>';
+        });
+        node.innerHTML = html;
+    });
+})();
+
+// SOF inline edit toggle
+function sofToggleEdit(evtId) {
+    var display = document.getElementById('sof-display-' + evtId);
+    var edit = document.getElementById('sof-edit-' + evtId);
+    if (!display || !edit) return;
+    // Close any other open edit rows
+    document.querySelectorAll('.sof-edit-row').forEach(function(r) {
+        if (r.id !== 'sof-edit-' + evtId) {
+            r.style.display = 'none';
+            var otherId = r.id.replace('sof-edit-', '');
+            var otherDisplay = document.getElementById('sof-display-' + otherId);
+            if (otherDisplay) otherDisplay.style.display = '';
+        }
+    });
+    // Toggle current
+    if (edit.style.display === 'none') {
+        display.style.display = 'none';
+        edit.style.display = '';
+        edit.querySelector('input[name="event_label"]').focus();
+    } else {
+        edit.style.display = 'none';
+        display.style.display = '';
+    }
+}
+</script>
+{% endblock %}

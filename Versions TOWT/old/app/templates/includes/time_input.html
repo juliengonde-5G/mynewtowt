@@ -1,0 +1,32 @@
+{#
+  Reusable time input with timezone selector.
+
+  Usage for type="time":
+    {% include "includes/time_input.html" with context %}
+    Required variables: field_name, field_value, field_label
+    Optional: field_tz_name (default: field_name + '_tz'), field_tz_value, input_class
+
+  Usage for type="datetime-local":
+    Set input_type="datetime-local"
+
+  The tz_choices variable must be available in the template context.
+#}
+{% set _input_type = input_type|default('time') %}
+{% set _tz_name = field_tz_name|default(field_name ~ '_tz') %}
+{% set _tz_value = field_tz_value|default('UTC') %}
+{% set _class = input_class|default('fi') %}
+
+<div class="fg {{ 'full' if full|default(false) else '' }}">
+    <label>{{ field_label }}</label>
+    <div class="tz-input-wrap">
+        <input type="{{ _input_type }}" name="{{ field_name }}" value="{{ field_value }}" class="{{ _class }}">
+        <select name="{{ _tz_name }}" class="tz-select">
+            {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+            <option value="{{ code }}" {% if code == _tz_value %}selected{% endif %}>
+                {{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <span class="tz-utc-hint"></span>
+</div>

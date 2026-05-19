@@ -1,0 +1,110 @@
+<div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+    <div class="modal" style="max-width:550px;">
+        <div class="modal-header">
+            <h3>{{ 'Modifier shift' if edit_ds else 'Nouveau shift docker' }}</h3>
+            <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+        </div>
+        <form method="POST" id="docker-form"
+              action="{{ '/escale/dockers/' ~ edit_ds.id ~ '/edit' if edit_ds else '/escale/dockers/create' }}">
+            {{ csrf_input(request) }}
+            {% if not edit_ds %}
+            <input type="hidden" name="leg_id" value="{{ leg_id }}">
+            {% endif %}
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Cale *</label>
+                    <select name="hold" class="form-select" required>
+                        <option value="avant" {% if edit_ds and edit_ds.hold == 'avant' %}selected{% endif %}>Avant</option>
+                        <option value="arriere" {% if edit_ds and edit_ds.hold == 'arriere' %}selected{% endif %}>Arrière</option>
+                    </select>
+                </div>
+
+                <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--towt-blue);margin:12px 0 8px;padding-bottom:4px;border-bottom:1px solid #f0f0f0;">Prévisionnel</div>
+                {% if quay_start and quay_end %}
+                <p style="font-size:11px;color:#888;margin-bottom:8px;">Bornes à quai : {{ quay_start[8:10] }}/{{ quay_start[5:7] }} {{ quay_start[11:16] }} → {{ quay_end[8:10] }}/{{ quay_end[5:7] }} {{ quay_end[11:16] }}</p>
+                {% endif %}
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Début</label>
+                        <div class="tz-input-wrap">
+                            <input type="datetime-local" name="planned_start" class="form-input"
+                                   {% if quay_start %}min="{{ quay_start }}"{% endif %} {% if quay_end %}max="{{ quay_end }}"{% endif %}
+                                   value="{{ edit_ds.planned_start.strftime('%Y-%m-%dT%H:%M') if edit_ds and edit_ds.planned_start else '' }}">
+                            <select name="planned_start_tz" class="tz-select">
+                                {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                                <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <span class="tz-utc-hint"></span>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Fin</label>
+                        <div class="tz-input-wrap">
+                            <input type="datetime-local" name="planned_end" class="form-input"
+                                   {% if quay_start %}min="{{ quay_start }}"{% endif %} {% if quay_end %}max="{{ quay_end }}"{% endif %}
+                                   value="{{ edit_ds.planned_end.strftime('%Y-%m-%dT%H:%M') if edit_ds and edit_ds.planned_end else '' }}">
+                            <select name="planned_end_tz" class="tz-select">
+                                {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                                <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <span class="tz-utc-hint"></span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Palettes prévues</label>
+                    <input type="number" name="planned_palettes" class="form-input" min="0"
+                           value="{{ edit_ds.planned_palettes if edit_ds and edit_ds.planned_palettes else '' }}">
+                </div>
+
+                {% if edit_ds %}
+                <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--towt-green);margin:12px 0 8px;padding-bottom:4px;border-bottom:1px solid #f0f0f0;">Réalisé</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Début réel</label>
+                        <div class="tz-input-wrap">
+                            <input type="datetime-local" name="actual_start" class="form-input"
+                                   value="{{ edit_ds.actual_start.strftime('%Y-%m-%dT%H:%M') if edit_ds.actual_start else '' }}">
+                            <select name="actual_start_tz" class="tz-select">
+                                {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                                <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <span class="tz-utc-hint"></span>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Fin réelle</label>
+                        <div class="tz-input-wrap">
+                            <input type="datetime-local" name="actual_end" class="form-input"
+                                   value="{{ edit_ds.actual_end.strftime('%Y-%m-%dT%H:%M') if edit_ds.actual_end else '' }}">
+                            <select name="actual_end_tz" class="tz-select">
+                                {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                                <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <span class="tz-utc-hint"></span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Palettes réelles</label>
+                    <input type="number" name="actual_palettes" class="form-input" min="0"
+                           value="{{ edit_ds.actual_palettes if edit_ds and edit_ds.actual_palettes else '' }}">
+                </div>
+                {% endif %}
+
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <textarea name="notes" class="form-input" rows="2">{{ edit_ds.notes if edit_ds and edit_ds.notes else '' }}</textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+                <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> {{ 'Enregistrer' if edit_ds else 'Créer' }}</button>
+            </div>
+        </form>
+    </div>
+</div>

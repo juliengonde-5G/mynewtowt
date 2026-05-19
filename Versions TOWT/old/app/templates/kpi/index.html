@@ -1,0 +1,679 @@
+{% extends "base.html" %}
+
+{% block title %}TOWT - KPI{% endblock %}
+{% block page_title %}Indicateurs de performance{% endblock %}
+
+{% block topbar_actions %}
+<a href="/kpi/export/csv" class="btn btn-secondary btn-sm" hx-boost="false">
+    <i data-lucide="download"></i> Export CSV
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="kpi-page">
+    <!-- ═══ FILTERS BAR ═══ -->
+    <div class="kpi-filters">
+        <div class="kpi-filters-left">
+            <div class="vessel-tabs">
+                <a href="/kpi?year={{ current_year }}&tab={{ active_tab }}"
+                   class="vessel-tab {% if not selected_vessel %}active{% endif %}">
+                    <i data-lucide="globe"></i> Tous
+                </a>
+                {% for v in vessels %}
+                <a href="/kpi?vessel={{ v.code }}&year={{ current_year }}&tab={{ active_tab }}"
+                   class="vessel-tab {% if selected_vessel == v.code %}active{% endif %}">
+                    <i data-lucide="ship"></i> {{ v.name }}
+                </a>
+                {% endfor %}
+            </div>
+            <div class="year-selector">
+                {% for y in years %}
+                <a href="/kpi?{% if selected_vessel %}vessel={{ selected_vessel }}&{% endif %}year={{ y }}&tab={{ active_tab }}"
+                   class="year-btn {% if current_year == y %}active{% endif %}">{{ y }}</a>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="kpi-filters-right">
+            <select id="route-filter" class="filter-select" onchange="applyRouteFilter(this.value)">
+                <option value="">Toutes les routes</option>
+                {% for r in available_routes %}
+                <option value="{{ r.key }}" {% if selected_route == r.key %}selected{% endif %}>{{ r.label }}</option>
+                {% endfor %}
+            </select>
+            <select id="leg-filter" class="filter-select" onchange="applyLegFilter(this.value)">
+                <option value="">Tous les legs</option>
+                {% for l in legs_for_filter %}
+                <option value="{{ l.id }}" {% if selected_leg_id == l.id %}selected{% endif %}>{{ l.code }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- ═══ CATEGORY TABS ═══ -->
+    <div class="kpi-category-tabs">
+        {% set tabs = [
+            ("operations", "Opérations", "settings"),
+            ("commerce", "Commerce", "shopping-cart"),
+            ("environnement", "Environnement", "leaf"),
+            ("finances", "Finances", "euro"),
+            ("exploitation", "Exploitation", "anchor"),
+        ] %}
+        {% for key, label, icon in tabs %}
+        <a href="/kpi?{% if selected_vessel %}vessel={{ selected_vessel }}&{% endif %}year={{ current_year }}&tab={{ key }}{% if selected_route %}&route={{ selected_route }}{% endif %}{% if selected_leg_id %}&leg_id={{ selected_leg_id }}{% endif %}"
+           class="category-tab {% if active_tab == key %}active{% endif %}">
+            <i data-lucide="{{ icon }}"></i>
+            <span>{{ label }}</span>
+        </a>
+        {% endfor %}
+    </div>
+
+    <!-- ═══ TAB CONTENT ═══ -->
+
+    {% if active_tab == "operations" %}
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!--                     OPÉRATIONS                        -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div class="kpi-tab-content">
+        <div class="kpi-summary-grid cols-4">
+            <div class="kpi-card" style="border-left-color:#6366F1;">
+                <div class="kpi-card-icon" style="background:rgba(99,102,241,0.1);color:#6366F1;"><i data-lucide="clock"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ ops_data.total_duration_h }}</span>
+                    <span class="kpi-card-unit">heures d'opérations (réalisé)</span>
+                    <div class="kpi-card-sub">Prévisionnel : {{ ops_data.planned_duration_h }} h · {{ ops_data.ops_count }} opérations</div>
+                </div>
+            </div>
+            <div class="kpi-card" style="border-left-color:#10B981;">
+                <div class="kpi-card-icon" style="background:rgba(16,185,129,0.1);color:#10B981;"><i data-lucide="zap"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ ops_data.productivity_pal_h }}</span>
+                    <span class="kpi-card-unit">palettes / heure</span>
+                    <div class="kpi-card-sub">{{ ops_data.total_palettes }} palettes en {{ ops_data.total_shift_hours }} h · {{ ops_data.shifts_count }} shifts</div>
+                </div>
+            </div>
+            <div class="kpi-card" style="border-left-color:#DC2626;">
+                <div class="kpi-card-icon" style="background:rgba(220,38,38,0.1);color:#DC2626;"><i data-lucide="alert-triangle"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ ops_data.claims_per_escale }}</span>
+                    <span class="kpi-card-unit">sinistres / escale</span>
+                    <div class="kpi-card-sub">{{ ops_data.claims_total }} sinistres · {{ ops_data.claims_open }} en cours · {{ ops_data.claims_closed }} clôturés</div>
+                </div>
+            </div>
+            <div class="kpi-card" style="border-left-color:#F59E0B;">
+                <div class="kpi-card-icon" style="background:rgba(245,158,11,0.1);color:#F59E0B;"><i data-lucide="file-warning"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ ops_data.lop_count }}</span>
+                    <span class="kpi-card-unit">Letters of Protest</span>
+                    <div class="kpi-card-sub">Cargo : {{ ops_data.claims_cargo }} · Crew : {{ ops_data.claims_crew }} · Coque : {{ ops_data.claims_hull }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detail tables -->
+        <div class="kpi-detail-section">
+            <div class="kpi-detail-card">
+                <h4><i data-lucide="bar-chart-3"></i> Répartition des sinistres</h4>
+                <div class="kpi-bar-chart">
+                    {% set max_claims = [ops_data.claims_cargo, ops_data.claims_crew, ops_data.claims_hull] | max %}
+                    {% for label, val, color in [("Cargo", ops_data.claims_cargo, "#3B82F6"), ("Crew", ops_data.claims_crew, "#10B981"), ("Coque", ops_data.claims_hull, "#F59E0B")] %}
+                    <div class="bar-row">
+                        <span class="bar-label">{{ label }}</span>
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width:{{ (val / max_claims * 100) if max_claims > 0 else 0 }}%;background:{{ color }};"></div>
+                        </div>
+                        <span class="bar-value">{{ val }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="kpi-detail-card">
+                <h4><i data-lucide="clock"></i> Durée des opérations</h4>
+                <div class="kpi-stat-rows">
+                    <div class="stat-row">
+                        <span>Durée totale réalisée</span>
+                        <strong>{{ ops_data.total_duration_h }} h</strong>
+                    </div>
+                    <div class="stat-row">
+                        <span>Durée totale prévisionnelle</span>
+                        <strong>{{ ops_data.planned_duration_h }} h</strong>
+                    </div>
+                    <div class="stat-row">
+                        <span>Écart</span>
+                        <strong class="{% if ops_data.total_duration_h > ops_data.planned_duration_h %}text-red{% else %}text-green{% endif %}">
+                            {{ '%+.1f'|format(ops_data.total_duration_h - ops_data.planned_duration_h) }} h
+                        </strong>
+                    </div>
+                    <div class="stat-row">
+                        <span>Nombre d'opérations</span>
+                        <strong>{{ ops_data.ops_count }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% elif active_tab == "commerce" %}
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!--                      COMMERCE                         -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div class="kpi-tab-content">
+        <div class="kpi-summary-grid cols-4">
+            <div class="kpi-card" style="border-left-color:#8B5CF6;">
+                <div class="kpi-card-icon" style="background:rgba(139,92,246,0.1);color:#8B5CF6;"><i data-lucide="package"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ '{:,}'.format(commerce_data.total_palettes).replace(',', ' ') }}</span>
+                    <span class="kpi-card-unit">palettes chargées</span>
+                    <div class="kpi-card-sub">{{ '%.0f'|format(commerce_data.total_weight) }} tonnes · {{ commerce_data.orders_count }} commandes</div>
+                </div>
+            </div>
+            <div class="kpi-card" style="border-left-color:#3B82F6;">
+                <div class="kpi-card-icon" style="background:rgba(59,130,246,0.1);color:#3B82F6;"><i data-lucide="percent"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ commerce_data.avg_fill_rate }}%</span>
+                    <span class="kpi-card-unit">taux de remplissage moyen</span>
+                    <div class="kpi-card-sub">Capacité palettes par navire</div>
+                </div>
+            </div>
+            <div class="kpi-card" style="border-left-color:#10B981;">
+                <div class="kpi-card-icon" style="background:rgba(16,185,129,0.1);color:#10B981;"><i data-lucide="euro"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ '%.0f'|format(commerce_data.avg_price_palette) }} €</span>
+                    <span class="kpi-card-unit">prix moyen / palette</span>
+                    <div class="kpi-card-sub">CA total : {{ '{:,.0f}'.format(commerce_data.total_revenue).replace(',', ' ') }} €</div>
+                </div>
+            </div>
+            <div class="kpi-card" style="border-left-color:#F59E0B;">
+                <div class="kpi-card-icon" style="background:rgba(245,158,11,0.1);color:#F59E0B;"><i data-lucide="trending-up"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ '{:,.0f}'.format(commerce_data.total_revenue).replace(',', ' ') }} €</span>
+                    <span class="kpi-card-unit">chiffre d'affaires commandes</span>
+                    <div class="kpi-card-sub">{{ commerce_data.orders_count }} commandes affectées</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="kpi-detail-section three-cols">
+            <!-- Par type de chargeur -->
+            <div class="kpi-detail-card">
+                <h4><i data-lucide="users"></i> Par type de chargeur</h4>
+                <div class="kpi-bar-chart">
+                    {% set max_ct = commerce_data.client_type_volumes.values() | max if commerce_data.client_type_volumes.values() | list else 1 %}
+                    {% for ct, vol in commerce_data.client_type_volumes.items() %}
+                    {% if vol > 0 %}
+                    <div class="bar-row">
+                        <span class="bar-label">{{ "Chargeur" if ct == "shipper" else ("Transitaire" if ct == "freight_forwarder" else "Non défini") }}</span>
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width:{{ (vol / max_ct * 100) if max_ct > 0 else 0 }}%;background:{{ '#8B5CF6' if ct == 'shipper' else ('#3B82F6' if ct == 'freight_forwarder' else '#9CA3AF') }};"></div>
+                        </div>
+                        <span class="bar-value">{{ vol }} pal.</span>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            <!-- Par type de cargaison (format palette) -->
+            <div class="kpi-detail-card">
+                <h4><i data-lucide="layers"></i> Par format palette</h4>
+                <div class="kpi-bar-chart">
+                    {% set max_cg = commerce_data.cargo_type_volumes.values() | max if commerce_data.cargo_type_volumes.values() | list else 1 %}
+                    {% for fmt, vol in commerce_data.cargo_type_volumes.items() %}
+                    {% if vol > 0 %}
+                    <div class="bar-row">
+                        <span class="bar-label">{{ fmt }}</span>
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width:{{ (vol / max_cg * 100) if max_cg > 0 else 0 }}%;background:#10B981;"></div>
+                        </div>
+                        <span class="bar-value">{{ vol }} pal.</span>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            <!-- Par groupe de prix unitaire -->
+            <div class="kpi-detail-card">
+                <h4><i data-lucide="bar-chart-3"></i> Par groupe de prix unitaire</h4>
+                <div class="kpi-bar-chart">
+                    {% set max_pg = commerce_data.price_groups.values() | max if commerce_data.price_groups.values() | list else 1 %}
+                    {% set pg_colors = ["#6366F1", "#3B82F6", "#10B981", "#F59E0B", "#EF4444"] %}
+                    {% for pg, vol in commerce_data.price_groups.items() %}
+                    {% if vol > 0 %}
+                    <div class="bar-row">
+                        <span class="bar-label">{{ pg }}</span>
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width:{{ (vol / max_pg * 100) if max_pg > 0 else 0 }}%;background:{{ pg_colors[loop.index0 % 5] }};"></div>
+                        </div>
+                        <span class="bar-value">{{ vol }} pal.</span>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% elif active_tab == "environnement" %}
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!--                   ENVIRONNEMENT                       -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div class="kpi-tab-content">
+        <div class="kpi-summary-grid cols-4">
+            <div class="kpi-card kpi-card-co2">
+                <div class="kpi-card-icon"><i data-lucide="leaf"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ '%.1f'|format(env_data.co2_avoided_t) }}</span>
+                    <span class="kpi-card-unit">tonnes CO2 évitées</span>
+                    <div class="kpi-card-equiv">
+                        {% if env_data.equiv_flights >= 0.01 %}
+                        <span class="equiv-badge">{{ '%.1f'|format(env_data.equiv_flights) }} vols Paris-NYC</span>
+                        {% endif %}
+                        {% if env_data.equiv_containers >= 1 %}
+                        <span class="equiv-badge">{{ '%.0f'|format(env_data.equiv_containers) }} containers</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="kpi-card kpi-card-nox">
+                <div class="kpi-card-icon"><i data-lucide="wind"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ '%.1f'|format(env_data.nox_avoided_kg) }}</span>
+                    <span class="kpi-card-unit">kg NOx évités</span>
+                    <div class="kpi-card-sub">+ {{ '%.1f'|format(env_data.sox_avoided_kg) }} kg SOx évités</div>
+                </div>
+            </div>
+            <div class="kpi-card kpi-card-dist">
+                <div class="kpi-card-icon"><i data-lucide="navigation"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ '{:,.0f}'.format(env_data.distance_nm).replace(',', ' ') }}</span>
+                    <span class="kpi-card-unit">milles nautiques</span>
+                    <div class="kpi-card-sub">{{ env_data.leg_count }} legs · {{ '%.0f'|format(env_data.cargo_tons) }} t transportées</div>
+                </div>
+            </div>
+            <div class="kpi-card kpi-card-eff">
+                <div class="kpi-card-icon"><i data-lucide="target"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ env_data.co2_per_ton_avg }}</span>
+                    <span class="kpi-card-unit">kg CO2 / tonne (voile)</span>
+                    <div class="kpi-card-sub">vs ~{{ env_data.conv_co2_per_ton }} kg conventionnel</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions: Sync + Certificate -->
+        <div style="display:flex;gap:12px;margin-top:16px;flex-wrap:wrap;align-items:center;">
+            <form method="POST" action="/kpi/sync-cargo" style="display:inline;">
+                {{ csrf_input(request) }}
+                <input type="hidden" name="year" value="{{ current_year }}">
+                {% if selected_vessel %}<input type="hidden" name="vessel" value="{{ selected_vessel }}">{% endif %}
+                <button type="submit" class="btn btn-secondary btn-sm">
+                    <i data-lucide="refresh-cw"></i> Synchroniser tonnage depuis commandes
+                </button>
+            </form>
+            <form method="GET" action="/kpi/certificate" style="display:inline-flex;gap:6px;align-items:center;" hx-boost="false">
+                <input type="hidden" name="year" value="{{ current_year }}">
+                <input type="text" name="client_name" placeholder="Nom du client" required
+                       style="padding:6px 10px;border-radius:6px;border:1px solid #ccc;font-family:'Poppins',system-ui,sans-serif;font-size:13px;min-width:180px;">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i data-lucide="award"></i> Certificat décarbonation PDF
+                </button>
+            </form>
+        </div>
+
+        <!-- Leg detail grid -->
+        <div class="section-header" style="margin-top:16px;"><h3>Détail par leg</h3></div>
+        {% if leg_kpis %}
+        <div class="kpi-env-table-wrap">
+            <table class="kpi-env-table">
+                <thead>
+                    <tr>
+                        <th>Leg</th>
+                        <th>Route</th>
+                        <th>Distance (NM)</th>
+                        <th>Cargo (t)</th>
+                        <th>Occupation</th>
+                        <th>CO2 évité (kg)</th>
+                        <th>NOx évité</th>
+                        <th>SOx évité</th>
+                        <th>CO2/t</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for kpi in leg_kpis %}
+                    <tr>
+                        <td><span class="leg-code-badge">{{ kpi.leg.leg_code }}</span></td>
+                        <td>{{ kpi.leg.departure_port.locode }} → {{ kpi.leg.arrival_port.locode }}</td>
+                        <td>{{ kpi.distance_nm }}</td>
+                        <td>
+                            <form method="POST" action="/kpi/legs/{{ kpi.leg.id }}/cargo" style="display:inline-flex;gap:4px;align-items:center;">
+                                {{ csrf_input(request) }}
+                                <input type="number" name="cargo_tons" step="0.1" min="0" value="{{ kpi.cargo_tons }}" class="cargo-input-sm">
+                                <button type="submit" class="btn-save-sm">OK</button>
+                            </form>
+                        </td>
+                        <td>{{ kpi.occupation_pct }}%</td>
+                        <td class="text-green">{{ '%.0f'|format(kpi.co2_avoided_kg) }}</td>
+                        <td>{{ '%.2f'|format(kpi.nox_avoided_kg) }}</td>
+                        <td>{{ '%.2f'|format(kpi.sox_avoided_kg) }}</td>
+                        <td>{{ kpi.co2_per_ton_kg }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i data-lucide="leaf" style="width:48px;height:48px;color:var(--towt-green);"></i>
+            <h3>Aucun leg pour cette sélection</h3>
+        </div>
+        {% endif %}
+    </div>
+
+    {% elif active_tab == "finances" %}
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!--                      FINANCES                         -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div class="kpi-tab-content">
+        <div class="kpi-summary-grid cols-4">
+            <div class="kpi-card" style="border-left-color:#10B981;">
+                <div class="kpi-card-icon" style="background:rgba(16,185,129,0.1);color:#10B981;"><i data-lucide="trending-up"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ '{:,.0f}'.format(finance_data.revenue_actual).replace(',', ' ') }} €</span>
+                    <span class="kpi-card-unit">revenus réalisés</span>
+                    <div class="kpi-card-sub">Prévisionnel : {{ '{:,.0f}'.format(finance_data.revenue_forecast).replace(',', ' ') }} €</div>
+                </div>
+            </div>
+            <div class="kpi-card" style="border-left-color:#EF4444;">
+                <div class="kpi-card-icon" style="background:rgba(239,68,68,0.1);color:#EF4444;"><i data-lucide="trending-down"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ '{:,.0f}'.format(finance_data.total_costs).replace(',', ' ') }} €</span>
+                    <span class="kpi-card-unit">coûts totaux</span>
+                    <div class="kpi-card-sub">{{ finance_data.legs_with_finance }} legs avec données finance</div>
+                </div>
+            </div>
+            <div class="kpi-card" style="border-left-color:{% if finance_data.result_actual >= 0 %}#10B981{% else %}#EF4444{% endif %};">
+                <div class="kpi-card-icon" style="background:{% if finance_data.result_actual >= 0 %}rgba(16,185,129,0.1);color:#10B981{% else %}rgba(239,68,68,0.1);color:#EF4444{% endif %};"><i data-lucide="calculator"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ '{:,.0f}'.format(finance_data.result_actual).replace(',', ' ') }} €</span>
+                    <span class="kpi-card-unit">résultat net</span>
+                    <div class="kpi-card-sub">Marge : {{ finance_data.margin_rate }}%</div>
+                </div>
+            </div>
+            <div class="kpi-card" style="border-left-color:#F59E0B;">
+                <div class="kpi-card-icon" style="background:rgba(245,158,11,0.1);color:#F59E0B;"><i data-lucide="shield"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ '{:,.0f}'.format(finance_data.total_provisions).replace(',', ' ') }} €</span>
+                    <span class="kpi-card-unit">provisions sinistres</span>
+                    <div class="kpi-card-sub">Indemnités : {{ '{:,.0f}'.format(finance_data.total_indemnities).replace(',', ' ') }} € · Franchises : {{ '{:,.0f}'.format(finance_data.total_franchises).replace(',', ' ') }} €</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="kpi-detail-section">
+            <!-- Détail par type de dépense -->
+            <div class="kpi-detail-card">
+                <h4><i data-lucide="pie-chart"></i> Détail des coûts par catégorie</h4>
+                <div class="kpi-bar-chart">
+                    {% set max_cost = finance_data.cost_groups.values() | max if finance_data.cost_groups.values() | list else 1 %}
+                    {% set cost_colors = ["#3B82F6", "#6366F1", "#8B5CF6", "#F59E0B", "#EF4444"] %}
+                    {% for label, val in finance_data.cost_groups.items() %}
+                    <div class="bar-row">
+                        <span class="bar-label">{{ label }}</span>
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width:{{ (val / max_cost * 100) if max_cost > 0 else 0 }}%;background:{{ cost_colors[loop.index0 % 5] }};"></div>
+                        </div>
+                        <span class="bar-value">{{ '{:,.0f}'.format(val).replace(',', ' ') }} €</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <!-- Rentabilité -->
+            <div class="kpi-detail-card">
+                <h4><i data-lucide="activity"></i> Rentabilité</h4>
+                <div class="kpi-stat-rows">
+                    <div class="stat-row">
+                        <span>Revenus réalisés</span>
+                        <strong class="text-green">{{ '{:,.0f}'.format(finance_data.revenue_actual).replace(',', ' ') }} €</strong>
+                    </div>
+                    <div class="stat-row">
+                        <span>Coûts totaux</span>
+                        <strong class="text-red">{{ '{:,.0f}'.format(finance_data.total_costs).replace(',', ' ') }} €</strong>
+                    </div>
+                    <div class="stat-row stat-row-highlight">
+                        <span>Résultat</span>
+                        <strong class="{% if finance_data.result_actual >= 0 %}text-green{% else %}text-red{% endif %}">
+                            {{ '{:,.0f}'.format(finance_data.result_actual).replace(',', ' ') }} €
+                        </strong>
+                    </div>
+                    <div class="stat-row">
+                        <span>Taux de marge</span>
+                        <strong>{{ finance_data.margin_rate }}%</strong>
+                    </div>
+                    <div class="stat-row">
+                        <span>Résultat prévisionnel</span>
+                        <strong>{{ '{:,.0f}'.format(finance_data.result_forecast).replace(',', ' ') }} €</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% elif active_tab == "exploitation" %}
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!--                    EXPLOITATION                        -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div class="kpi-tab-content">
+        <div class="kpi-summary-grid cols-4">
+            <div class="kpi-card" style="border-left-color:#6366F1;">
+                <div class="kpi-card-icon" style="background:rgba(99,102,241,0.1);color:#6366F1;"><i data-lucide="activity"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ exploitation_data.taux_activite }}%</span>
+                    <span class="kpi-card-unit">taux d'activité</span>
+                    <div class="kpi-card-sub">{{ exploitation_data.total_activity_days }} jours d'activité / {{ exploitation_data.days_elapsed }} jours écoulés</div>
+                </div>
+            </div>
+            <div class="kpi-card" style="border-left-color:#F59E0B;">
+                <div class="kpi-card-icon" style="background:rgba(245,158,11,0.1);color:#F59E0B;"><i data-lucide="git-compare"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ exploitation_data.avg_ecart_hours }} h</span>
+                    <span class="kpi-card-unit">écart moyen vs planning</span>
+                    <div class="kpi-card-sub">{{ exploitation_data.planning_ecarts | length }} legs avec données ATD/ETD</div>
+                </div>
+            </div>
+            <div class="kpi-card" style="border-left-color:#3B82F6;">
+                <div class="kpi-card-icon" style="background:rgba(59,130,246,0.1);color:#3B82F6;"><i data-lucide="gauge"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ exploitation_data.avg_speed_knots }} kn</span>
+                    <span class="kpi-card-unit">vitesse d'exploitation moyenne</span>
+                    <div class="kpi-card-sub">{{ exploitation_data.completed_legs }} legs complétés / {{ exploitation_data.total_legs }}</div>
+                </div>
+            </div>
+            <div class="kpi-card" style="border-left-color:#10B981;">
+                <div class="kpi-card-icon" style="background:rgba(16,185,129,0.1);color:#10B981;"><i data-lucide="anchor"></i></div>
+                <div class="kpi-card-body">
+                    <span class="kpi-card-value">{{ exploitation_data.total_nav_days }} j</span>
+                    <span class="kpi-card-unit">jours de navigation</span>
+                    <div class="kpi-card-sub">+ {{ exploitation_data.total_port_days }} jours au port</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="kpi-detail-section">
+            <!-- Écarts planning -->
+            {% if exploitation_data.planning_ecarts %}
+            <div class="kpi-detail-card">
+                <h4><i data-lucide="git-compare"></i> Écart par rapport au planning (ETD → ATD)</h4>
+                <div class="kpi-env-table-wrap">
+                    <table class="kpi-env-table compact">
+                        <thead>
+                            <tr><th>Leg</th><th>Écart (heures)</th><th>Écart (jours)</th><th>Statut</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for e in exploitation_data.planning_ecarts %}
+                            <tr>
+                                <td><span class="leg-code-badge">{{ e.leg_code }}</span></td>
+                                <td class="{% if e.ecart_hours > 0 %}text-red{% elif e.ecart_hours < 0 %}text-green{% endif %}">
+                                    {{ '%+.1f'|format(e.ecart_hours) }} h
+                                </td>
+                                <td>{{ '%+.1f'|format(e.ecart_days) }} j</td>
+                                <td>
+                                    {% if e.ecart_hours|abs < 12 %}
+                                    <span class="status-badge green">OK</span>
+                                    {% elif e.ecart_hours|abs < 48 %}
+                                    <span class="status-badge orange">Retard modéré</span>
+                                    {% else %}
+                                    <span class="status-badge red">Retard important</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Durée moyenne par route -->
+            {% if exploitation_data.route_avg_durations %}
+            <div class="kpi-detail-card">
+                <h4><i data-lucide="map"></i> Durée moyenne de navigation par route</h4>
+                <div class="kpi-bar-chart">
+                    {% set max_dur = exploitation_data.route_avg_durations | map(attribute='avg_days') | max if exploitation_data.route_avg_durations else 1 %}
+                    {% for rd in exploitation_data.route_avg_durations %}
+                    <div class="bar-row">
+                        <span class="bar-label">{{ rd.route }}</span>
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width:{{ (rd.avg_days / max_dur * 100) if max_dur > 0 else 0 }}%;background:#3B82F6;"></div>
+                        </div>
+                        <span class="bar-value">{{ rd.avg_days }} j <small>({{ rd.count }}x)</small></span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ═══ LEG DETAIL MODAL ═══ -->
+<div id="leg-detail-modal" class="kpi-modal-overlay" style="display:none;">
+    <div class="kpi-modal">
+        <div class="kpi-modal-header">
+            <h3 id="leg-modal-title">—</h3>
+            <button onclick="closeLegDetail()" class="kpi-modal-close">✕</button>
+        </div>
+        <div id="leg-modal-body" class="kpi-modal-body">
+            <div style="text-align:center;padding:40px;color:#999;">Chargement…</div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* ── Filters ── */
+    .kpi-filters{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;}
+    .kpi-filters-left{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+    .kpi-filters-right{display:flex;gap:8px;align-items:center;}
+    .filter-select{padding:6px 10px;border:1px solid #e2e8f0;border-radius:var(--radius);font-size:12px;font-family:'Poppins',system-ui,sans-serif;color:var(--towt-gray);background:#fff;min-width:160px;}
+    .filter-select:focus{outline:none;border-color:var(--towt-blue);box-shadow:0 0 0 2px rgba(9,85,97,0.1);}
+    .vessel-tabs{display:flex;gap:4px;background:#fff;padding:4px;border-radius:var(--radius);box-shadow:var(--shadow);}
+    .vessel-tab{padding:6px 12px;border-radius:var(--radius);font-size:12px;font-weight:500;color:var(--towt-gray);display:flex;align-items:center;gap:4px;white-space:nowrap;}
+    .vessel-tab:hover{background:var(--towt-light);} .vessel-tab.active{background:var(--towt-blue);color:#fff;}
+    .vessel-tab i{width:14px;height:14px;}
+    .year-selector{display:flex;gap:3px;background:#fff;padding:4px;border-radius:var(--radius);box-shadow:var(--shadow);}
+    .year-btn{padding:6px 12px;border-radius:var(--radius);font-size:12px;font-weight:500;color:var(--towt-gray);}
+    .year-btn:hover{background:var(--towt-light);} .year-btn.active{background:var(--towt-green);color:#fff;}
+
+    /* ── Category tabs ── */
+    .kpi-category-tabs{display:flex;gap:2px;background:#fff;padding:4px;border-radius:var(--radius-lg);box-shadow:var(--shadow);margin-bottom:16px;}
+    .category-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;color:#64748B;transition:all .15s;}
+    .category-tab:hover{background:#f1f5f9;color:var(--towt-gray);}
+    .category-tab.active{background:var(--towt-blue);color:#fff;box-shadow:0 2px 8px rgba(9,85,97,0.2);}
+    .category-tab i{width:16px;height:16px;}
+
+    /* ── Summary grid ── */
+    .kpi-summary-grid{display:grid;gap:12px;margin-bottom:16px;}
+    .kpi-summary-grid.cols-4{grid-template-columns:repeat(4,1fr);}
+    @media(max-width:1100px){.kpi-summary-grid.cols-4{grid-template-columns:repeat(2,1fr);}}
+    @media(max-width:600px){.kpi-summary-grid.cols-4{grid-template-columns:1fr;}}
+    .kpi-card{background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:16px;display:flex;gap:12px;align-items:flex-start;border-left:4px solid transparent;}
+    .kpi-card-co2{border-left-color:var(--towt-green);} .kpi-card-nox{border-left-color:#60A5FA;}
+    .kpi-card-dist{border-left-color:var(--towt-sky);} .kpi-card-eff{border-left-color:#F59E0B;}
+    .kpi-card-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .kpi-card-co2 .kpi-card-icon{background:rgba(135,189,43,0.12);color:var(--towt-green);}
+    .kpi-card-nox .kpi-card-icon{background:rgba(96,165,250,0.12);color:#60A5FA;}
+    .kpi-card-dist .kpi-card-icon{background:rgba(158,198,210,0.2);color:var(--towt-sky-dark);}
+    .kpi-card-eff .kpi-card-icon{background:rgba(245,158,11,0.12);color:#F59E0B;}
+    .kpi-card-body{flex:1;} .kpi-card-value{display:block;font-size:24px;font-weight:700;color:var(--towt-gray);line-height:1;}
+    .kpi-card-unit{display:block;font-size:11px;color:#888;margin-top:3px;}
+    .kpi-card-sub{font-size:10px;color:#aaa;margin-top:4px;}
+    .kpi-card-equiv{margin-top:6px;display:flex;flex-direction:column;gap:3px;}
+    .equiv-badge{display:inline-block;font-size:10px;font-weight:500;background:#F0FFF4;color:#22863A;padding:2px 6px;border-radius:100px;border:1px solid #C6F6D5;}
+
+    /* ── Detail sections ── */
+    .kpi-detail-section{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    .kpi-detail-section.three-cols{grid-template-columns:repeat(3,1fr);}
+    @media(max-width:900px){.kpi-detail-section,.kpi-detail-section.three-cols{grid-template-columns:1fr;}}
+    .kpi-detail-card{background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:16px;}
+    .kpi-detail-card h4{font-size:13px;font-weight:600;color:var(--towt-gray);margin:0 0 12px;display:flex;align-items:center;gap:6px;}
+    .kpi-detail-card h4 i{width:16px;height:16px;color:var(--towt-sky-dark);}
+
+    /* ── Bar chart ── */
+    .kpi-bar-chart{display:flex;flex-direction:column;gap:8px;}
+    .bar-row{display:flex;align-items:center;gap:8px;}
+    .bar-label{width:100px;font-size:11px;color:#64748B;text-align:right;flex-shrink:0;}
+    .bar-track{flex:1;height:22px;background:#f1f5f9;border-radius:4px;overflow:hidden;}
+    .bar-fill{height:100%;border-radius:4px;transition:width .3s ease;min-width:2px;}
+    .bar-value{font-size:11px;font-weight:600;color:var(--towt-gray);min-width:60px;}
+
+    /* ── Stat rows ── */
+    .kpi-stat-rows{display:flex;flex-direction:column;gap:0;}
+    .stat-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:12px;}
+    .stat-row:last-child{border-bottom:none;}
+    .stat-row span{color:#64748B;}
+    .stat-row strong{color:var(--towt-gray);}
+    .stat-row-highlight{background:#f8fafc;margin:0 -16px;padding:8px 16px;border-radius:6px;}
+
+    /* ── Table ── */
+    .kpi-env-table-wrap{overflow-x:auto;}
+    .kpi-env-table{width:100%;border-collapse:collapse;font-size:12px;}
+    .kpi-env-table th{text-align:left;padding:8px;font-size:10px;text-transform:uppercase;color:#94A3B8;font-weight:600;border-bottom:2px solid #e2e8f0;}
+    .kpi-env-table td{padding:8px;border-bottom:1px solid #f1f5f9;color:var(--towt-gray);}
+    .kpi-env-table.compact td,.kpi-env-table.compact th{padding:6px 8px;}
+    .leg-code-badge{display:inline-block;background:var(--towt-light);padding:2px 6px;border-radius:4px;font-size:11px;font-weight:600;color:var(--towt-blue);font-family:'Poppins',system-ui,sans-serif;}
+    .cargo-input-sm{width:60px;padding:3px 6px;border:1px solid #e2e8f0;border-radius:4px;font-size:11px;text-align:right;font-family:'Poppins',system-ui,sans-serif;}
+    .cargo-input-sm:focus{border-color:var(--towt-blue);outline:none;}
+    .btn-save-sm{padding:3px 8px;font-size:10px;font-weight:600;background:var(--towt-green);color:#fff;border:none;border-radius:4px;cursor:pointer;}
+    .btn-save-sm:hover{opacity:0.9;}
+
+    /* ── Utility ── */
+    .text-green{color:#16A34A;font-weight:600;} .text-red{color:#DC2626;font-weight:600;}
+    .status-badge{display:inline-block;padding:2px 8px;border-radius:100px;font-size:10px;font-weight:600;}
+    .status-badge.green{background:#DCFCE7;color:#16A34A;} .status-badge.orange{background:#FEF3C7;color:#D97706;} .status-badge.red{background:#FEE2E2;color:#DC2626;}
+    .empty-state{text-align:center;padding:40px;color:#999;}
+    .empty-state h3{margin:12px 0 4px;font-size:14px;color:#64748B;}
+    .section-header h3{font-size:14px;font-weight:600;color:var(--towt-gray);margin:0 0 8px;}
+</style>
+
+<script>
+function applyRouteFilter(val) {
+    const url = new URL(window.location.href);
+    if (val) {
+        url.searchParams.set('route', val);
+        url.searchParams.delete('leg_id');
+    } else {
+        url.searchParams.delete('route');
+    }
+    window.location.href = url.toString();
+}
+
+function applyLegFilter(val) {
+    const url = new URL(window.location.href);
+    if (val) {
+        url.searchParams.set('leg_id', val);
+        url.searchParams.delete('route');
+    } else {
+        url.searchParams.delete('leg_id');
+    }
+    window.location.href = url.toString();
+}
+</script>
+{% endblock %}

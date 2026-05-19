@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}my_TOWT — Claims{% endblock %}
+{% block page_title %}⚠️ {{ t('page_claims', lang) }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/claims/create" class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Nouveau claim</a>
+{% endblock %}
+
+{% block content %}
+<div class="cl-stats">
+    <div class="cl-stat"><span class="cl-stat-val">{{ stats.total }}</span><span class="cl-stat-lbl">Total</span></div>
+    <div class="cl-stat cl-stat-warn"><span class="cl-stat-val">{{ stats.open }}</span><span class="cl-stat-lbl">Ouverts</span></div>
+    <div class="cl-stat"><span class="cl-stat-val">{{ stats.declared }}</span><span class="cl-stat-lbl">Déclarés</span></div>
+    <div class="cl-stat"><span class="cl-stat-val">{{ stats.instruction }}</span><span class="cl-stat-lbl">En instruction</span></div>
+    <div class="cl-stat cl-stat-money"><span class="cl-stat-val">{{ "%.0f"|format(total_provision) }} €</span><span class="cl-stat-lbl">Provisions</span></div>
+    <div class="cl-stat cl-stat-danger"><span class="cl-stat-val">{{ "%.0f"|format(total_company) }} €</span><span class="cl-stat-lbl">Charge cie</span></div>
+</div>
+
+<!-- GANTT -->
+{% if gantt_data|length > 0 %}
+<div class="cl-gantt-section">
+    <h3 style="margin:0 0 10px;font-size:14px;">📊 Avancement des sinistres</h3>
+    <div class="cl-gantt" id="gantt-container"></div>
+</div>
+{% endif %}
+
+<div class="cl-filters">
+    <a href="/claims" class="cl-filter {% if not selected_type and not selected_status %}active{% endif %}">Tous</a>
+    <span class="cl-sep">|</span>
+    {% for code, label in claim_types %}
+    <a href="/claims?claim_type={{ code }}" class="cl-filter cl-ft-{{ code }} {% if selected_type == code %}active{% endif %}">{{ label }}</a>
+    {% endfor %}
+    <span class="cl-sep">|</span>
+    {% for code, label in claim_statuses %}
+    <a href="/claims?status={{ code }}" class="cl-filter {% if selected_status == code %}active{% endif %}">{{ label }}</a>
+    {% endfor %}
+</div>
+
+<div class="cl-card">
+{% if claims %}
+<table class="cl-table">
+    <thead><tr><th>Réf.</th><th>Type</th><th>Navire</th><th>Leg</th><th>Contexte</th><th>Date</th><th>Garantie</th><th>Statut</th><th style="text-align:right;">Provision</th><th></th></tr></thead>
+    <tbody>
+    {% for c in claims %}
+    <tr class="{% if c.status == 'closed' %}cl-row-closed{% endif %}">
+        <td><a href="/claims/{{ c.id }}" class="cl-ref">{{ c.reference }}</a></td>
+        <td><span class="cl-type-badge cl-type-{{ c.claim_type }}">{{ c.type_label }}</span></td>
+        <td>{{ c.vessel.name }}</td>
+        <td><span style="font-family:'Poppins',sans-serif;font-size:11px;color:var(--towt-blue);">{{ c.leg.leg_code }}</span><br><span style="font-size:10px;color:#888;">{{ c.leg.departure_port.locode }} → {{ c.leg.arrival_port.locode }}</span></td>
+        <td style="font-size:11px;">{{ c.context_label }}</td>
+        <td style="font-size:11px;">{{ c.incident_date.strftime('%d/%m/%Y') if c.incident_date else '—' }}</td>
+        <td><span class="cl-guarantee cl-g-{{ c.guarantee_type }}">{{ c.guarantee_label }}</span></td>
+        <td><span class="cl-status cl-st-{{ c.status }}">{{ c.status_label }}</span></td>
+        <td style="text-align:right;font-family:'Poppins',sans-serif;font-size:12px;">{{ "%.0f"|format(c.provision_amount or 0) }} €</td>
+        <td><a href="/claims/{{ c.id }}" class="btn btn-secondary btn-sm">Voir</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p style="text-align:center;padding:40px;color:#888;">Aucun claim.</p>
+{% endif %}
+</div>
+
+<style>
+    .cl-stats{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px}@media(max-width:900px){.cl-stats{grid-template-columns:repeat(3,1fr)}}
+    .cl-stat{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:14px;text-align:center}.cl-stat-val{font-size:22px;font-weight:700;color:var(--towt-blue);display:block}.cl-stat-lbl{font-size:10px;color:#888;text-transform:uppercase}
+    .cl-stat-warn .cl-stat-val{color:#D97706}.cl-stat-money .cl-stat-val{color:#2563EB;font-size:16px}.cl-stat-danger .cl-stat-val{color:#DC2626;font-size:16px}
+    .cl-gantt-section{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:16px 20px;margin-bottom:16px;overflow-x:auto}
+    .cl-gantt{position:relative;min-height:40px}
+    .cl-gantt-row{display:flex;align-items:center;margin-bottom:6px;font-size:11px;height:28px}
+    .cl-gantt-label{width:140px;flex-shrink:0;font-weight:600;font-family:'Poppins',sans-serif;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .cl-gantt-track{flex:1;position:relative;height:20px;background:#f5f5f5;border-radius:4px;overflow:hidden}
+    .cl-gantt-bar{position:absolute;height:100%;border-radius:4px;min-width:4px;cursor:pointer;opacity:0.85;transition:opacity 0.15s}
+    .cl-gantt-bar:hover{opacity:1}
+    .cl-gantt-bar.gt-cargo{background:#D97706}.cl-gantt-bar.gt-crew{background:#6366F1}.cl-gantt-bar.gt-hull{background:#DC2626}
+    .cl-gantt-bar.gs-open{background:repeating-linear-gradient(45deg,transparent,transparent 3px,rgba(255,255,255,0.3) 3px,rgba(255,255,255,0.3) 6px)}
+    .cl-gantt-bar.gs-closed{opacity:0.4}
+    .cl-gantt-months{display:flex;font-size:9px;color:#aaa;border-top:1px solid #eee;padding-top:4px;margin-top:4px}
+    .cl-gantt-months span{flex:1;text-align:center}
+    .cl-filters{display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-bottom:16px;padding:8px;background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow)}
+    .cl-filter{padding:5px 12px;border-radius:var(--radius);font-size:11px;font-weight:500;color:#888;text-decoration:none}.cl-filter:hover{background:var(--towt-light)}.cl-filter.active{background:var(--towt-blue);color:white}
+    .cl-sep{color:#ddd;margin:0 4px}
+    .cl-card{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:16px;overflow-x:auto}
+    .cl-table{width:100%;border-collapse:collapse;font-size:12px}.cl-table th{text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;color:#888;border-bottom:2px solid #f0f0f0}.cl-table td{padding:8px 10px;border-bottom:1px solid #f8f8f8;vertical-align:top}
+    .cl-ref{font-family:'Poppins',sans-serif;font-weight:700;color:var(--towt-blue);text-decoration:none;font-size:11px}.cl-ref:hover{text-decoration:underline}
+    .cl-row-closed{opacity:0.5}
+    .cl-type-badge{font-size:10px;padding:3px 10px;border-radius:100px;font-weight:600}.cl-type-cargo{background:rgba(245,158,11,0.1);color:#D97706}.cl-type-crew{background:rgba(99,102,241,0.1);color:#6366F1}.cl-type-hull{background:rgba(220,38,38,0.1);color:#DC2626}
+    .cl-status{font-size:10px;padding:3px 10px;border-radius:100px;font-weight:600}.cl-st-open{background:rgba(245,158,11,0.1);color:#D97706}.cl-st-declared{background:rgba(59,130,246,0.1);color:#2563EB}.cl-st-instruction{background:rgba(168,85,247,0.1);color:#A855F7}.cl-st-accepted{background:rgba(34,197,94,0.1);color:#16a34a}.cl-st-refused{background:rgba(220,38,38,0.1);color:#DC2626}.cl-st-closed{background:rgba(107,114,128,0.1);color:#6B7280}
+    .cl-guarantee{font-size:10px;padding:2px 8px;border-radius:100px;font-weight:500}.cl-g-pi{background:rgba(6,182,212,0.1);color:#0891B2}.cl-g-hull_div{background:rgba(220,38,38,0.08);color:#991B1B}.cl-g-war_risk{background:rgba(107,114,128,0.1);color:#4B5563}
+</style>
+
+<script>
+(function(){
+    var data = {{ gantt_data|tojson }};
+    if (!data || !data.length) return;
+    var container = document.getElementById('gantt-container');
+    if (!container) return;
+
+    // Find date range (year scope)
+    var now = new Date();
+    var yearStart = new Date(now.getFullYear(), 0, 1);
+    var yearEnd = new Date(now.getFullYear(), 11, 31);
+    var totalDays = (yearEnd - yearStart) / 86400000;
+
+    var months = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+    var html = '';
+
+    data.forEach(function(c) {
+        var s = new Date(c.start); var e = new Date(c.end);
+        if (s < yearStart) s = yearStart;
+        if (e > yearEnd) e = yearEnd;
+        var left = ((s - yearStart) / 86400000) / totalDays * 100;
+        var width = Math.max(((e - s) / 86400000) / totalDays * 100, 1);
+        var cls = 'gt-' + c.type;
+        if (c.status === 'closed' || c.status === 'refused') cls += ' gs-closed';
+        html += '<div class="cl-gantt-row">';
+        html += '<div class="cl-gantt-label"><a href="/claims/' + c.id + '" style="color:var(--towt-blue);text-decoration:none;">' + c.ref + '</a></div>';
+        html += '<div class="cl-gantt-track"><div class="cl-gantt-bar ' + cls + '" style="left:' + left.toFixed(1) + '%;width:' + width.toFixed(1) + '%;" title="' + c.ref + ' — ' + c.vessel + ' — ' + c.provision + '€"></div></div>';
+        html += '</div>';
+    });
+
+    html += '<div class="cl-gantt-months">';
+    months.forEach(function(m) { html += '<span>' + m + '</span>'; });
+    html += '</div>';
+
+    container.innerHTML = html;
+})();
+</script>
+{% endblock %}

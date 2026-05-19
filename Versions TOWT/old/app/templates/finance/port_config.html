@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Configuration Ports{% endblock %}
+{% block page_title %}Configuration des ports{% endblock %}
+
+{% block topbar_actions %}
+<a href="/finance" class="btn btn-secondary btn-sm"><i data-lucide="arrow-left"></i> Retour finances</a>
+{% endblock %}
+
+{% block content %}
+<div class="port-config-page">
+    <div class="section-block" style="margin-bottom:20px;">
+        <h3 style="font-size:15px;margin-bottom:12px;">Ajouter / modifier un port</h3>
+        <div class="form-group" style="max-width:400px;position:relative;">
+            <input type="text" id="port-search" class="form-input" placeholder="Rechercher un port (LOCODE ou nom)..." oninput="searchPort(this.value)">
+            <div id="port-results" style="position:absolute;top:100%;left:0;right:0;z-index:100;background:white;border-radius:0 0 8px 8px;box-shadow:var(--shadow-lg);max-height:200px;overflow-y:auto;"></div>
+        </div>
+    </div>
+
+    {% if configs %}
+    <div class="section-block" style="margin-bottom:12px;padding:12px 16px;display:flex;align-items:center;gap:12px;">
+        <label for="country-filter" style="font-size:13px;font-weight:500;white-space:nowrap;">Filtrer par pays :</label>
+        <select id="country-filter" class="form-input" style="max-width:220px;" onchange="filterByCountry(this.value)">
+            <option value="">Tous les pays</option>
+            {% set countries = [] %}
+            {% for c in configs %}
+                {% if c.port and c.port.country_code and c.port.country_code not in countries %}
+                    {% if countries.append(c.port.country_code) %}{% endif %}
+                {% endif %}
+            {% endfor %}
+            {% for cc in countries|sort %}
+            <option value="{{ cc }}">{{ cc|flag }} {{ cc }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="table-container">
+        <table class="data-table" id="port-table">
+            <thead>
+                <tr>
+                    <th>LOCODE</th>
+                    <th>Port</th>
+                    <th>Pays</th>
+                    <th>Accessible</th>
+                    <th style="text-align:right;">Coût portuaire (€)</th>
+                    <th style="text-align:right;">Coût/jour quai (€)</th>
+                    <th style="text-align:right;">Coût/palette (€)</th>
+                    <th>Notes</th>
+                    <th style="text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in configs %}
+                <tr data-country="{{ c.port.country_code if c.port else '' }}" {% if not c.accessible %}style="opacity:0.5;"{% endif %}>
+                    <td><strong style="font-family:monospace;color:var(--towt-blue);">{{ c.port_locode }}</strong></td>
+                    <td>{{ c.port.name if c.port else '—' }}</td>
+                    <td>{{ c.port.country_code|flag }} {{ c.port.country_code if c.port else '—' }}</td>
+                    <td>
+                        {% if c.accessible %}<span class="badge badge-completed">✓ Oui</span>
+                        {% else %}<span class="badge badge-cancelled">✗ Non</span>{% endif %}
+                    </td>
+                    <td style="text-align:right;font-family:monospace;">{{ c.port_cost_total|eur }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ c.daily_quay_cost|eur }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ c.cost_per_palette|eur }}</td>
+                    <td style="font-size:12px;">{{ c.notes or '—' }}</td>
+                    <td style="text-align:right;">
+                        <button class="btn btn-sm btn-secondary" onclick="openPortModal('{{ c.port_locode }}')"><i data-lucide="pencil"></i></button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i data-lucide="anchor" style="width:48px;height:48px;color:var(--towt-sky);"></i>
+        <h3>Aucun port configuré</h3>
+        <p>Recherchez un port ci-dessus pour configurer ses coûts.</p>
+    </div>
+    {% endif %}
+</div>
+<div id="modal-container"></div>
+<style>
+    .port-result{padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f5f5f5}
+    .port-result:hover{background:var(--towt-light)}
+    .section-block{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px}
+</style>
+<script>
+    var searchTimeout;
+    window.searchPort = function(q){
+        clearTimeout(searchTimeout);
+        if(q.length<2){document.getElementById('port-results').innerHTML='';return;}
+        searchTimeout=setTimeout(function(){
+            fetch('/finance/ports/search?q='+encodeURIComponent(q))
+                .then(function(r){return r.text();})
+                .then(function(html){document.getElementById('port-results').innerHTML=html;});
+        },300);
+    };
+    window.selectPort = function(locode,name){
+        document.getElementById('port-results').innerHTML='';
+        document.getElementById('port-search').value=locode+' — '+name;
+        openPortModal(locode);
+    };
+    window.openPortModal = function(locode){
+        fetch('/finance/ports/'+locode+'/edit').then(function(r){return r.text();}).then(function(html){
+            document.getElementById('modal-container').innerHTML=html;lucide.createIcons();
+            var form=document.getElementById('port-config-form');
+            if(form){form.addEventListener('submit',function(e){e.preventDefault();
+                fetch(form.action,{method:'POST',body:new FormData(form)})
+                    .then(function(r){if(r.redirected)window.location.href=r.url;else window.location.href='/finance/ports';})
+                    .catch(function(){window.location.reload();});});}
+        });
+    };
+    window.closeModal = function(){document.getElementById('modal-container').innerHTML='';};
+    window.filterByCountry = function(cc){
+        var rows = document.querySelectorAll('#port-table tbody tr');
+        for(var i=0;i<rows.length;i++){
+            rows[i].style.display = (!cc || rows[i].getAttribute('data-country')===cc) ? '' : 'none';
+        }
+    };
+</script>
+{% endblock %}

@@ -1,0 +1,412 @@
+{% extends "base.html" %}
+{% block title %}{% if edit_grid %}Modifier{% else %}Nouvelle{% endif %} Grille Tarifaire{% endblock %}
+{% block page_title %}{% if edit_grid %}Modifier {{ edit_grid.reference }}{% else %}Nouvelle grille tarifaire{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/commercial?tab=grids" class="btn btn-secondary btn-sm"><i data-lucide="arrow-left"></i> Retour</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:1100px;">
+    <p style="color:#888;font-size:13px;margin-bottom:20px;">Référence: <strong style="color:var(--towt-blue);">{{ reference }}</strong></p>
+
+    <form method="POST" id="gridForm">
+        {{ csrf_input(request) }}
+        <!-- ═══ CLIENT ═══════════════════════════════════ -->
+        <div style="background:#f8fafc;border-radius:8px;padding:16px;margin-bottom:20px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <h4 style="margin:0;color:var(--towt-blue);font-size:14px;">Client</h4>
+                <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;" onclick="toggleNewClient()"><i data-lucide="plus" style="width:12px;height:12px;"></i> Nouveau client</button>
+            </div>
+
+            <!-- Select existing -->
+            <div id="client-select-row">
+                <div class="form-group" style="margin:0;">
+                    <select name="client_id" id="clientSelect" class="form-select" required onchange="onClientChange()">
+                        <option value="">— Sélectionner un client —</option>
+                        {% for c in clients %}
+                        <option value="{{ c.id }}" data-type="{{ c.client_type }}" {% if edit_grid and edit_grid.client_id == c.id %}selected{% endif %}>
+                            {{ c.name }} ({% if c.client_type == 'freight_forwarder' %}FF{% else %}Chargeur{% endif %})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Inline new client form (hidden by default) -->
+            <div id="new-client-form" style="display:none;margin-top:12px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:12px;">
+                <div style="display:grid;grid-template-columns:1fr 150px;gap:12px;margin-bottom:8px;">
+                    <div class="form-group" style="margin:0;">
+                        <label class="form-label" style="font-size:11px;">Nom *</label>
+                        <input type="text" id="newClientName" class="form-input" placeholder="Ex: CMA CGM Logistics">
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label class="form-label" style="font-size:11px;">Type *</label>
+                        <select id="newClientType" class="form-select">
+                            <option value="shipper">📦 Chargeur</option>
+                            <option value="freight_forwarder">🚛 FF</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px;">
+                    <div class="form-group" style="margin:0;">
+                        <label class="form-label" style="font-size:11px;">Contact</label>
+                        <input type="text" id="newClientContact" class="form-input" placeholder="Jean Dupont">
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label class="form-label" style="font-size:11px;">Email</label>
+                        <input type="email" id="newClientEmail" class="form-input" placeholder="contact@example.com">
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="toggleNewClient()">Annuler</button>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="createClientInline()"><i data-lucide="check"></i> Créer</button>
+                </div>
+            </div>
+
+            <!-- Client type indicator -->
+            <div id="client-type-badge" style="margin-top:8px;display:none;">
+                <span id="client-type-label" style="display:inline-block;padding:4px 12px;border-radius:10px;font-size:12px;font-weight:500;"></span>
+            </div>
+        </div>
+
+        <!-- ═══ GENERAL INFO ═════════════════════════════ -->
+        <div style="background:#f8fafc;border-radius:8px;padding:16px;margin-bottom:20px;">
+            <h4 style="margin:0 0 12px;color:var(--towt-blue);font-size:14px;">Paramètres</h4>
+            <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:12px;">
+                <div class="form-group" style="margin:0;">
+                    <label class="form-label">Navire (OPEX)</label>
+                    <select name="vessel_id" id="vesselSelect" class="form-select" onchange="computeRates()">
+                        <option value="">— Défaut compagnie —</option>
+                        {% for v in vessels %}
+                        <option value="{{ v.id }}" {% if edit_grid and edit_grid.vessel_id == v.id %}selected{% endif %}>
+                            {{ v.name }}{% if v.opex_daily_sea %} (€{{ "%.0f"|format(v.opex_daily_sea) }}/j){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label class="form-label">Valide du *</label>
+                    <input type="date" name="valid_from" id="validFrom" class="form-input" required
+                           value="{{ edit_grid.valid_from.isoformat() if edit_grid and edit_grid.valid_from else '' }}"
+                           onchange="onDatesChange()">
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label class="form-label">Valide au *</label>
+                    <input type="date" name="valid_to" id="validTo" class="form-input" required
+                           value="{{ edit_grid.valid_to.isoformat() if edit_grid and edit_grid.valid_to else '' }}"
+                           onchange="onDatesChange()">
+                </div>
+            </div>
+            <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;">
+                <div class="form-group" style="margin:0;">
+                    <label class="form-label">Indice d'ajustement</label>
+                    <input type="number" name="adjustment_index" id="adjIndex" class="form-input" step="0.01" min="0.5" max="3.0"
+                           value="{{ '%.2f'|format(edit_grid.adjustment_index) if edit_grid and edit_grid.adjustment_index else '1.00' }}"
+                           onchange="computeRates()" oninput="computeRates()">
+                    <p style="font-size:10px;color:#888;margin-top:2px;">1.00 = neutre</p>
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label class="form-label">BL Fee (€)</label>
+                    <input type="number" name="bl_fee" class="form-input" step="0.01" value="{{ '%.2f'|format(default_bl_fee) }}">
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label class="form-label">Booking Fee (€)</label>
+                    <input type="number" name="booking_fee" class="form-input" step="0.01" value="{{ '%.2f'|format(default_booking_fee) }}">
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label class="form-label">Vol. engagement</label>
+                    <input type="number" name="volume_commitment" class="form-input" min="0"
+                           value="{{ edit_grid.volume_commitment if edit_grid and edit_grid.volume_commitment else '' }}"
+                           placeholder="pal./commande">
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ BRACKETS (Coefficients de dégressivité) ═══ -->
+        <div id="brackets-section" style="background:#f0f4ff;border-radius:8px;padding:16px;margin-bottom:20px;">
+            <h4 style="margin:0 0 8px;color:var(--towt-blue);font-size:14px;">Coefficients de dégressivité</h4>
+            <p style="font-size:11px;color:#888;margin-bottom:12px;">Base = 100% (100 palettes). Ajustez les coefficients par tranche. <strong>FF = tarif unique</strong>.</p>
+            <div id="brackets-grid" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+            <input type="hidden" name="brackets_json" id="bracketsInput">
+        </div>
+
+        <!-- ═══ ROUTES ═══════════════════════════════════ -->
+        <div style="background:#f8fafc;border-radius:8px;padding:16px;margin-bottom:20px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <h4 style="margin:0;color:var(--towt-blue);font-size:14px;">Routes tarifées</h4>
+                <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;" onclick="loadRoutesFromSchedule()"><i data-lucide="calendar" style="width:12px;height:12px;"></i> Charger sailing schedule</button>
+            </div>
+            <p style="font-size:11px;color:#888;margin-bottom:12px;">Renseignez les dates de validité puis chargez le sailing schedule. Cochez les routes à inclure dans la grille.</p>
+
+            <div id="routes-container">
+                <p id="routes-empty" style="text-align:center;color:#bbb;padding:16px;font-size:12px;">Aucune route chargée.</p>
+            </div>
+        </div>
+
+        <!-- ═══ NOTES ════════════════════════════════════ -->
+        <div class="form-group" style="margin-bottom:20px;">
+            <label class="form-label">Commentaires</label>
+            <textarea name="notes" class="form-input" rows="3" placeholder="Notes internes, conditions particulières...">{{ edit_grid.notes if edit_grid and edit_grid.notes else '' }}</textarea>
+        </div>
+
+        <!-- Actions -->
+        <div style="display:flex;gap:12px;justify-content:flex-end;">
+            <a href="/commercial?tab=grids" class="btn btn-secondary">Annuler</a>
+            <button type="submit" class="btn btn-primary"><i data-lucide="save"></i> {% if edit_grid %}Enregistrer{% else %}Créer la grille{% endif %}</button>
+        </div>
+    </form>
+</div>
+
+<script>
+// ─── State ───
+let currentBrackets = {{ default_brackets_shipper|tojson }};
+const defaultBracketsShipper = {{ default_brackets_shipper|tojson }};
+const defaultBracketsFF = {{ default_brackets_ff|tojson }};
+let currentClientType = 'shipper';
+let routeIndex = 0;
+let loadedRoutes = [];
+
+// ─── Client handling ───
+function toggleNewClient() {
+    const form = document.getElementById('new-client-form');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+function createClientInline() {
+    const name = document.getElementById('newClientName').value.trim();
+    const type = document.getElementById('newClientType').value;
+    const contact = document.getElementById('newClientContact').value.trim();
+    const email = document.getElementById('newClientEmail').value.trim();
+    if (!name) { alert('Nom requis'); return; }
+
+    const fd = new FormData();
+    fd.append('name', name);
+    fd.append('client_type', type);
+    fd.append('contact_name', contact);
+    fd.append('contact_email', email);
+
+    fetch('/commercial/pricing/clients/create-inline', { method: 'POST', body: fd })
+        .then(r => r.text())
+        .then(html => {
+            document.getElementById('clientSelect').innerHTML = html;
+            document.getElementById('new-client-form').style.display = 'none';
+            document.getElementById('newClientName').value = '';
+            onClientChange();
+            lucide.createIcons();
+        });
+}
+
+function onClientChange() {
+    const sel = document.getElementById('clientSelect');
+    const opt = sel.options[sel.selectedIndex];
+    const type = opt ? opt.dataset.type : '';
+    const badge = document.getElementById('client-type-badge');
+    const label = document.getElementById('client-type-label');
+
+    if (type === 'freight_forwarder') {
+        currentClientType = 'freight_forwarder';
+        currentBrackets = JSON.parse(JSON.stringify(defaultBracketsFF));
+        badge.style.display = 'block';
+        label.textContent = '🚛 Freight Forwarder — Tarif unique (pas de dégressivité)';
+        label.style.background = '#f3e8ff'; label.style.color = '#7c3aed';
+    } else if (type === 'shipper') {
+        currentClientType = 'shipper';
+        currentBrackets = JSON.parse(JSON.stringify(defaultBracketsShipper));
+        badge.style.display = 'block';
+        label.textContent = '📦 Chargeur — Tarif dégressif par volume';
+        label.style.background = '#dcfce7'; label.style.color = '#16a34a';
+    } else {
+        badge.style.display = 'none';
+    }
+    renderBrackets();
+    recalcAllRoutes();
+}
+
+// ─── Brackets rendering ───
+function renderBrackets() {
+    const grid = document.getElementById('brackets-grid');
+    grid.innerHTML = '';
+
+    currentBrackets.forEach((b, i) => {
+        const div = document.createElement('div');
+        div.style.cssText = 'background:#fff;border:1px solid #ddd;border-radius:6px;padding:8px 12px;min-width:120px;text-align:center;';
+        div.innerHTML = `
+            <div style="font-size:11px;color:#666;margin-bottom:4px;font-weight:500;">${b.label}</div>
+            <div style="display:flex;align-items:center;gap:4px;justify-content:center;">
+                <input type="number" value="${(b.coeff * 100).toFixed(0)}" min="10" max="200" step="5"
+                       style="width:60px;text-align:center;border:1px solid #ddd;border-radius:4px;padding:4px;font-size:13px;font-weight:600;"
+                       onchange="updateBracketCoeff(${i}, this.value)">
+                <span style="font-size:12px;color:#888;">%</span>
+            </div>
+        `;
+        grid.appendChild(div);
+    });
+
+    // Update hidden input
+    document.getElementById('bracketsInput').value = JSON.stringify(currentBrackets);
+}
+
+function updateBracketCoeff(index, pctValue) {
+    currentBrackets[index].coeff = parseFloat(pctValue) / 100;
+    document.getElementById('bracketsInput').value = JSON.stringify(currentBrackets);
+    recalcAllRoutes();
+}
+
+// ─── Routes from sailing schedule ───
+function onDatesChange() {}
+
+function loadRoutesFromSchedule() {
+    const from = document.getElementById('validFrom').value;
+    const to = document.getElementById('validTo').value;
+    const vesselId = document.getElementById('vesselSelect').value;
+    if (!from || !to) { alert('Renseignez les dates de validité'); return; }
+
+    let url = `/commercial/pricing/api/legs-for-period?valid_from=${from}&valid_to=${to}`;
+    if (vesselId) url += `&vessel_id=${vesselId}`;
+
+    fetch(url)
+        .then(r => r.json())
+        .then(routes => {
+            routes.forEach(r => {
+                const key = `${r.pol}-${r.pod}`;
+                if (!loadedRoutes.some(lr => `${lr.pol}-${lr.pod}` === key)) {
+                    r.selected = false;
+                    loadedRoutes.push(r);
+                }
+            });
+            renderAllRoutes();
+            computeRates();
+        })
+        .catch(err => console.error('Error loading routes:', err));
+}
+
+function toggleRoute(index) {
+    loadedRoutes[index].selected = !loadedRoutes[index].selected;
+    updateRouteRow(index);
+    updateSelectedCount();
+}
+
+function toggleAllRoutes(checked) {
+    loadedRoutes.forEach((r, i) => {
+        r.selected = checked;
+        updateRouteRow(i);
+    });
+    updateSelectedCount();
+}
+
+function updateRouteRow(i) {
+    const row = document.getElementById(`route-row-${i}`);
+    if (!row) return;
+    const r = loadedRoutes[i];
+    row.style.opacity = r.selected ? '1' : '0.4';
+    row.querySelectorAll('input[type="hidden"]').forEach(inp => inp.disabled = !r.selected);
+    row.querySelectorAll('input[type="number"]').forEach(inp => inp.disabled = !r.selected);
+}
+
+function updateSelectedCount() {
+    const count = loadedRoutes.filter(r => r.selected).length;
+    const el = document.getElementById('selected-count');
+    if (el) el.textContent = `${count} route${count !== 1 ? 's' : ''} sélectionnée${count !== 1 ? 's' : ''}`;
+}
+
+function renderAllRoutes() {
+    const container = document.getElementById('routes-container');
+
+    if (loadedRoutes.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:#bbb;padding:16px;font-size:12px;">Aucune route chargée.</p>';
+        return;
+    }
+
+    let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+    html += '<span id="selected-count" style="font-size:12px;color:var(--towt-blue);font-weight:500;">0 route sélectionnée</span>';
+    html += '<div style="display:flex;gap:6px;">';
+    html += '<button type="button" class="btn btn-secondary btn-sm" style="font-size:10px;" onclick="toggleAllRoutes(true)">Tout cocher</button>';
+    html += '<button type="button" class="btn btn-secondary btn-sm" style="font-size:10px;" onclick="toggleAllRoutes(false)">Tout décocher</button>';
+    html += '</div></div>';
+
+    html += '<div class="table-container"><table class="data-table" style="font-size:12px;"><thead><tr>';
+    html += '<th style="width:36px;text-align:center;">✓</th>';
+    html += '<th>POL</th><th>POD</th>';
+    currentBrackets.forEach(b => {
+        html += `<th style="text-align:center;font-size:10px;background:#f0f4ff;">${b.label}<br><span style="color:#888;">${(b.coeff*100).toFixed(0)}%</span></th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    loadedRoutes.forEach((r, i) => {
+        const sel = r.selected;
+        html += `<tr id="route-row-${i}" style="cursor:pointer;opacity:${sel ? '1' : '0.4'};">`;
+        html += `<td style="text-align:center;"><input type="checkbox" ${sel ? 'checked' : ''} onchange="toggleRoute(${i})" style="cursor:pointer;"></td>`;
+        html += `<td onclick="toggleRoute(${i})"><strong>${r.pol_name}</strong><br><span style="font-size:10px;color:#888;">${r.pol}</span>
+                     <input type="hidden" name="pol_${i}" value="${r.pol}" ${sel ? '' : 'disabled'}></td>`;
+        html += `<td onclick="toggleRoute(${i})"><strong>${r.pod_name}</strong><br><span style="font-size:10px;color:#888;">${r.pod}</span>
+                     <input type="hidden" name="pod_${i}" value="${r.pod}" ${sel ? '' : 'disabled'}></td>`;
+
+        currentBrackets.forEach(b => {
+            html += `<td style="text-align:center;background:#f9fafb;">
+                <input type="number" name="rate_${b.key}_${i}" id="rate_${b.key}_${i}"
+                       class="form-input" style="width:80px;text-align:center;font-size:12px;padding:4px;"
+                       step="0.01" placeholder="…" ${sel ? '' : 'disabled'}>
+            </td>`;
+        });
+        html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+    updateSelectedCount();
+}
+
+function computeRates() {
+    if (!loadedRoutes.length) return;
+
+    const vesselId = document.getElementById('vesselSelect').value;
+    const adjIndex = parseFloat(document.getElementById('adjIndex').value) || 1.0;
+
+    const payload = {
+        vessel_id: vesselId ? parseInt(vesselId) : null,
+        adjustment_index: adjIndex,
+        brackets: currentBrackets,
+        routes: loadedRoutes.map(r => ({ pol: r.pol, pod: r.pod }))
+    };
+
+    fetch('/commercial/pricing/api/compute-rates', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(results => {
+        results.forEach((res, i) => {
+            currentBrackets.forEach(b => {
+                const input = document.getElementById(`rate_${b.key}_${i}`);
+                if (input && !input.dataset.manual) {
+                    const rate = res.rates[b.key];
+                    input.value = rate ? rate.toFixed(2) : '';
+                    input.title = `Distance: ${res.distance} NM — Nav: ${res.nav_days}j — OPEX: €${res.opex_daily}/j`;
+                }
+            });
+        });
+    })
+    .catch(err => console.error('Erreur calcul tarifs:', err));
+}
+
+function recalcAllRoutes() {
+    document.querySelectorAll('[data-manual]').forEach(el => delete el.dataset.manual);
+    computeRates();
+}
+
+document.addEventListener('input', function(e) {
+    if (e.target.name && e.target.name.startsWith('rate_')) {
+        e.target.dataset.manual = '1';
+    }
+});
+
+// ─── Init ───
+document.addEventListener('DOMContentLoaded', function() {
+    onClientChange();
+    renderBrackets();
+    lucide.createIcons();
+});
+</script>
+{% endblock %}

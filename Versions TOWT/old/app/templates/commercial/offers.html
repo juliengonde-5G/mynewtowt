@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Offres tarifaires{% endblock %}
+{% block page_title %}Historique des offres tarifaires{% endblock %}
+
+{% block topbar_actions %}
+<a href="/commercial/pricing/grids" class="btn btn-secondary btn-sm"><i data-lucide="grid"></i> Grilles</a>
+<a href="/commercial/pricing/clients" class="btn btn-secondary btn-sm"><i data-lucide="users"></i> Clients</a>
+{% endblock %}
+
+{% block content %}
+<div class="offers-page">
+
+    <!-- Filters -->
+    <form method="get" action="/commercial/pricing/offers" style="display:flex;gap:12px;align-items:end;margin-bottom:20px;flex-wrap:wrap;">
+        <div class="form-group" style="margin:0;min-width:200px;">
+            <label class="form-label" style="font-size:11px;">Client</label>
+            <select name="client_id" class="form-control" onchange="this.form.submit()">
+                <option value="">Tous les clients</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}" {% if selected_client_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin:0;min-width:150px;">
+            <label class="form-label" style="font-size:11px;">Statut</label>
+            <select name="status" class="form-control" onchange="this.form.submit()">
+                <option value="">Tous</option>
+                <option value="draft" {% if selected_status == 'draft' %}selected{% endif %}>Brouillon</option>
+                <option value="sent" {% if selected_status == 'sent' %}selected{% endif %}>Envoyée</option>
+                <option value="accepted" {% if selected_status == 'accepted' %}selected{% endif %}>Acceptée</option>
+                <option value="rejected" {% if selected_status == 'rejected' %}selected{% endif %}>Refusée</option>
+                <option value="expired" {% if selected_status == 'expired' %}selected{% endif %}>Expirée</option>
+            </select>
+        </div>
+        {% if selected_client_id or selected_status %}
+        <a href="/commercial/pricing/offers" class="btn btn-secondary btn-sm" style="margin-bottom:2px;">Réinitialiser</a>
+        {% endif %}
+    </form>
+
+    {% if offers %}
+    <div class="table-container">
+        <table class="data-table">
+            <thead><tr>
+                <th>Référence</th><th>Client</th><th>Grille</th><th>Validité</th><th>Statut</th>
+                <th>Envoyée le</th><th>Document</th><th style="text-align:right;">Actions</th>
+            </tr></thead>
+            <tbody>
+                {% for offer in offers %}
+                <tr>
+                    <td><strong style="color:var(--towt-blue);font-family:'Poppins',sans-serif;">{{ offer.reference }}</strong></td>
+                    <td>
+                        {{ offer.client.name if offer.client else '—' }}
+                        {% if offer.client %}
+                        <br><span class="badge {% if offer.client.client_type == 'freight_forwarder' %}badge-blue{% else %}badge-green{% endif %}" style="font-size:9px;">
+                            {{ 'FF' if offer.client.client_type == 'freight_forwarder' else 'Chargeur' }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if offer.rate_grid %}
+                        <a href="/commercial/pricing/grids/{{ offer.rate_grid.id }}" style="color:var(--towt-blue);font-weight:500;">{{ offer.rate_grid.reference }}</a>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>{{ offer.validity_date }}</td>
+                    <td>
+                        {% if offer.status == 'draft' %}<span class="badge badge-orange">Brouillon</span>
+                        {% elif offer.status == 'sent' %}<span class="badge badge-blue">Envoyée</span>
+                        {% elif offer.status == 'accepted' %}<span class="badge badge-green">Acceptée</span>
+                        {% elif offer.status == 'rejected' %}<span class="badge badge-red">Refusée</span>
+                        {% elif offer.status == 'expired' %}<span class="badge badge-gray">Expirée</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size:12px;">{{ offer.sent_at.strftime('%d/%m/%Y %H:%M') if offer.sent_at else '—' }}</td>
+                    <td>
+                        {% if offer.document_filename %}
+                        <a href="/commercial/pricing/offers/{{ offer.id }}/download" class="btn btn-secondary btn-sm" style="font-size:11px;">
+                            <i data-lucide="download" style="width:12px;height:12px;"></i> DOCX
+                        </a>
+                        {% else %}<span style="color:#ccc;">—</span>{% endif %}
+                    </td>
+                    <td style="text-align:right;">
+                        <div style="display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap;">
+                            {% if offer.status == 'draft' %}
+                            <form method="post" action="/commercial/pricing/offers/{{ offer.id }}/status" style="margin:0;">
+                                {{ csrf_input(request) }}
+                                <input type="hidden" name="status" value="sent">
+                                <button type="submit" class="btn btn-sm" style="font-size:10px;background:#3498db;color:#fff;">Envoyée</button>
+                            </form>
+                            {% endif %}
+                            {% if offer.status == 'sent' %}
+                            <form method="post" action="/commercial/pricing/offers/{{ offer.id }}/status" style="margin:0;">
+                                {{ csrf_input(request) }}
+                                <input type="hidden" name="status" value="accepted">
+                                <button type="submit" class="btn btn-sm" style="font-size:10px;background:#27ae60;color:#fff;">Acceptée</button>
+                            </form>
+                            <form method="post" action="/commercial/pricing/offers/{{ offer.id }}/status" style="margin:0;">
+                                {{ csrf_input(request) }}
+                                <input type="hidden" name="status" value="rejected">
+                                <button type="submit" class="btn btn-sm" style="font-size:10px;background:#e74c3c;color:#fff;">Refusée</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Stats summary -->
+    <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
+        {% set draft_count = offers|selectattr('status', 'equalto', 'draft')|list|length %}
+        {% set sent_count = offers|selectattr('status', 'equalto', 'sent')|list|length %}
+        {% set accepted_count = offers|selectattr('status', 'equalto', 'accepted')|list|length %}
+        {% set rejected_count = offers|selectattr('status', 'equalto', 'rejected')|list|length %}
+        <div style="background:#fff3e0;border-radius:8px;padding:10px 16px;font-size:12px;">
+            <strong style="color:#e65100;">{{ draft_count }}</strong> brouillon{{ 's' if draft_count > 1 else '' }}
+        </div>
+        <div style="background:#e3f2fd;border-radius:8px;padding:10px 16px;font-size:12px;">
+            <strong style="color:#1565c0;">{{ sent_count }}</strong> envoyée{{ 's' if sent_count > 1 else '' }}
+        </div>
+        <div style="background:#e8f5e9;border-radius:8px;padding:10px 16px;font-size:12px;">
+            <strong style="color:#2e7d32;">{{ accepted_count }}</strong> acceptée{{ 's' if accepted_count > 1 else '' }}
+        </div>
+        <div style="background:#ffebee;border-radius:8px;padding:10px 16px;font-size:12px;">
+            <strong style="color:#c62828;">{{ rejected_count }}</strong> refusée{{ 's' if rejected_count > 1 else '' }}
+        </div>
+    </div>
+
+    {% else %}
+    <div style="text-align:center;padding:48px;color:#999;">
+        <i data-lucide="file-text" style="width:48px;height:48px;margin-bottom:16px;opacity:0.3;"></i>
+        <p>Aucune offre tarifaire{% if selected_client_id or selected_status %} avec ces filtres{% endif %}.</p>
+        <a href="/commercial/pricing/grids" class="btn btn-primary btn-sm" style="margin-top:8px;">Créer depuis une grille</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

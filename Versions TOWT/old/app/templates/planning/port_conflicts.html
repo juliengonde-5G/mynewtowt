@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Vue par port{% endblock %}
+{% block page_title %}Vue par port — Surveillance des escales{% endblock %}
+
+{% block topbar_actions %}
+<a href="/planning" class="btn btn-secondary btn-sm"><i data-lucide="arrow-left"></i> Retour planning</a>
+{% endblock %}
+
+{% block content %}
+<div class="port-conflicts-page">
+    <div class="search-card">
+        <form method="GET" action="/planning/ports" class="port-search-form" hx-boost="false">
+            <div class="form-group" style="margin:0;flex:1;position:relative;">
+                <input type="text" id="port_search_input" class="form-input"
+                       placeholder="Rechercher un port (code ou nom)..."
+                       value="{{ port.locode ~ ' - ' ~ port.name if port else port_code }}"
+                       autocomplete="off">
+                <input type="hidden" name="port" id="port_hidden" value="{{ port_code }}">
+                <div class="port-dropdown" id="port_dd"></div>
+            </div>
+            <button type="submit" class="btn btn-primary"><i data-lucide="search"></i> Rechercher</button>
+        </form>
+    </div>
+
+    {% if port %}
+    <div class="section-header" style="margin-top:20px;">
+        <h3>
+            <span class="port-badge" style="font-size:14px;">{{ port.locode }}</span>
+            {{ port.name }} ({{ port.country_code }}) — {{ legs_at_port|length }} escale(s)
+        </h3>
+    </div>
+
+    {% if legs_at_port %}
+    {% set vessel_names = legs_at_port|map(attribute='vessel.name')|unique|list %}
+    <div style="margin-bottom:12px;display:flex;gap:16px;flex-wrap:wrap;">
+        {% for vn in vessel_names %}
+        <span style="font-size:12px;display:flex;align-items:center;"><span class="vessel-dot vessel-dot-{{ loop.index }}"></span> {{ vn }}</span>
+        {% endfor %}
+    </div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead><tr><th>Navire</th><th>Leg</th><th>Type</th><th>ETA / ETD</th><th>Réel</th><th>Statut</th><th>Conflit ?</th></tr></thead>
+            <tbody>
+                {% for leg in legs_at_port %}
+                {% set is_arrival = (leg.arrival_port_locode == port.locode) %}
+                {% set is_departure = (leg.departure_port_locode == port.locode) %}
+                {% set vidx = vessel_names.index(leg.vessel.name) + 1 if leg.vessel.name in vessel_names else 1 %}
+                <tr class="vessel-color-{{ vidx }}">
+                    <td><strong>{{ leg.vessel.name }}</strong></td>
+                    <td><span style="font-family:monospace;color:var(--towt-blue);">{{ leg.leg_code }}</span></td>
+                    <td>
+                        {% if is_arrival %}<span class="badge badge-completed">⚓ Arrivée</span>{% endif %}
+                        {% if is_departure %}<span class="badge badge-planned">⛵ Départ</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if is_arrival %}{{ leg.eta.strftime('%d/%m/%Y') if leg.eta else '—' }}{% endif %}
+                        {% if is_departure %}{{ leg.etd.strftime('%d/%m/%Y') if leg.etd else '—' }}{% endif %}
+                    </td>
+                    <td>
+                        {% if is_arrival %}{{ leg.ata.strftime('%d/%m/%Y') if leg.ata else '—' }}{% endif %}
+                        {% if is_departure %}{{ leg.atd.strftime('%d/%m/%Y') if leg.atd else '—' }}{% endif %}
+                    </td>
+                    <td><span class="badge badge-{{ leg.status }}">{{ leg.status|replace('_',' ')|capitalize }}</span></td>
+                    <td id="conflict-{{ leg.id }}"></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        (function() {
+            var legs = [
+                {% for leg in legs_at_port %}
+                {id:{{ leg.id }}, vessel:"{{ leg.vessel.name }}",
+                 eta:{{ '"' ~ leg.eta.isoformat() ~ '"' if leg.eta else 'null' }},
+                 etd:{{ '"' ~ leg.etd.isoformat() ~ '"' if leg.etd else 'null' }}},
+                {% endfor %}
+            ];
+            for (var i=0; i<legs.length; i++) {
+                var di = legs[i].eta ? new Date(legs[i].eta) : (legs[i].etd ? new Date(legs[i].etd) : null);
+                if (!di) continue;
+                var conflict = false;
+                for (var j=0; j<legs.length; j++) {
+                    if (i===j) continue;
+                    var dj = legs[j].eta ? new Date(legs[j].eta) : (legs[j].etd ? new Date(legs[j].etd) : null);
+                    if (!dj) continue;
+                    if (Math.abs(di-dj)/3600000 < 48 && legs[i].vessel !== legs[j].vessel) { conflict=true; break; }
+                }
+                var cell = document.getElementById('conflict-' + legs[i].id);
+                if (cell) cell.innerHTML = conflict
+                    ? '<span class="badge badge-cancelled">⚠️ < 48h</span>'
+                    : '<span class="badge badge-completed">OK</span>';
+            }
+        })();
+    </script>
+    {% else %}
+    <div class="empty-state" style="margin-top:20px;">
+        <i data-lucide="check-circle" style="width:48px;height:48px;color:var(--towt-green);"></i>
+        <h3>Aucune escale sur ce port</h3>
+    </div>
+    {% endif %}
+
+    {% elif port_code %}
+    <div class="empty-state" style="margin-top:20px;">
+        <i data-lucide="alert-circle" style="width:48px;height:48px;color:var(--warning);"></i>
+        <h3>Port non trouvé</h3>
+        <p>Le code "{{ port_code }}" ne correspond à aucun port.</p>
+    </div>
+    {% else %}
+    <div class="empty-state" style="margin-top:20px;">
+        <i data-lucide="anchor" style="width:48px;height:48px;color:var(--towt-sky);"></i>
+        <h3>Sélectionnez un port</h3>
+        <p>Recherchez un port pour voir toutes les escales planifiées et détecter les conflits.</p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .search-card{background:white;padding:16px;border-radius:var(--radius-lg);box-shadow:var(--shadow);}
+    .port-search-form{display:flex;gap:12px;align-items:center;}
+    .port-dropdown{position:absolute;top:100%;left:0;right:0;background:white;border:1px solid #e0e0e0;border-radius:6px;max-height:200px;overflow-y:auto;z-index:500;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.12);}
+    .port-dropdown.show{display:block;}
+    .port-dd-item{padding:8px 12px;cursor:pointer;font-size:12px;display:flex;justify-content:space-between;}
+    .port-dd-item:hover{background:var(--towt-light);}
+    .port-dd-item .pcode{font-weight:700;font-family:monospace;color:var(--towt-blue);margin-right:6px;}
+    .port-dd-item .pcountry{font-size:10px;color:#aaa;}
+    
+    .vessel-color-1{border-left:4px solid var(--towt-blue);}.vessel-color-2{border-left:4px solid var(--towt-green);}
+    .vessel-color-3{border-left:4px solid #F59E0B;}.vessel-color-4{border-left:4px solid #8B5CF6;}
+    .vessel-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;}
+    .vessel-dot-1{background:var(--towt-blue);}.vessel-dot-2{background:var(--towt-green);}
+    .vessel-dot-3{background:#F59E0B;}.vessel-dot-4{background:#8B5CF6;}
+
+    .port-badge{display:inline-block;background:var(--towt-light);padding:2px 6px;border-radius:4px;font-weight:600;color:var(--towt-blue);font-family:monospace;}
+</style>
+
+<script>
+    (function(){
+        var input = document.getElementById('port_search_input');
+        var hidden = document.getElementById('port_hidden');
+        var dd = document.getElementById('port_dd');
+        var timer = null;
+
+        input.addEventListener('input', function(){
+            clearTimeout(timer);
+            var q = input.value.trim();
+            if (q.length < 2) { dd.classList.remove('show'); return; }
+            timer = setTimeout(function(){
+                fetch('/api/ports/search?q=' + encodeURIComponent(q) + '&limit=10')
+                    .then(function(r){ return r.json(); })
+                    .then(function(ports){
+                        dd.innerHTML = '';
+                        ports.forEach(function(p){
+                            var div = document.createElement('div');
+                            div.className = 'port-dd-item';
+                            div.innerHTML = '<span><span class="pcode">' + p.locode + '</span> ' + p.name + '</span><span class="pcountry">' + p.country_code + '</span>';
+                            div.addEventListener('mousedown', function(e){
+                                e.preventDefault();
+                                input.value = p.locode + ' - ' + p.name;
+                                hidden.value = p.locode;
+                                dd.classList.remove('show');
+                            });
+                            dd.appendChild(div);
+                        });
+                        if (ports.length > 0) dd.classList.add('show');
+                    });
+            }, 200);
+        });
+
+        input.addEventListener('blur', function(){ setTimeout(function(){ dd.classList.remove('show'); }, 250); });
+    })();
+</script>
+{% endblock %}

@@ -1,0 +1,58 @@
+<div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+    <div class="modal" style="max-width:500px;">
+        <div class="modal-header">
+            <h3>{{ 'Modifier' if edit_member else 'Nouveau membre' }}</h3>
+            <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+        </div>
+        <form method="POST" action="{{ '/crew/members/' ~ edit_member.id ~ '/edit' if edit_member else '/crew/members/create' }}">
+            {{ csrf_input(request) }}
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Prénom *</label><input type="text" name="first_name" class="form-input" required value="{{ edit_member.first_name if edit_member else '' }}"></div>
+                    <div class="form-group"><label class="form-label">Nom *</label><input type="text" name="last_name" class="form-input" required value="{{ edit_member.last_name if edit_member else '' }}"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Rôle *</label>
+                        <select name="role" class="form-select" required>
+                            {% for r in crew_roles %}
+                            <option value="{{ r.value }}" {% if edit_member and edit_member.role == r.value %}selected{% endif %}>{{ r.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group"><label class="form-label">Téléphone</label><input type="text" name="phone" class="form-input" value="{{ edit_member.phone if edit_member and edit_member.phone else '' }}"></div>
+                </div>
+                <div class="form-group"><label class="form-label">Email</label><input type="email" name="email" class="form-input" value="{{ edit_member.email if edit_member and edit_member.email else '' }}"></div>
+                <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+                    <input type="checkbox" name="is_foreign" id="is_foreign" value="1" {% if edit_member and edit_member.is_foreign %}checked{% endif %} style="width:16px;height:16px;">
+                    <label for="is_foreign" class="form-label" style="margin:0;">Personnel étranger</label>
+                </div>
+                <div style="border-top:1px solid #f0f0f0;margin:10px 0 6px;padding-top:8px;">
+                    <span style="font-size:11px;font-weight:600;color:#888;">DOCUMENTS / IMMIGRATION</span>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Nationalité</label><input type="text" name="nationality" class="form-input" value="{{ edit_member.nationality if edit_member and edit_member.nationality else '' }}"></div>
+                    <div class="form-group"><label class="form-label">N° Passeport</label><input type="text" name="passport_number" class="form-input" value="{{ edit_member.passport_number if edit_member and edit_member.passport_number else '' }}"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Expiration passeport</label><input type="date" name="passport_expiry" class="form-input" value="{{ edit_member.passport_expiry.isoformat() if edit_member and edit_member.passport_expiry else '' }}"></div>
+                    <div class="form-group">
+                        <label class="form-label">Type de visa</label>
+                        <select name="visa_type" class="form-select">
+                            <option value="">— Aucun —</option>
+                            <option value="schengen" {% if edit_member and edit_member.visa_type == 'schengen' %}selected{% endif %}>Schengen</option>
+                            <option value="work" {% if edit_member and edit_member.visa_type == 'work' %}selected{% endif %}>Travail</option>
+                            <option value="transit" {% if edit_member and edit_member.visa_type == 'transit' %}selected{% endif %}>Transit</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group"><label class="form-label">Expiration visa</label><input type="date" name="visa_expiry" class="form-input" value="{{ edit_member.visa_expiry.isoformat() if edit_member and edit_member.visa_expiry else '' }}"></div>
+                <div class="form-group"><label class="form-label">Notes</label><textarea name="notes" class="form-input" rows="2">{{ edit_member.notes if edit_member and edit_member.notes else '' }}</textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+                <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> {{ 'Enregistrer' if edit_member else 'Créer' }}</button>
+            </div>
+        </form>
+    </div>
+</div>

@@ -1,0 +1,61 @@
+{% extends "cargo/portal_base.html" %}
+{% block portal_title %}{% if lang == 'fr' %}Politique de confidentialité{% elif lang == 'es' %}Política de privacidad{% else %}Privacy Policy{% endif %}{% endblock %}
+
+{% block portal_content %}
+<h1>🔒 {% if lang == 'fr' %}Politique de confidentialité{% elif lang == 'es' %}Política de privacidad{% elif lang == 'pt-br' %}Política de privacidade{% else %}Privacy Policy{% endif %}</h1>
+
+<div class="card csec">
+{% if lang == 'fr' %}
+<h3>1. Responsable du traitement</h3>
+<p>TOWT — Transoceanic Wind Transport<br>Les Docks, 52 quai Frissard, 76600 Le Havre, France<br>Contact : <a href="mailto:privacy@towt.eu">privacy@towt.eu</a></p>
+
+<h3>2. Données collectées</h3>
+<p>Dans le cadre de la gestion des cargaisons, nous collectons :</p>
+<ul>
+    <li><strong>Informations société :</strong> nom de l'expéditeur, du destinataire, du notifié</li>
+    <li><strong>Adresses :</strong> adresse postale, ville, code postal, pays</li>
+    <li><strong>Données de cargaison :</strong> description des marchandises, poids, dimensions, valeur</li>
+    <li><strong>Données techniques :</strong> adresse IP, navigateur (à des fins de sécurité)</li>
+</ul>
+
+<h3>3. Base légale</h3>
+<p>Exécution du contrat de transport (Art. 6(1)(b) RGPD) et obligation légale pour la documentation maritime (Art. 6(1)(c) RGPD).</p>
+
+<h3>4. Durée de conservation</h3>
+<p>Les données de transport sont conservées 5 ans conformément aux obligations de droit maritime. Les journaux d'accès sont conservés 12 mois.</p>
+
+<h3>5. Vos droits</h3>
+<p>Accès, rectification, effacement, limitation, portabilité. Contact : <a href="mailto:privacy@towt.eu">privacy@towt.eu</a></p>
+
+<h3>6. Cookies</h3>
+<p>Ce portail utilise uniquement des cookies strictement nécessaires (session, langue). Aucun cookie de suivi ou publicitaire.</p>
+
+{% else %}
+<h3>1. Data Controller</h3>
+<p>TOWT — Transoceanic Wind Transport<br>Les Docks, 52 quai Frissard, 76600 Le Havre, France<br>Contact: <a href="mailto:privacy@towt.eu">privacy@towt.eu</a></p>
+
+<h3>2. Data Collected</h3>
+<p>For cargo management, we collect:</p>
+<ul>
+    <li><strong>Company information:</strong> shipper, consignee, notify party names</li>
+    <li><strong>Addresses:</strong> postal address, city, postal code, country</li>
+    <li><strong>Cargo data:</strong> goods description, weight, dimensions, value</li>
+    <li><strong>Technical data:</strong> IP address, browser (for security purposes)</li>
+</ul>
+
+<h3>3. Legal Basis</h3>
+<p>Contract performance (Art. 6(1)(b) GDPR) and legal obligation for maritime documentation (Art. 6(1)(c) GDPR).</p>
+
+<h3>4. Data Retention</h3>
+<p>Transport data is kept for 5 years as required by maritime law. Access logs are kept for 12 months.</p>
+
+<h3>5. Your Rights</h3>
+<p>Access, rectification, erasure, restriction, portability. Contact: <a href="mailto:privacy@towt.eu">privacy@towt.eu</a></p>
+
+<h3>6. Cookies</h3>
+<p>This portal uses only strictly necessary cookies (session, language). No tracking or advertising cookies.</p>
+{% endif %}
+
+<p style="margin-top:20px;font-size:11px;color:#888;">{% if lang == 'fr' %}Dernière mise à jour : mars 2026 — Version 1.0{% else %}Last updated: March 2026 — Version 1.0{% endif %}</p>
+</div>
+{% endblock %}

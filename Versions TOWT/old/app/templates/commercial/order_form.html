@@ -1,0 +1,193 @@
+<div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+    <div class="modal" style="max-width:680px;">
+        <div class="modal-header">
+            <h3>{{ 'Modifier ' ~ edit_order.reference if edit_order else 'Nouvel ordre de transport' }}</h3>
+            <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+        </div>
+        <form method="POST" id="order-form"
+              action="{{ '/commercial/orders/' ~ edit_order.id ~ '/edit' if edit_order else '/commercial/orders/create' }}">
+            {{ csrf_input(request) }}
+            <div class="modal-body">
+                {% if error %}
+                <div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;border-left:3px solid #dc2626;">{{ error }}</div>
+                {% endif %}
+
+                <div class="form-group">
+                    <label class="form-label">Référence</label>
+                    <input type="text" class="form-input" value="{{ reference }}" disabled style="background:#f5f5f5;font-family:monospace;">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Client *</label>
+                        <input type="text" name="client_name" class="form-input" required
+                               value="{{ edit_order.client_name if edit_order else '' }}" placeholder="Nom du client">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Contact</label>
+                        <input type="text" name="client_contact" class="form-input"
+                               value="{{ edit_order.client_contact if edit_order and edit_order.client_contact else '' }}" placeholder="Email ou tél.">
+                    </div>
+                </div>
+
+                <!-- Cargo -->
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;">
+                    <div class="form-group">
+                        <label class="form-label">Palettes *</label>
+                        <input type="number" name="quantity_palettes" class="form-input" min="1" required
+                               value="{{ edit_order.quantity_palettes if edit_order else '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Format palette</label>
+                        <select name="palette_format" class="form-select">
+                            {% for pf in palette_formats %}
+                            <option value="{{ pf.value }}" {% if edit_order and edit_order.palette_format == pf.value %}selected{% endif %}>
+                                {{ pf.value }} (×{{ pf.coeff }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Poids/pal. (t)</label>
+                        <input type="text" name="weight_per_palette" class="form-input"
+                               value="{{ edit_order.weight_per_palette if edit_order and edit_order.weight_per_palette else default_weight }}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Prix unit. (€) *</label>
+                        <input type="text" name="unit_price" class="form-input" required
+                               value="{{ edit_order.unit_price if edit_order else '' }}">
+                    </div>
+                </div>
+
+                <!-- Fees -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;background:rgba(245,158,11,0.05);border-radius:8px;padding:12px;margin:8px 0;">
+                    <div class="form-group" style="margin:0;">
+                        <label class="form-label">💰 Frais de booking (€)</label>
+                        <input type="text" name="booking_fee" class="form-input"
+                               value="{{ edit_order.booking_fee if edit_order and edit_order.booking_fee else '' }}" placeholder="0">
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label class="form-label">📄 Frais de documentation (€)</label>
+                        <input type="text" name="documentation_fee" class="form-input"
+                               value="{{ edit_order.documentation_fee if edit_order and edit_order.documentation_fee else '' }}" placeholder="0">
+                    </div>
+                </div>
+
+                <!-- Delivery period + ports -->
+                <div style="background:rgba(96,165,250,0.06);border-radius:8px;padding:12px;margin:8px 0;">
+                    <div style="font-size:12px;font-weight:600;color:#2563EB;margin-bottom:8px;">📅 Livraison & route souhaitée</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Du</label>
+                            <input type="date" name="delivery_date_start" class="form-input"
+                                   value="{{ edit_order.delivery_date_start.isoformat() if edit_order and edit_order.delivery_date_start else '' }}">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Au</label>
+                            <input type="date" name="delivery_date_end" class="form-input"
+                                   value="{{ edit_order.delivery_date_end.isoformat() if edit_order and edit_order.delivery_date_end else '' }}">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="position:relative;">
+                            <label class="form-label">Port de départ</label>
+                            <input type="text" id="dep_port_search" class="form-input" autocomplete="off"
+                                   placeholder="Rechercher un port..."
+                                   value="{{ edit_order.departure_locode if edit_order and edit_order.departure_locode else '' }}">
+                            <input type="hidden" name="departure_locode" id="dep_port_hidden"
+                                   value="{{ edit_order.departure_locode if edit_order and edit_order.departure_locode else '' }}">
+                            <div class="port-dropdown" id="dep_port_dd"></div>
+                        </div>
+                        <div class="form-group" style="position:relative;">
+                            <label class="form-label">Port d'arrivée</label>
+                            <input type="text" id="arr_port_search" class="form-input" autocomplete="off"
+                                   placeholder="Rechercher un port..."
+                                   value="{{ edit_order.arrival_locode if edit_order and edit_order.arrival_locode else '' }}">
+                            <input type="hidden" name="arrival_locode" id="arr_port_hidden"
+                                   value="{{ edit_order.arrival_locode if edit_order and edit_order.arrival_locode else '' }}">
+                            <div class="port-dropdown" id="arr_port_dd"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+                        <input type="checkbox" name="thc_included" id="thc_cb"
+                               {% if edit_order and edit_order.thc_included %}checked{% endif %}>
+                        <label for="thc_cb" class="form-label" style="margin:0;">THC inclus</label>
+                    </div>
+                    {% if edit_order %}
+                    <div class="form-group">
+                        <label class="form-label">Statut</label>
+                        <select name="status" class="form-select">
+                            <option value="non_affecte" {% if edit_order.status == 'non_affecte' %}selected{% endif %}>Non affecté</option>
+                            <option value="reserve" {% if edit_order.status == 'reserve' %}selected{% endif %}>Réservé</option>
+                            <option value="confirme" {% if edit_order.status == 'confirme' %}selected{% endif %}>Confirmé</option>
+                            <option value="annule" {% if edit_order.status == 'annule' %}selected{% endif %}>Annulé</option>
+                        </select>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea name="description" class="form-input" rows="2">{{ edit_order.description if edit_order and edit_order.description else '' }}</textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+                <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> {{ 'Enregistrer' if edit_order else 'Créer' }}</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .port-dropdown{position:absolute;top:100%;left:0;right:0;background:white;border:1px solid #e0e0e0;border-radius:6px;max-height:180px;overflow-y:auto;z-index:500;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.12);}
+    .port-dropdown.show{display:block;}
+    .port-dd-item{padding:7px 10px;cursor:pointer;font-size:12px;display:flex;justify-content:space-between;align-items:center;}
+    .port-dd-item:hover{background:#f0f7f8;}
+    .port-dd-item .pcode{font-weight:700;font-family:monospace;color:#095561;margin-right:6px;}
+    .port-dd-item .pcountry{font-size:10px;color:#aaa;}
+</style>
+
+<script>
+(function(){
+    function setupPortSearch(searchId, hiddenId, ddId) {
+        var input = document.getElementById(searchId);
+        var hidden = document.getElementById(hiddenId);
+        var dd = document.getElementById(ddId);
+        if (!input || !dd) return;
+        var timer = null;
+        input.addEventListener('input', function() {
+            clearTimeout(timer);
+            var q = input.value.trim();
+            if (q.length < 2) { dd.classList.remove('show'); return; }
+            timer = setTimeout(function() {
+                fetch('/api/ports/search?q=' + encodeURIComponent(q) + '&limit=8')
+                    .then(function(r){ return r.json(); })
+                    .then(function(ports) {
+                        dd.innerHTML = '';
+                        ports.forEach(function(p) {
+                            var div = document.createElement('div');
+                            div.className = 'port-dd-item';
+                            div.innerHTML = '<span><span class="pcode">' + p.locode + '</span> ' + p.name + '</span><span class="pcountry">' + p.country_code + '</span>';
+                            div.addEventListener('mousedown', function(e) {
+                                e.preventDefault();
+                                input.value = p.locode + ' - ' + p.name;
+                                hidden.value = p.locode;
+                                dd.classList.remove('show');
+                            });
+                            dd.appendChild(div);
+                        });
+                        if (ports.length > 0) dd.classList.add('show');
+                    });
+            }, 200);
+        });
+        input.addEventListener('blur', function() { setTimeout(function(){ dd.classList.remove('show'); }, 250); });
+        input.addEventListener('focus', function() { if (dd.children.length > 0) dd.classList.add('show'); });
+    }
+    setupPortSearch('dep_port_search', 'dep_port_hidden', 'dep_port_dd');
+    setupPortSearch('arr_port_search', 'arr_port_hidden', 'arr_port_dd');
+})();
+</script>

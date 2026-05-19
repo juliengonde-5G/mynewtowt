@@ -1,0 +1,238 @@
+{% extends "cargo/portal_base.html" %}
+{% block portal_title %}{{ t('cp_guide', lang) }}{% endblock %}
+{% block extra_css %}
+.toc{background:white;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);padding:20px 24px;margin-bottom:24px}
+.toc h2{font-size:16px;color:#095561;margin-bottom:12px}
+.toc ol{padding-left:20px}
+.toc li{margin-bottom:6px}
+.toc a{color:#095561;text-decoration:none;font-size:14px}
+.toc a:hover{text-decoration:underline}
+.gs{background:white;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);margin-bottom:20px;overflow:hidden;border-left:4px solid #095561}
+.gs h2{background:#f8fafb;padding:14px 20px;border-bottom:1px solid #eee;font-size:16px;color:#095561;display:flex;align-items:center;gap:8px}
+.gs .sb{padding:20px}
+.gs h3{font-size:14px;color:#095561;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid #e5e7eb}
+.gs h3:first-child{margin-top:0}
+.gs p{font-size:13px;margin-bottom:10px;line-height:1.6}
+.gs ul,.gs ol{font-size:13px;padding-left:20px;margin-bottom:10px}
+.gs li{margin-bottom:4px;line-height:1.5}
+.ft{width:100%;border-collapse:collapse;font-size:12px;margin:12px 0}
+.ft th{background:#f0f7f8;color:#095561;text-align:left;padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.3px;border-bottom:2px solid #095561}
+.ft td{padding:8px 12px;border-bottom:1px solid #eee;vertical-align:top}
+.ft tr:hover{background:#f8fafb}
+.req{color:#dc2626;font-weight:700}
+.rec{color:#f59e0b;font-weight:600;font-style:italic}
+.opt{color:#888;font-style:italic}
+.tip{background:#ecfdf5;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin:12px 0;font-size:13px;line-height:1.5}
+.tip strong{color:#16a34a}
+.warn{background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:12px 16px;margin:12px 0;font-size:13px;line-height:1.5}
+.warn strong{color:#a16207}
+.alert{background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 16px;margin:12px 0;font-size:13px;line-height:1.5}
+.alert strong{color:#dc2626}
+.step{display:flex;gap:12px;margin-bottom:16px;align-items:flex-start}
+.sn{background:#095561;color:white;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+.sc{flex:1;font-size:13px;line-height:1.5}
+.sc strong{display:block;margin-bottom:2px;color:#095561}
+.feetbl{width:100%;border-collapse:collapse;font-size:12px;margin:12px 0}
+.feetbl th{background:#fef2f2;color:#dc2626;text-align:left;padding:8px 12px;font-size:11px;text-transform:uppercase;border-bottom:2px solid #dc2626}
+.feetbl td{padding:8px 12px;border-bottom:1px solid #eee}
+.feetbl td:last-child{text-align:right;font-weight:600}
+@media(max-width:600px){.ft,.feetbl{font-size:11px} .ft th,.ft td,.feetbl th,.feetbl td{padding:6px 8px}}
+{% endblock %}
+
+{% block portal_content %}
+<h1>📖 {{ t('cp_guide', lang) }}</h1>
+
+<!-- Table of contents -->
+<div class="toc">
+    <h2>{{ t('guide_toc', lang) }}</h2>
+    <ol>
+        <li><a href="#overview">{{ t('guide_s1_title', lang) }}</a></li>
+        <li><a href="#steps">{{ t('guide_s2_title', lang) }}</a></li>
+        <li><a href="#fields">{{ t('guide_s3_title', lang) }}</a></li>
+        <li><a href="#batches">{{ t('guide_s4_title', lang) }}</a></li>
+        <li><a href="#packaging">{{ t('guide_s5_title', lang) }}</a></li>
+        <li><a href="#fees">{{ t('guide_s6_title', lang) }}</a></li>
+        <li><a href="#us">{{ t('guide_s7_title', lang) }}</a></li>
+        <li><a href="#faq">{{ t('guide_s8_title', lang) }}</a></li>
+        <li><a href="#contact">{{ t('guide_s9_title', lang) }}</a></li>
+    </ol>
+</div>
+
+<!-- 1. Overview -->
+<div class="gs" id="overview">
+    <h2>1. {{ t('guide_s1_title', lang) }}</h2>
+    <div class="sb">
+        <p>{{ t('guide_s1_p1', lang) }}</p>
+        <p>{{ t('guide_s1_p2', lang) }}</p>
+        <div class="tip">
+            <strong>{{ t('guide_tip', lang) }} :</strong> {{ t('guide_s1_tip', lang) }}
+        </div>
+    </div>
+</div>
+
+<!-- 2. Steps -->
+<div class="gs" id="steps">
+    <h2>2. {{ t('guide_s2_title', lang) }}</h2>
+    <div class="sb">
+        <div class="step"><div class="sn">1</div><div class="sc"><strong>{{ t('guide_step1_title', lang) }}</strong>{{ t('guide_step1_desc', lang) }}</div></div>
+        <div class="step"><div class="sn">2</div><div class="sc"><strong>{{ t('guide_step2_title', lang) }}</strong>{{ t('guide_step2_desc', lang) }}</div></div>
+        <div class="step">
+            <div class="sn">3</div>
+            <div class="sc">
+                <strong>{{ t('guide_step3_title', lang) }}</strong>
+                {{ t('guide_step3_desc', lang) }}
+                <div class="warn" style="margin-top:8px">
+                    <strong>{{ t('guide_important', lang) }} :</strong> {{ t('guide_step3_warning', lang) }}
+                </div>
+            </div>
+        </div>
+        <div class="step"><div class="sn">4</div><div class="sc"><strong>{{ t('guide_step4_title', lang) }}</strong>{{ t('guide_step4_desc', lang) }}</div></div>
+        <div class="step"><div class="sn">5</div><div class="sc"><strong>{{ t('guide_step5_title', lang) }}</strong>{{ t('guide_step5_desc', lang) }}</div></div>
+    </div>
+</div>
+
+<!-- 3. Field reference -->
+<div class="gs" id="fields">
+    <h2>3. {{ t('guide_s3_title', lang) }}</h2>
+    <div class="sb">
+        <p>{{ t('guide_s3_intro', lang) }}</p>
+
+        <h3>{{ t('pl_shipper_section', lang) }}</h3>
+        <table class="ft">
+            <thead><tr><th>{{ t('guide_field', lang) }}</th><th>{{ t('guide_required', lang) }}</th><th>{{ t('guide_description', lang) }}</th><th>{{ t('guide_example', lang) }}</th></tr></thead>
+            <tbody>
+                <tr><td>{{ t('f_customer_name', lang) }}</td><td><span class="req">*</span></td><td>{{ t('guide_f_customer_name_desc', lang) }}</td><td>Maison Dupont SARL</td></tr>
+                <tr><td>{{ t('f_freight_forwarder', lang) }}</td><td><span class="opt">{{ t('guide_optional', lang) }}</span></td><td>{{ t('guide_f_freight_forwarder_desc', lang) }}</td><td>Geodis Logistics</td></tr>
+                <tr><td>{{ t('f_code_transitaire', lang) }}</td><td><span class="opt">{{ t('guide_optional', lang) }}</span></td><td>{{ t('guide_f_code_transitaire_desc', lang) }}</td><td>GEO-4521</td></tr>
+                <tr><td>{{ t('f_shipper_name', lang) }}</td><td><span class="req">*</span></td><td>{{ t('guide_f_shipper_name_desc', lang) }}</td><td>Maison Dupont SARL</td></tr>
+                <tr><td>{{ t('f_shipper_address', lang) }}</td><td><span class="req">*</span></td><td>{{ t('guide_f_shipper_address_desc', lang) }}</td><td>12 rue du Port<br>76400 Fecamp, France</td></tr>
+                <tr><td>{{ t('f_po_number', lang) }}</td><td><span class="opt">{{ t('guide_optional', lang) }}</span></td><td>{{ t('guide_f_po_number_desc', lang) }}</td><td>PO-2026-0042</td></tr>
+                <tr><td>{{ t('f_batch_id', lang) }}</td><td><span class="opt">{{ t('guide_optional', lang) }}</span></td><td>{{ t('guide_f_batch_id_desc', lang) }}</td><td>LOT-2026-A</td></tr>
+                <tr><td>{{ t('f_notify_address', lang) }}</td><td><span class="req">*</span></td><td>{{ t('guide_f_notify_desc', lang) }}</td><td>Import Co. LLC<br>200 Main St, Newark NJ</td></tr>
+                <tr><td>{{ t('f_consignee_address', lang) }}</td><td><span class="req">*</span></td><td>{{ t('guide_f_consignee_desc', lang) }}</td><td>Wine Distributors Inc.<br>500 Harbor Blvd, Newark NJ 07114</td></tr>
+            </tbody>
+        </table>
+
+        <h3>{{ t('pl_goods_section', lang) }}</h3>
+        <table class="ft">
+            <thead><tr><th>{{ t('guide_field', lang) }}</th><th>{{ t('guide_required', lang) }}</th><th>{{ t('guide_description', lang) }}</th><th>{{ t('guide_example', lang) }}</th></tr></thead>
+            <tbody>
+                <tr><td>{{ t('f_pallet_type', lang) }}</td><td><span class="rec">{{ t('guide_recommended', lang) }}</span></td><td>{{ t('guide_f_pallet_type_desc', lang) }}</td><td>EPAL (80×120)</td></tr>
+                <tr><td>{{ t('f_type_of_goods', lang) }}</td><td><span class="req">*</span></td><td>{{ t('guide_f_goods_desc', lang) }}</td><td>{{ t('guide_f_goods_example', lang) }}</td></tr>
+                <tr><td>{{ t('f_bio_products', lang) }}</td><td><span class="opt">{{ t('guide_optional', lang) }}</span></td><td>{{ t('guide_f_bio_desc', lang) }}</td><td>{{ t('yes', lang) }} / {{ t('no', lang) }}</td></tr>
+                <tr><td>{{ t('f_pallet_quantity', lang) }}</td><td><span class="req">*</span></td><td>{{ t('guide_f_qty_desc', lang) }}</td><td>8</td></tr>
+                <tr><td>{{ t('f_cases_quantity', lang) }}</td><td><span class="opt">{{ t('guide_optional', lang) }}</span></td><td>{{ t('guide_f_cases_desc', lang) }}</td><td>120</td></tr>
+                <tr><td>{{ t('f_units_per_case', lang) }}</td><td><span class="opt">{{ t('guide_optional', lang) }}</span></td><td>{{ t('guide_f_units_desc', lang) }}</td><td>6</td></tr>
+                <tr><td>{{ t('f_imo_class', lang) }}</td><td><span class="opt">{{ t('guide_optional', lang) }}</span></td><td>{{ t('guide_f_imo_desc', lang) }}</td><td>Class 3 - Flammable liquids</td></tr>
+                <tr><td>{{ t('f_cargo_value', lang) }}</td><td><span class="opt">{{ t('guide_optional', lang) }}</span></td><td>{{ t('guide_f_value_desc', lang) }}</td><td>25 000</td></tr>
+            </tbody>
+        </table>
+
+        <h3>{{ t('pl_dimensions_section', lang) }}</h3>
+        <table class="ft">
+            <thead><tr><th>{{ t('guide_field', lang) }}</th><th>{{ t('guide_required', lang) }}</th><th>{{ t('guide_description', lang) }}</th><th>{{ t('guide_example', lang) }}</th></tr></thead>
+            <tbody>
+                <tr><td>{{ t('f_length', lang) }}</td><td><span class="req">*</span></td><td>{{ t('guide_f_length_desc', lang) }}</td><td>120</td></tr>
+                <tr><td>{{ t('f_width', lang) }}</td><td><span class="req">*</span></td><td>{{ t('guide_f_width_desc', lang) }}</td><td>80</td></tr>
+                <tr><td>{{ t('f_height', lang) }}</td><td><span class="req">*</span></td><td>{{ t('guide_f_height_desc', lang) }}</td><td>160</td></tr>
+                <tr><td>{{ t('f_weight', lang) }}</td><td><span class="req">*</span></td><td>{{ t('guide_f_weight_desc', lang) }}</td><td>850</td></tr>
+            </tbody>
+        </table>
+
+        <div class="warn">
+            <strong>{{ t('guide_important', lang) }} :</strong> {{ t('guide_height_warning', lang) }}
+        </div>
+    </div>
+</div>
+
+<!-- 4. Batches -->
+<div class="gs" id="batches">
+    <h2>4. {{ t('guide_s4_title', lang) }}</h2>
+    <div class="sb">
+        <p>{{ t('guide_s4_p1', lang) }}</p>
+        <ul>
+            <li>{{ t('guide_s4_li1', lang) }}</li>
+            <li>{{ t('guide_s4_li2', lang) }}</li>
+        </ul>
+        <div class="tip">
+            <strong>{{ t('guide_tip', lang) }} :</strong> {{ t('guide_s4_tip', lang) }}
+        </div>
+    </div>
+</div>
+
+<!-- 5. Packaging -->
+<div class="gs" id="packaging">
+    <h2>5. {{ t('guide_s5_title', lang) }}</h2>
+    <div class="sb">
+        <h3>{{ t('guide_s5_general_title', lang) }}</h3>
+        <ul>
+            <li>{{ t('guide_s5_li1', lang) }}</li>
+            <li>{{ t('guide_s5_li2', lang) }}</li>
+        </ul>
+
+        <h3>{{ t('guide_s5_pallet_title', lang) }}</h3>
+        <ul>
+            <li>{{ t('guide_s5_pli1', lang) }}</li>
+            <li>{{ t('guide_s5_pli2', lang) }}</li>
+        </ul>
+    </div>
+</div>
+
+<!-- 6. Fees -->
+<div class="gs" id="fees">
+    <h2>6. {{ t('guide_s6_title', lang) }}</h2>
+    <div class="sb">
+        <p>{{ t('guide_s6_intro', lang) }}</p>
+        <table class="feetbl">
+            <thead><tr><th>{{ t('guide_situation', lang) }}</th><th>{{ t('guide_fee', lang) }} (EUR)</th></tr></thead>
+            <tbody>
+                <tr><td>{{ t('guide_fee_bl', lang) }}</td><td>90 €</td></tr>
+                <tr><td>{{ t('guide_fee_amend1', lang) }}</td><td>30 €</td></tr>
+                <tr><td>{{ t('guide_fee_amend2', lang) }}</td><td>50 €</td></tr>
+                <tr><td>{{ t('guide_fee_resubmit', lang) }}</td><td>40 €</td></tr>
+                <tr><td>{{ t('guide_fee_urgent', lang) }}</td><td>70 €</td></tr>
+                <tr><td>{{ t('guide_fee_late', lang) }}</td><td>100 €</td></tr>
+                <tr><td>{{ t('guide_fee_reissue', lang) }}</td><td>30 €</td></tr>
+                <tr><td>{{ t('guide_fee_courier_dom', lang) }}</td><td>25 €</td></tr>
+                <tr><td>{{ t('guide_fee_courier_intl', lang) }}</td><td>35 €</td></tr>
+                <tr><td>{{ t('guide_fee_manifest', lang) }}</td><td>35 €</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 7. US-specific -->
+<div class="gs" id="us">
+    <h2>7. {{ t('guide_s7_title', lang) }}</h2>
+    <div class="sb">
+        <h3>AMS (Automated Manifest System)</h3>
+        <p>{{ t('guide_s7_ams', lang) }}</p>
+        <h3>ISF (Importer Security Filing / 10+2)</h3>
+        <p>{{ t('guide_s7_isf', lang) }}</p>
+        <div class="warn">
+            <strong>{{ t('guide_important', lang) }} :</strong> {{ t('guide_s7_warning', lang) }}
+        </div>
+    </div>
+</div>
+
+<!-- 8. FAQ -->
+<div class="gs" id="faq">
+    <h2>8. {{ t('guide_s8_title', lang) }}</h2>
+    <div class="sb">
+        <h3>{{ t('guide_faq1_q', lang) }}</h3>
+        <p>{{ t('guide_faq1_a', lang) }}</p>
+    </div>
+</div>
+
+<!-- 9. Contact -->
+<div class="gs" id="contact">
+    <h2>9. {{ t('guide_s9_title', lang) }}</h2>
+    <div class="sb">
+        <p>{{ t('guide_s9_p1', lang) }}</p>
+        <ul>
+            <li><strong>Email :</strong> <a href="mailto:exploitation@towt.eu" style="color:#095561">exploitation@towt.eu</a> / <a href="mailto:operation@towt.eu" style="color:#095561">operation@towt.eu</a></li>
+        </ul>
+        <p>{{ t('guide_s9_p2', lang) }}</p>
+    </div>
+</div>
+{% endblock %}

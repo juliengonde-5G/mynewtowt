@@ -1,0 +1,207 @@
+{# ═══════════════════════════════════════════════════════════════
+   VESSEL SVG COMPONENTS — reusable across stowage views
+
+   Includes:
+   1. Lateral cross-section (profile view showing 3 decks)
+   2. Top-down view per deck (plan view showing 6 blocks per deck)
+
+   Variables expected: zones, zone_order, dangerous_zones
+   ═══════════════════════════════════════════════════════════════ #}
+
+{% macro vessel_lateral(zones, dangerous_zones, interactive=false, lang="fr") %}
+{# Lateral cross-section view — profile of the vessel showing 3 decks x 2 holds x 3 blocks #}
+<div class="vessel-lateral">
+  <svg viewBox="0 0 800 380" xmlns="http://www.w3.org/2000/svg" class="vessel-svg lateral">
+    {# Hull outline #}
+    <path d="M 30,350 L 30,60 Q 30,40 50,35 L 120,20 Q 140,15 160,15 L 640,15 Q 680,15 720,30 L 760,50 Q 780,60 780,80 L 780,350 Q 780,360 770,360 L 40,360 Q 30,360 30,350 Z"
+          fill="none" stroke="var(--towt-blue, #1a3a5c)" stroke-width="2.5"/>
+
+    {# Bow label #}
+    <text x="770" y="375" text-anchor="end" class="vessel-label">{{ "AVANT / BOW" if lang == "fr" else "BOW" }}</text>
+    <text x="40" y="375" text-anchor="start" class="vessel-label">{{ "ARRIÈRE / STERN" if lang == "fr" else "STERN" }}</text>
+
+    {# Waterline #}
+    <line x1="25" y1="320" x2="785" y2="320" stroke="#4a9eda" stroke-width="1" stroke-dasharray="8,4" opacity="0.5"/>
+
+    {# Deck separators #}
+    <line x1="40" y1="130" x2="770" y2="130" stroke="var(--towt-blue, #1a3a5c)" stroke-width="1.5"/>
+    <line x1="40" y1="230" x2="770" y2="230" stroke="var(--towt-blue, #1a3a5c)" stroke-width="1.5"/>
+
+    {# Hold separator (centerline) #}
+    <line x1="405" y1="20" x2="405" y2="350" stroke="var(--towt-blue, #1a3a5c)" stroke-width="1.5" stroke-dasharray="6,3"/>
+
+    {# Deck labels #}
+    <text x="15" y="85" class="deck-label" transform="rotate(-90, 15, 85)">SUP</text>
+    <text x="15" y="185" class="deck-label" transform="rotate(-90, 15, 185)">MIL</text>
+    <text x="15" y="285" class="deck-label" transform="rotate(-90, 15, 285)">INF</text>
+
+    {# Hold labels #}
+    <text x="220" y="13" class="hold-label">{{ "CALE ARRIÈRE" if lang == "fr" else "AFT HOLD" }}</text>
+    <text x="590" y="13" class="hold-label">{{ "CALE AVANT" if lang == "fr" else "FWD HOLD" }}</text>
+
+    {# Zone blocks — 18 rectangles #}
+    {% set deck_y = {"SUP": 35, "MIL": 135, "INF": 235} %}
+    {% set deck_h = {"SUP": 90, "MIL": 90, "INF": 110} %}
+    {% set hold_blocks = {
+      "AR": {"AR": {"x": 50, "w": 115}, "MIL": {"x": 170, "w": 115}, "AV": {"x": 290, "w": 110}},
+      "AV": {"AR": {"x": 415, "w": 115}, "MIL": {"x": 535, "w": 110}, "AV": {"x": 650, "w": 115}}
+    } %}
+
+    {% for zone_code in ["SUP_AR_AR","SUP_AR_MIL","SUP_AR_AV","SUP_AV_AR","SUP_AV_MIL","SUP_AV_AV",
+                          "MIL_AR_AR","MIL_AR_MIL","MIL_AR_AV","MIL_AV_AR","MIL_AV_MIL","MIL_AV_AV",
+                          "INF_AR_AR","INF_AR_MIL","INF_AR_AV","INF_AV_AR","INF_AV_MIL","INF_AV_AV"] %}
+      {% set parts = zone_code.split("_") %}
+      {% set deck = parts[0] %}
+      {% set hold = parts[1] %}
+      {% set block = parts[2] %}
+      {% set zone = zones.get(zone_code, {}) %}
+      {% set tp = zone.get("total_palettes", 0) %}
+      {% set tw = zone.get("total_weight_kg", 0) %}
+      {% set has_dg = zone.get("has_dangerous", false) %}
+      {% set is_dg_zone = zone_code in dangerous_zones %}
+
+      {# Color based on fill level #}
+      {% set max_cap = zone.get("max_weight_kg", 1) %}
+      {% if tp == 0 %}
+        {% set fill_color = "#f0f4f8" %}
+      {% elif has_dg %}
+        {% set fill_color = "#fef3cd" %}
+      {% elif tw / max_cap > 0.85 %}
+        {% set fill_color = "#f8d7da" %}
+      {% elif tw / max_cap > 0.5 %}
+        {% set fill_color = "#d4edda" %}
+      {% else %}
+        {% set fill_color = "#d1ecf1" %}
+      {% endif %}
+
+      {% set bx = hold_blocks[hold][block]["x"] %}
+      {% set bw = hold_blocks[hold][block]["w"] %}
+      {% set by = deck_y[deck] %}
+      {% set bh = deck_h[deck] %}
+
+      <g class="zone-block{% if interactive %} zone-interactive{% endif %}"
+         data-zone="{{ zone_code }}"
+         {% if interactive %}ondrop="dropBatch(event, '{{ zone_code }}')" ondragover="allowDrop(event)"{% endif %}>
+        <rect x="{{ bx }}" y="{{ by }}" width="{{ bw }}" height="{{ bh }}"
+              rx="3" ry="3"
+              fill="{{ fill_color }}"
+              stroke="{{ '#dc3545' if is_dg_zone else '#adb5bd' }}"
+              stroke-width="{{ '2' if is_dg_zone else '1' }}"
+              {% if is_dg_zone %}stroke-dasharray="4,2"{% endif %}/>
+
+        {# Zone code #}
+        <text x="{{ bx + bw/2 }}" y="{{ by + 14 }}" text-anchor="middle" class="zone-code-text">{{ zone_code }}</text>
+
+        {# Pallet count #}
+        <text x="{{ bx + bw/2 }}" y="{{ by + bh/2 + 2 }}" text-anchor="middle" class="zone-count">
+          {{ tp }} {{ "pal." if tp > 0 else "—" }}
+        </text>
+
+        {# Weight #}
+        {% if tw > 0 %}
+        <text x="{{ bx + bw/2 }}" y="{{ by + bh/2 + 18 }}" text-anchor="middle" class="zone-weight">
+          {{ "%.1f"|format(tw/1000) }}t
+        </text>
+        {% endif %}
+
+        {# Dangerous goods indicator #}
+        {% if has_dg %}
+        <text x="{{ bx + bw - 6 }}" y="{{ by + 14 }}" text-anchor="end" class="zone-dg-icon" fill="#dc3545">&#9888;</text>
+        {% endif %}
+
+        {# Batch count badges #}
+        {% set nb = zone.get("batches", [])|length %}
+        {% if nb > 0 %}
+        <circle cx="{{ bx + 12 }}" cy="{{ by + bh - 12 }}" r="9" fill="var(--towt-blue, #1a3a5c)" opacity="0.8"/>
+        <text x="{{ bx + 12 }}" y="{{ by + bh - 8 }}" text-anchor="middle" fill="white" font-size="10">{{ nb }}</text>
+        {% endif %}
+      </g>
+    {% endfor %}
+  </svg>
+</div>
+{% endmacro %}
+
+
+{% macro vessel_topdown(zones, dangerous_zones, deck_code, deck_label, interactive=false, lang="fr") %}
+{# Top-down view for one deck — shows 6 blocks (2 holds x 3 blocks) #}
+<div class="vessel-deck-plan">
+  <h4 class="deck-plan-title">{{ deck_label }}</h4>
+  <svg viewBox="0 0 700 180" xmlns="http://www.w3.org/2000/svg" class="vessel-svg topdown">
+    {# Deck outline #}
+    <rect x="10" y="10" width="680" height="160" rx="8" ry="8"
+          fill="none" stroke="var(--towt-blue, #1a3a5c)" stroke-width="2"/>
+
+    {# Hold separator #}
+    <line x1="350" y1="10" x2="350" y2="170" stroke="var(--towt-blue, #1a3a5c)" stroke-width="1.5" stroke-dasharray="6,3"/>
+
+    {# Labels #}
+    <text x="180" y="8" text-anchor="middle" class="hold-label">{{ "ARRIÈRE" if lang == "fr" else "AFT" }}</text>
+    <text x="520" y="8" text-anchor="middle" class="hold-label">{{ "AVANT" if lang == "fr" else "FWD" }}</text>
+
+    {% set blocks = {
+      "AR_AR": {"x": 15, "w": 108},
+      "AR_MIL": {"x": 128, "w": 108},
+      "AR_AV": {"x": 241, "w": 104},
+      "AV_AR": {"x": 355, "w": 108},
+      "AV_MIL": {"x": 468, "w": 108},
+      "AV_AV": {"x": 581, "w": 104}
+    } %}
+
+    {% for suffix, pos in blocks.items() %}
+      {% set zone_code = deck_code ~ "_" ~ suffix %}
+      {% set zone = zones.get(zone_code, {}) %}
+      {% set tp = zone.get("total_palettes", 0) %}
+      {% set tw = zone.get("total_weight_kg", 0) %}
+      {% set has_dg = zone.get("has_dangerous", false) %}
+      {% set is_dg_zone = zone_code in dangerous_zones %}
+      {% set max_cap = zone.get("max_weight_kg", 1) %}
+
+      {% if tp == 0 %}
+        {% set fill_color = "#f0f4f8" %}
+      {% elif has_dg %}
+        {% set fill_color = "#fef3cd" %}
+      {% elif tw / max_cap > 0.85 %}
+        {% set fill_color = "#f8d7da" %}
+      {% elif tw / max_cap > 0.5 %}
+        {% set fill_color = "#d4edda" %}
+      {% else %}
+        {% set fill_color = "#d1ecf1" %}
+      {% endif %}
+
+      <g class="zone-block{% if interactive %} zone-interactive{% endif %}"
+         data-zone="{{ zone_code }}"
+         {% if interactive %}ondrop="dropBatch(event, '{{ zone_code }}')" ondragover="allowDrop(event)"{% endif %}>
+        <rect x="{{ pos.x }}" y="18" width="{{ pos.w }}" height="145" rx="3" ry="3"
+              fill="{{ fill_color }}"
+              stroke="{{ '#dc3545' if is_dg_zone else '#adb5bd' }}"
+              stroke-width="{{ '2' if is_dg_zone else '1' }}"
+              {% if is_dg_zone %}stroke-dasharray="4,2"{% endif %}/>
+        <text x="{{ pos.x + pos.w/2 }}" y="36" text-anchor="middle" class="zone-code-text">{{ zone_code }}</text>
+        <text x="{{ pos.x + pos.w/2 }}" y="85" text-anchor="middle" class="zone-count">{{ tp }} pal.</text>
+        {% if tw > 0 %}
+        <text x="{{ pos.x + pos.w/2 }}" y="105" text-anchor="middle" class="zone-weight">{{ "%.1f"|format(tw/1000) }}t</text>
+        {% endif %}
+        {% if has_dg %}
+        <text x="{{ pos.x + pos.w - 8 }}" y="36" text-anchor="end" class="zone-dg-icon" fill="#dc3545">&#9888;</text>
+        {% endif %}
+        {% set nb = zone.get("batches", [])|length %}
+        {% if nb > 0 %}
+        <text x="{{ pos.x + pos.w/2 }}" y="145" text-anchor="middle" class="zone-batch-count">{{ nb }} batch{{ "es" if nb > 1 else "" }}</text>
+        {% endif %}
+      </g>
+    {% endfor %}
+  </svg>
+</div>
+{% endmacro %}
+
+
+{% macro vessel_legend(lang="fr") %}
+<div class="vessel-legend">
+  <span class="legend-item"><span class="legend-swatch" style="background:#f0f4f8;border:1px solid #adb5bd"></span> {{ "Vide" if lang == "fr" else "Empty" }}</span>
+  <span class="legend-item"><span class="legend-swatch" style="background:#d1ecf1"></span> {{ "< 50%" if lang == "fr" else "< 50%" }}</span>
+  <span class="legend-item"><span class="legend-swatch" style="background:#d4edda"></span> {{ "50-85%" if lang == "fr" else "50-85%" }}</span>
+  <span class="legend-item"><span class="legend-swatch" style="background:#f8d7da"></span> {{ "> 85%" if lang == "fr" else "> 85%" }}</span>
+  <span class="legend-item"><span class="legend-swatch" style="background:#fef3cd;border:1px solid #dc3545"></span> {{ "Dangereux" if lang == "fr" else "Dangerous" }}</span>
+  <span class="legend-item"><span class="legend-swatch" style="border:2px dashed #dc3545;background:transparent"></span> {{ "Zone DG/hors-format" if lang == "fr" else "DG/oversized zone" }}</span>
+</div>
+{% endmacro %}

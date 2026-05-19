@@ -1,0 +1,39 @@
+{% extends "cargo/portal_base.html" %}
+{% block portal_title %}{{ t('cp_messages', lang) }}{% endblock %}
+
+{% block portal_content %}
+<h1>💬 {{ t('cp_messages', lang) }}</h1>
+
+<div class="card">
+  <h2>{{ t('cp_conversation', lang) }}</h2>
+  <div class="mth" id="msgThread">
+    {% if messages %}
+      {% for m in messages %}
+      <div class="mb {% if m.sender_type == 'client' %}mb-c{% else %}mb-co{% endif %}">
+        <div>{{ m.message }}</div>
+        <div class="mm">{{ m.sender_name }} · {{ m.created_at.strftime('%d/%m/%Y %H:%M') }}</div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p style="text-align:center;color:#aaa;padding:30px 0">{{ t('cp_no_messages', lang) }}</p>
+    {% endif %}
+  </div>
+
+  <form method="POST" action="/p/{{ pl.token }}/messages/send?lang={{ lang }}">
+      {{ csrf_input(request) }}
+    <div class="mib">
+      <textarea name="message" placeholder="{{ t('cp_write_msg', lang) }}" required></textarea>
+      <button type="submit">{{ t('cp_send', lang) }}</button>
+    </div>
+  </form>
+</div>
+
+<div style="text-align:center;margin-top:16px;font-size:12px;color:#888">
+  {{ t('cp_contact_email', lang) }} <a href="mailto:operations@towt.eu" style="color:#095561">operations@towt.eu</a>
+</div>
+
+<script>
+var mt = document.getElementById('msgThread');
+if(mt) mt.scrollTop = mt.scrollHeight;
+</script>
+{% endblock %}

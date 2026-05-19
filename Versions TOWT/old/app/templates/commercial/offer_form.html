@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Nouvelle offre{% endblock %}
+{% block page_title %}Générer une offre tarifaire{% endblock %}
+
+{% block content %}
+<div style="max-width:800px;margin:0 auto;">
+    <div class="card">
+        <div class="card-body">
+            <!-- Grid summary -->
+            <div style="background:var(--towt-light-bg, #f0f6fc);border-radius:8px;padding:16px;margin-bottom:24px;">
+                <div style="display:flex;justify-content:space-between;align-items:start;">
+                    <div>
+                        <h3 style="margin:0 0 8px;color:var(--towt-blue);font-family:'Poppins',sans-serif;">{{ grid.reference }}</h3>
+                        <p style="margin:0;color:#666;font-size:13px;">
+                            Client: <strong>{{ grid.client.name if grid.client else '—' }}</strong>
+                            &nbsp;|&nbsp; Validité: {{ grid.valid_from }} → {{ grid.valid_to }}
+                        </p>
+                    </div>
+                    <span class="badge badge-blue" style="font-size:11px;">{{ grid.lines|length }} route{{ 's' if grid.lines|length > 1 else '' }}</span>
+                </div>
+            </div>
+
+            <!-- Preview: routes in grid -->
+            {% if grid.lines %}
+            <h4 style="margin:0 0 12px;color:var(--towt-blue);font-size:14px;">Routes incluses dans l'offre</h4>
+            <div class="table-container" style="margin-bottom:24px;">
+                <table class="data-table" style="font-size:12px;">
+                    <thead><tr>
+                        <th>POL</th><th>POD</th><th>< 10 pal.</th><th>10-50 pal.</th><th>51-100 pal.</th><th>> 100 pal.</th>
+                    </tr></thead>
+                    <tbody>
+                        {% for line in grid.lines %}
+                        <tr>
+                            <td><strong>{{ line.pol.name if line.pol else line.pol_locode }}</strong></td>
+                            <td><strong>{{ line.pod.name if line.pod else line.pod_locode }}</strong></td>
+                            <td>{{ '%.2f'|format(line.rate_lt10) if line.rate_lt10 else '—' }} €</td>
+                            <td>{{ '%.2f'|format(line.rate_10to50) if line.rate_10to50 else '—' }} €</td>
+                            <td>{{ '%.2f'|format(line.rate_51to100) if line.rate_51to100 else '—' }} €</td>
+                            <td>{{ '%.2f'|format(line.rate_gt100) if line.rate_gt100 else '—' }} €</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+            <hr style="border:0;border-top:1px solid #eee;margin:24px 0;">
+
+            <!-- Offer form -->
+            <form method="post" action="/commercial/pricing/grids/{{ grid.id }}/offer/create">
+                {{ csrf_input(request) }}
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                    <div class="form-group">
+                        <label class="form-label">Référence</label>
+                        <input type="text" class="form-control" value="{{ reference }}" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Date limite de validité *</label>
+                        <input type="date" name="validity_date" class="form-control" required
+                               value="{{ grid.valid_to }}">
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top:16px;">
+                    <label class="form-label">Notes additionnelles (optionnel)</label>
+                    <textarea name="notes" class="form-control" rows="3" placeholder="Notes spécifiques pour cette offre..."></textarea>
+                </div>
+
+                <div style="background:#fffde7;border:1px solid #fff9c4;border-radius:8px;padding:12px;margin-top:16px;font-size:12px;color:#f57f17;">
+                    <strong><i data-lucide="info" style="width:14px;height:14px;vertical-align:middle;"></i> Le document DOCX généré contiendra :</strong>
+                    <ul style="margin:8px 0 0;padding-left:20px;">
+                        <li>Rates Construction (Full Liner Terms, OTHC/DTHC, Europallets, free time, BL & Booking fees)</li>
+                        <li>Sailing Schedule (routes, distances, jours de navigation)</li>
+                        <li>Rates Offer (tableau des prix par tranche de palettes)</li>
+                    </ul>
+                </div>
+
+                <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:24px;">
+                    <a href="/commercial/pricing/grids/{{ grid.id }}" class="btn btn-secondary">Annuler</a>
+                    <button type="submit" class="btn btn-primary"><i data-lucide="file-text"></i> Générer l'offre DOCX</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

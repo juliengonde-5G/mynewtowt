@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}TOWT — Ordre depuis offre {{ offer.reference }}{% endblock %}
+{% block page_title %}🚢 Générer un ordre de transport{% endblock %}
+
+{% block topbar_actions %}
+<a href="/commercial/pricing/grids/{{ grid.id }}" class="btn btn-secondary btn-sm"><i data-lucide="arrow-left"></i> Retour grille</a>
+<button type="submit" form="order-offer-form" class="btn btn-primary btn-sm">💾 Créer l'ordre</button>
+{% endblock %}
+
+{% block content %}
+<form method="POST" action="/commercial/pricing/offers/{{ offer.id }}/create-order" id="order-offer-form" style="max-width:800px;margin:0 auto;">
+
+    <!-- Source info -->
+    <div class="card" style="margin-bottom:16px;">
+        <div class="card-body">
+            <h3 style="margin:0 0 12px;color:var(--towt-blue);font-size:14px;">📄 Depuis l'offre {{ offer.reference }}</h3>
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 16px;font-size:13px;">
+                <span style="color:#888;">Client</span><span style="font-weight:500;">{{ offer.client.name if offer.client else '—' }}</span>
+                <span style="color:#888;">Grille</span><span>{{ grid.reference }}</span>
+                <span style="color:#888;">Validité</span><span>{{ grid.valid_from }} → {{ grid.valid_to }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Route selection -->
+    <div class="card" style="margin-bottom:16px;">
+        <div class="card-body">
+            <h3 style="margin:0 0 12px;color:var(--towt-blue);font-size:14px;">🗺️ Route *</h3>
+            <select name="line_id" id="sel-line" class="form-input" required onchange="updatePrice()">
+                <option value="">— Choisir une route —</option>
+                {% for line in grid.lines %}
+                <option value="{{ line.id }}"
+                    data-pol="{{ line.pol_locode }}" data-pod="{{ line.pod_locode }}"
+                    data-lt10="{{ line.rate_lt10 or 0 }}" data-10to50="{{ line.rate_10to50 or 0 }}"
+                    data-51to100="{{ line.rate_51to100 or 0 }}" data-gt100="{{ line.rate_gt100 or 0 }}">
+                    {{ line.pol.name if line.pol else line.pol_locode }} → {{ line.pod.name if line.pod else line.pod_locode }}
+                    ({{ '%.0f'|format(line.distance_nm) if line.distance_nm else '?' }} NM)
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- Cargo details -->
+    <div class="card" style="margin-bottom:16px;">
+        <div class="card-body">
+            <h3 style="margin:0 0 12px;color:var(--towt-blue);font-size:14px;">📦 Cargaison</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group">
+                    <label class="form-label">Quantité palettes *</label>
+                    <input type="number" name="quantity_palettes" id="qty" class="form-input" min="1" value="10" required onchange="updatePrice()">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Format palette</label>
+                    <select name="palette_format" class="form-input">
+                        <option value="EPAL">EPAL (120×80)</option>
+                        <option value="USPAL">USPAL (120×100)</option>
+                        <option value="PORTPAL">PORTPAL</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Poids / palette (t)</label>
+                    <input type="number" name="weight_per_palette" class="form-input" step="0.01" value="0.80">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Prix unitaire (€/palette)</label>
+                    <input type="number" name="unit_price" id="unit-price" class="form-input" step="0.01" placeholder="Auto depuis grille">
+                    <span style="font-size:10px;color:#888;">Laisser vide = tarif grille automatique</span>
+                </div>
+            </div>
+
+            <!-- Auto-calculated price display -->
+            <div id="price-info" style="display:none;margin-top:16px;padding:12px 16px;background:rgba(9,85,97,0.04);border-radius:8px;border:1px solid rgba(9,85,97,0.1);">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <span style="font-size:11px;color:#888;text-transform:uppercase;">Tarif grille appliqué</span>
+                        <div style="font-size:20px;font-weight:700;color:var(--towt-blue);" id="auto-rate">—</div>
+                        <span style="font-size:11px;color:#888;" id="bracket-label">—</span>
+                    </div>
+                    <div style="text-align:right;">
+                        <span style="font-size:11px;color:#888;">Estimation total</span>
+                        <div style="font-size:18px;font-weight:600;color:var(--towt-blue);" id="total-est">—</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="card" style="margin-bottom:16px;">
+        <div class="card-body">
+            <h3 style="margin:0 0 12px;color:var(--towt-blue);font-size:14px;">📝 Description</h3>
+            <textarea name="description" class="form-input" rows="3" placeholder="Description de la marchandise, notes..."></textarea>
+        </div>
+    </div>
+
+    <!-- Fees summary -->
+    <div class="card" style="margin-bottom:16px;">
+        <div class="card-body">
+            <h3 style="margin:0 0 12px;color:var(--towt-blue);font-size:14px;">💶 Frais (depuis grille)</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">
+                <div>Booking Fee : <strong>{{ '%.2f'|format(grid.booking_fee or 0) }} €</strong></div>
+                <div>BL Fee : <strong>{{ '%.2f'|format(grid.bl_fee or 0) }} €</strong></div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<script>
+function updatePrice() {
+    var sel = document.getElementById('sel-line');
+    var opt = sel.options[sel.selectedIndex];
+    var qty = parseInt(document.getElementById('qty').value) || 0;
+    var info = document.getElementById('price-info');
+
+    if (!opt || !opt.value || qty <= 0) { info.style.display = 'none'; return; }
+
+    var rate, bracket;
+    if (qty > 100) { rate = parseFloat(opt.dataset.gt100); bracket = '> 100 palettes'; }
+    else if (qty > 50) { rate = parseFloat(opt.dataset['51to100']); bracket = '51-100 palettes'; }
+    else if (qty >= 10) { rate = parseFloat(opt.dataset['10to50']); bracket = '10-50 palettes'; }
+    else { rate = parseFloat(opt.dataset.lt10); bracket = '< 10 palettes'; }
+
+    var bookingFee = {{ grid.booking_fee or 0 }};
+    var blFee = {{ grid.bl_fee or 0 }};
+    var total = (qty * rate) + bookingFee + blFee;
+
+    document.getElementById('auto-rate').textContent = rate.toFixed(2) + ' € / palette';
+    document.getElementById('bracket-label').textContent = 'Tranche : ' + bracket;
+    document.getElementById('total-est').textContent = total.toFixed(2) + ' €';
+    info.style.display = 'block';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends "cargo/portal_base.html" %}
+{% block portal_title %}{{ t('cp_vessel', lang) }}{% endblock %}
+
+{% block portal_content %}
+<h1>🚢 {{ t('cp_vessel', lang) }}</h1>
+
+{% if vessel %}
+<div class="card">
+  <h2>{{ t('cp_about_vessel', lang) }} {{ vessel.name }}</h2>
+  <div class="igrid">
+    <div class="ibox"><div class="il">IMO</div><div class="iv">{{ vessel.imo or '—' }}</div></div>
+    <div class="ibox"><div class="il">{{ t('cp_flag', lang) }}</div><div class="iv">{{ vessel.flag or '—' }}</div></div>
+    <div class="ibox"><div class="il">{{ t('cp_deadweight', lang) }}</div><div class="iv">{{ vessel.deadweight or '—' }} T</div></div>
+    <div class="ibox"><div class="il">{{ t('cp_capacity', lang) }}</div><div class="iv">{{ vessel.pallet_capacity or '—' }}</div></div>
+    <div class="ibox"><div class="il">{{ t('cp_speed', lang) }}</div><div class="iv">{{ vessel.cruising_speed or '—' }} {{ t('cp_knots', lang) }}</div></div>
+  </div>
+</div>
+
+<div class="card csec">
+  {% if lang == 'en' %}
+  <h3>About {{ vessel.name }}</h3>
+  <p>{{ vessel.name }} {{ t('cp_vessel_desc_en', 'en') }}</p>
+  <h3>Key features</h3>
+  <ul>
+    <li>Modern cargo sailing vessel with state-of-the-art navigation</li>
+    <li>Wind-powered propulsion reducing CO₂ emissions by up to 90%</li>
+    <li>Cargo hold designed for palletized goods</li>
+    <li>Experienced crew specialized in sail cargo operations</li>
+  </ul>
+  <h3>Your cargo on board</h3>
+  <p>Your goods are stored in a ventilated cargo hold, protected from the elements. The vessel is equipped with modern handling equipment for safe loading and unloading. Each shipment is tracked and documented throughout the voyage.</p>
+  {% elif lang == 'es' %}
+  <h3>Sobre {{ vessel.name }}</h3>
+  <p>{{ vessel.name }} {{ t('cp_vessel_desc_es', 'es') }}</p>
+  <h3>Características principales</h3>
+  <ul>
+    <li>Velero de carga moderno con navegación de última generación</li>
+    <li>Propulsión eólica que reduce las emisiones de CO₂ hasta un 90%</li>
+    <li>Bodega diseñada para mercancías paletizadas</li>
+    <li>Tripulación experimentada en operaciones de carga a vela</li>
+  </ul>
+  <h3>Su carga a bordo</h3>
+  <p>Sus mercancías se almacenan en una bodega ventilada, protegidas de las intemperies. El buque está equipado con equipos modernos para una carga y descarga seguras. Cada envío es rastreado y documentado durante todo el viaje.</p>
+  {% elif lang == 'pt-br' %}
+  <h3>Sobre o {{ vessel.name }}</h3>
+  <p>{{ vessel.name }} {{ t('cp_vessel_desc_ptbr', 'pt-br') }}</p>
+  <h3>Características principais</h3>
+  <ul>
+    <li>Veleiro de carga moderno com navegação de última geração</li>
+    <li>Propulsão eólica reduzindo emissões de CO₂ em até 90%</li>
+    <li>Porão projetado para mercadorias paletizadas</li>
+    <li>Tripulação experiente em operações de carga à vela</li>
+  </ul>
+  <h3>Sua carga a bordo</h3>
+  <p>Suas mercadorias são armazenadas em um porão ventilado, protegidas das intempéries. O navio é equipado com equipamentos modernos para carga e descarga seguras. Cada embarque é rastreado e documentado durante toda a viagem.</p>
+  {% elif lang == 'vi' %}
+  <h3>Giới thiệu {{ vessel.name }}</h3>
+  <p>{{ vessel.name }} {{ t('cp_vessel_desc_vi', 'vi') }}</p>
+  <h3>Đặc điểm chính</h3>
+  <ul>
+    <li>Tàu buồm chở hàng hiện đại với hệ thống điều hướng tiên tiến</li>
+    <li>Động lực gió giảm phát thải CO₂ lên đến 90%</li>
+    <li>Hầm hàng thiết kế cho hàng hóa đóng pallet</li>
+    <li>Thủy thủ đoàn giàu kinh nghiệm trong vận tải hàng bằng buồm</li>
+  </ul>
+  <h3>Hàng hóa của bạn trên tàu</h3>
+  <p>Hàng hóa được lưu trữ trong hầm hàng thông gió, được bảo vệ khỏi thời tiết. Tàu được trang bị thiết bị xếp dỡ hiện đại. Mỗi lô hàng được theo dõi và ghi chép trong suốt hành trình.</p>
+  {% else %}
+  <h3>À propos du {{ vessel.name }}</h3>
+  <p>{{ vessel.name }} {{ t('cp_vessel_desc_fr', 'fr') }}</p>
+  <h3>Caractéristiques principales</h3>
+  <ul>
+    <li>Voilier-cargo moderne doté d'une navigation de pointe</li>
+    <li>Propulsion vélique réduisant les émissions de CO₂ jusqu'à 90 %</li>
+    <li>Cale conçue pour les marchandises palettisées</li>
+    <li>Équipage expérimenté spécialisé dans le transport à la voile</li>
+  </ul>
+  <h3>Votre cargo à bord</h3>
+  <p>Vos marchandises sont stockées dans une cale ventilée, protégées des intempéries. Le navire est équipé de matériel de manutention moderne pour un chargement et déchargement en toute sécurité. Chaque expédition est suivie et documentée tout au long du voyage.</p>
+  {% endif %}
+</div>
+
+{% else %}
+<div class="card"><p>{{ t('cp_no_voyage_info', lang) }}</p></div>
+{% endif %}
+{% endblock %}

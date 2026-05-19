@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Historique {{ pl.order.reference }}{% endblock %}
+{% block page_title %}Historique — {{ pl.order.reference }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/cargo/{{ pl.id }}" class="btn btn-secondary btn-sm"><i data-lucide="arrow-left"></i> Retour</a>
+{% endblock %}
+
+{% block content %}
+<div class="history-page">
+    {% if logs %}
+    <div class="table-container">
+        <table class="data-table">
+            <thead><tr><th>Date</th><th>Par</th><th>Batch</th><th>Champ</th><th>Ancienne valeur</th><th>Nouvelle valeur</th></tr></thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td style="white-space:nowrap;font-size:12px;">{{ log.changed_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td>
+                        {% if log.changed_by == 'Client' %}
+                        <span style="background:rgba(245,158,11,0.12);color:#D97706;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;">Client</span>
+                        {% else %}
+                        <span style="background:rgba(9,85,97,0.1);color:var(--towt-blue);padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;">{{ log.changed_by }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{% if log.batch_id %}#{{ log.batch_id }}{% else %}—{% endif %}</td>
+                    <td><code style="font-size:11px;background:#f5f5f5;padding:2px 6px;border-radius:3px;">{{ log.field_name }}</code></td>
+                    <td style="font-size:12px;color:#999;">{{ log.old_value or '—' }}</td>
+                    <td style="font-size:12px;font-weight:500;">{{ log.new_value or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i data-lucide="history" style="width:48px;height:48px;color:var(--towt-sky);"></i>
+        <h3>Aucune modification enregistrée</h3>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

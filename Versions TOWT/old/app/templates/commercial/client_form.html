@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}{% if edit_client %}Modifier{% else %}Nouveau{% endif %} Client{% endblock %}
+{% block page_title %}{% if edit_client %}Modifier {{ edit_client.name }}{% else %}Nouveau client{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/commercial/pricing/clients" class="btn btn-secondary btn-sm"><i data-lucide="arrow-left"></i> Retour</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:700px;">
+
+    <!-- Pipedrive search -->
+    {% if pipedrive_enabled and not edit_client %}
+    <div class="pd-search-box" style="margin-bottom:20px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <span style="font-size:18px;">🔗</span>
+            <h4 style="margin:0;color:var(--towt-blue);font-size:14px;">Importer depuis Pipedrive</h4>
+        </div>
+        <div style="display:flex;gap:8px;">
+            <input type="text" id="pd-search-input" class="form-input" placeholder="Rechercher une organisation Pipedrive..." style="flex:1;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="pdSearch()"><i data-lucide="search" style="width:14px;height:14px;"></i> Chercher</button>
+        </div>
+        <div id="pd-results" style="margin-top:8px;"></div>
+    </div>
+    {% endif %}
+
+    {% if edit_client and edit_client.pipedrive_org_id %}
+    <div style="margin-bottom:16px;padding:8px 14px;background:rgba(9,85,97,0.06);border-radius:8px;font-size:12px;color:var(--towt-blue);display:flex;align-items:center;gap:8px;">
+        <span>🔗</span>
+        <span>Lié à Pipedrive Organization #{{ edit_client.pipedrive_org_id }}</span>
+    </div>
+    {% endif %}
+
+    <form method="POST" id="client-form" action="{% if edit_client %}/commercial/pricing/clients/{{ edit_client.id }}/edit{% else %}/commercial/pricing/clients/create{% endif %}">
+        {{ csrf_input(request) }}
+        <input type="hidden" name="pipedrive_org_id" id="pd-org-id" value="{{ edit_client.pipedrive_org_id if edit_client and edit_client.pipedrive_org_id else '' }}">
+
+        <!-- Type & Nom -->
+        <div class="form-row" style="display:grid;grid-template-columns:200px 1fr;gap:16px;margin-bottom:16px;">
+            <div class="form-group">
+                <label class="form-label">Type de client *</label>
+                <select name="client_type" id="f-client-type" class="form-select" required>
+                    <option value="freight_forwarder" {% if edit_client and edit_client.client_type == 'freight_forwarder' %}selected{% endif %}>🚛 Freight Forwarder</option>
+                    <option value="shipper" {% if edit_client and edit_client.client_type == 'shipper' %}selected{% endif %}>📦 Chargeur</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Nom de l'entreprise *</label>
+                <input type="text" name="name" id="f-name" class="form-input" required value="{{ edit_client.name if edit_client else '' }}" placeholder="Ex: CMA CGM Logistics">
+            </div>
+        </div>
+
+        <!-- Contact -->
+        <div style="background:#f8fafc;border-radius:8px;padding:16px;margin-bottom:16px;">
+            <h4 style="margin:0 0 12px;color:var(--towt-blue);font-size:14px;"><i data-lucide="user" style="width:14px;height:14px;vertical-align:middle;"></i> Contact</h4>
+            <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px;">
+                <div class="form-group">
+                    <label class="form-label">Nom du contact</label>
+                    <input type="text" name="contact_name" id="f-contact-name" class="form-input" value="{{ edit_client.contact_name if edit_client and edit_client.contact_name else '' }}" placeholder="Jean Dupont">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" name="contact_email" id="f-contact-email" class="form-input" value="{{ edit_client.contact_email if edit_client and edit_client.contact_email else '' }}" placeholder="contact@example.com">
+                </div>
+            </div>
+            <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                <div class="form-group">
+                    <label class="form-label">Téléphone</label>
+                    <input type="text" name="contact_phone" id="f-contact-phone" class="form-input" value="{{ edit_client.contact_phone if edit_client and edit_client.contact_phone else '' }}" placeholder="+33 6 12 34 56 78">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Pays</label>
+                    <input type="text" name="country" id="f-country" class="form-input" value="{{ edit_client.country if edit_client and edit_client.country else '' }}" placeholder="France">
+                </div>
+            </div>
+        </div>
+
+        <!-- Address & Notes -->
+        <div class="form-group" style="margin-bottom:12px;">
+            <label class="form-label">Adresse</label>
+            <textarea name="address" id="f-address" class="form-input" rows="2" placeholder="Adresse postale...">{{ edit_client.address if edit_client and edit_client.address else '' }}</textarea>
+        </div>
+        <div class="form-group" style="margin-bottom:20px;">
+            <label class="form-label">Notes</label>
+            <textarea name="notes" class="form-input" rows="2" placeholder="Notes internes...">{{ edit_client.notes if edit_client and edit_client.notes else '' }}</textarea>
+        </div>
+
+        <!-- Actions -->
+        <div style="display:flex;gap:12px;justify-content:flex-end;">
+            <a href="/commercial/pricing/clients" class="btn btn-secondary">Annuler</a>
+            <button type="submit" class="btn btn-primary"><i data-lucide="save"></i> {% if edit_client %}Enregistrer{% else %}Créer le client{% endif %}</button>
+        </div>
+    </form>
+</div>
+
+{% if pipedrive_enabled and not edit_client %}
+<style>
+    .pd-search-box{background:white;border:1px solid #e5e7eb;border-radius:10px;padding:16px}
+    .pd-result-item{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid #eee;border-radius:6px;margin-bottom:4px;cursor:pointer;transition:background 0.1s}
+    .pd-result-item:hover{background:rgba(9,85,97,0.04)}
+    .pd-result-name{font-weight:600;font-size:13px;color:#333}
+    .pd-result-meta{font-size:11px;color:#888}
+    .pd-result-btn{font-size:11px;padding:4px 10px;border-radius:4px;background:var(--towt-blue);color:white;border:none;cursor:pointer;font-family:Poppins,system-ui,sans-serif}
+    .pd-result-btn:hover{opacity:0.85}
+    .pd-loading{text-align:center;padding:12px;color:#888;font-size:12px}
+    .pd-imported{background:rgba(135,189,43,0.08);border:1px solid rgba(135,189,43,0.3);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#4a7c10;display:flex;align-items:center;gap:8px}
+</style>
+<script>
+var pdSearchTimer = null;
+var pdInput = document.getElementById('pd-search-input');
+if (pdInput) {
+    pdInput.addEventListener('keyup', function(e) {
+        clearTimeout(pdSearchTimer);
+        if (this.value.length >= 2) {
+            pdSearchTimer = setTimeout(pdSearch, 400);
+        }
+    });
+    pdInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); pdSearch(); }
+    });
+}
+
+function pdSearch() {
+    var q = document.getElementById('pd-search-input').value.trim();
+    if (q.length < 2) return;
+    var box = document.getElementById('pd-results');
+    box.innerHTML = '<div class="pd-loading">Recherche en cours...</div>';
+
+    fetch('/commercial/pricing/pipedrive/search?q=' + encodeURIComponent(q))
+        .then(function(r){ return r.json(); })
+        .then(function(results) {
+            if (!results || results.length === 0) {
+                box.innerHTML = '<div class="pd-loading">Aucune organisation trouvée pour "' + q + '"</div>';
+                return;
+            }
+            var html = '';
+            results.forEach(function(org) {
+                html += '<div class="pd-result-item" onclick="pdSelect(' + org.id + ')">';
+                html += '<div><div class="pd-result-name">' + org.name + '</div>';
+                if (org.address) html += '<div class="pd-result-meta">' + org.address + '</div>';
+                if (org.owner_name) html += '<div class="pd-result-meta">Contact : ' + org.owner_name + '</div>';
+                html += '</div>';
+                html += '<button type="button" class="pd-result-btn" onclick="event.stopPropagation();pdSelect(' + org.id + ')">Importer</button>';
+                html += '</div>';
+            });
+            box.innerHTML = html;
+        })
+        .catch(function(err) {
+            box.innerHTML = '<div class="pd-loading" style="color:#dc2626;">Erreur de connexion à Pipedrive</div>';
+        });
+}
+
+function pdSelect(orgId) {
+    var box = document.getElementById('pd-results');
+    box.innerHTML = '<div class="pd-loading">Chargement des détails...</div>';
+
+    fetch('/commercial/pricing/pipedrive/org/' + orgId)
+        .then(function(r){ return r.json(); })
+        .then(function(org) {
+            // Fill form fields
+            document.getElementById('f-name').value = org.name || '';
+            document.getElementById('f-contact-name').value = org.contact_name || '';
+            document.getElementById('f-contact-email').value = org.contact_email || '';
+            document.getElementById('f-contact-phone').value = org.contact_phone || '';
+            document.getElementById('f-country').value = org.country || '';
+            document.getElementById('f-address').value = org.address || '';
+            document.getElementById('pd-org-id').value = org.id;
+
+            // Show confirmation
+            box.innerHTML = '<div class="pd-imported">✓ Organisation "<strong>' + org.name + '</strong>" importée depuis Pipedrive. Vous pouvez modifier les champs avant de créer le client.</div>';
+        })
+        .catch(function(err) {
+            box.innerHTML = '<div class="pd-loading" style="color:#dc2626;">Erreur lors de la récupération des données</div>';
+        });
+}
+</script>
+{% endif %}
+{% endblock %}

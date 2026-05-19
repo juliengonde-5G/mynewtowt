@@ -1,0 +1,106 @@
+{% extends "cargo/portal_base.html" %}
+{% block portal_title %}{{ t('cp_documents', lang) }}{% endblock %}
+
+{% block extra_css %}
+.upload-zone{display:block;border:2px dashed #c5d5e0;border-radius:12px;padding:24px;text-align:center;background:#f8fafb;transition:all .2s;cursor:pointer}
+.upload-zone:hover{border-color:#095561;background:#f0f7f8}
+.upload-zone.dragover{border-color:#095561;background:rgba(9,85,97,.06)}
+.doc-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.doc-item{display:flex;align-items:center;gap:12px;padding:10px 14px;background:#f8fafb;border-radius:8px;border:1px solid #e5e7eb}
+.doc-item .doc-icon{font-size:24px;flex-shrink:0}
+.doc-item .doc-info{flex:1;min-width:0}
+.doc-item .doc-name{font-size:13px;font-weight:600;color:#095561;word-break:break-all}
+.doc-item .doc-meta{font-size:10px;color:#888;margin-top:2px}
+.doc-item .doc-actions{display:flex;gap:6px;flex-shrink:0}
+.doc-btn{padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;border:none;cursor:pointer}
+.doc-btn-dl{background:rgba(9,85,97,.08);color:#095561}.doc-btn-dl:hover{background:rgba(9,85,97,.15)}
+.doc-btn-del{background:rgba(220,38,38,.06);color:#dc2626;font-size:10px}.doc-btn-del:hover{background:rgba(220,38,38,.12)}
+.upload-ok{background:#ecfdf5;border:1px solid #86efac;border-radius:8px;padding:12px;text-align:center;color:#16a34a;font-weight:600;margin-bottom:16px;font-size:13px}
+{% endblock %}
+
+{% block portal_content %}
+<h1>{{ t('cp_documents', lang) }}</h1>
+
+{% if request.query_params.get('uploaded') %}
+<div class="upload-ok">{% if lang == 'en' %}Document uploaded successfully{% elif lang == 'es' %}Documento subido con éxito{% elif lang == 'pt-br' %}Documento enviado com sucesso{% else %}Document déposé avec succès{% endif %}</div>
+{% endif %}
+
+<div class="card">
+  <h2>{% if lang == 'en' %}Upload documents{% elif lang == 'es' %}Subir documentos{% elif lang == 'pt-br' %}Enviar documentos{% else %}Déposer des documents{% endif %}</h2>
+  <form method="POST" action="/p/{{ pl.token }}/documents/upload" enctype="multipart/form-data" id="upload-form">
+    {{ csrf_input(request) }}
+    <label class="upload-zone" id="drop-zone" for="file-input">
+      <div style="font-size:36px;margin-bottom:8px">&#128193;</div>
+      <div style="font-size:14px;font-weight:600;color:#095561">
+        {% if lang == 'en' %}Click or drag a file here{% elif lang == 'es' %}Haga clic o arrastre un archivo aqui{% elif lang == 'pt-br' %}Clique ou arraste um arquivo aqui{% else %}Cliquez ou glissez un fichier ici{% endif %}
+      </div>
+      <div style="font-size:11px;color:#888;margin-top:4px">PDF, Excel, Word, images — max 20 Mo</div>
+      <input type="file" name="file" id="file-input" style="display:none" required>
+    </label>
+    <div id="file-selected" style="display:none;margin-top:12px;padding:10px 14px;background:#f0f7f8;border-radius:8px;font-size:13px;color:#095561;font-weight:600;"></div>
+    <div style="margin-top:12px">
+      <input type="text" name="notes" placeholder="{% if lang == 'en' %}Notes (optional){% elif lang == 'es' %}Notas (opcional){% elif lang == 'pt-br' %}Notas (opcional){% else %}Notes (optionnel){% endif %}" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box;">
+    </div>
+    <button type="submit" id="upload-btn" style="display:none;margin-top:12px;padding:10px 24px;background:#095561;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">
+      {% if lang == 'en' %}Upload{% elif lang == 'es' %}Subir{% elif lang == 'pt-br' %}Enviar{% else %}Deposer{% endif %}
+    </button>
+  </form>
+</div>
+
+{% if uploaded_docs %}
+<div class="card">
+  <h2>{% if lang == 'en' %}Uploaded documents{% elif lang == 'es' %}Documentos subidos{% elif lang == 'pt-br' %}Documentos enviados{% else %}Documents déposés{% endif %} ({{ uploaded_docs|length }})</h2>
+  <div class="doc-list">
+    {% for d in uploaded_docs %}
+    <div class="doc-item">
+      <span class="doc-icon">{% if d.filename.endswith('.pdf') %}&#128213;{% elif d.filename.endswith('.xlsx') or d.filename.endswith('.xls') %}&#128202;{% elif d.filename.endswith('.docx') or d.filename.endswith('.doc') %}&#128221;{% elif d.filename.endswith('.png') or d.filename.endswith('.jpg') or d.filename.endswith('.jpeg') %}&#128444;{% else %}&#128206;{% endif %}</span>
+      <div class="doc-info">
+        <div class="doc-name">{{ d.filename }}</div>
+        <div class="doc-meta">
+          {{ d.created_at.strftime('%d/%m/%Y %H:%M') }}
+          {% if d.file_size %} · {{ (d.file_size / 1024)|round(0)|int }} Ko{% endif %}
+          {% if d.notes %} · {{ d.notes }}{% endif %}
+          · <em>{{ d.uploaded_by }}</em>
+        </div>
+      </div>
+      <div class="doc-actions">
+        <a href="/p/{{ pl.token }}/documents/{{ d.id }}/download" class="doc-btn doc-btn-dl">{% if lang == 'en' %}Download{% else %}Télécharger{% endif %}</a>
+        {% if d.uploaded_by == 'Client' %}
+        <form method="POST" action="/p/{{ pl.token }}/documents/{{ d.id }}/delete" style="margin:0;">
+          {{ csrf_input(request) }}
+          <button type="submit" class="doc-btn doc-btn-del" onclick="return confirm('{% if lang == 'en' %}Delete this document?{% else %}Supprimer ce document ?{% endif %}')">&#10005;</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<script>
+var fi = document.getElementById('file-input');
+var dz = document.getElementById('drop-zone');
+var fs = document.getElementById('file-selected');
+var ub = document.getElementById('upload-btn');
+fi.addEventListener('change', function() {
+    if (fi.files.length) {
+        fs.textContent = fi.files[0].name;
+        fs.style.display = 'block';
+        ub.style.display = 'inline-block';
+    }
+});
+dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', function() { dz.classList.remove('dragover'); });
+dz.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dz.classList.remove('dragover');
+    if (e.dataTransfer.files.length) {
+        fi.files = e.dataTransfer.files;
+        fs.textContent = e.dataTransfer.files[0].name;
+        fs.style.display = 'block';
+        ub.style.display = 'inline-block';
+    }
+});
+</script>
+{% endblock %}

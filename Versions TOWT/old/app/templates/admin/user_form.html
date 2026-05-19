@@ -1,0 +1,96 @@
+<div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>
+                <i data-lucide="{{ 'user-pen' if edit_user else 'user-plus' }}" style="width:20px;height:20px;"></i>
+                {{ 'Modifier l\'utilisateur' if edit_user else 'Nouvel utilisateur' }}
+            </h3>
+            <button class="modal-close" onclick="closeModal()">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+
+        <form method="POST" 
+              action="{{ '/admin/users/' ~ edit_user.id ~ '/edit' if edit_user else '/admin/users/create' }}"
+              hx-post="{{ '/admin/users/' ~ edit_user.id ~ '/edit' if edit_user else '/admin/users/create' }}"
+              hx-target="#modal-container">
+            {{ csrf_input(request) }}
+            <div class="modal-body">
+                {% if error %}
+                <div class="form-error">
+                    <i data-lucide="alert-circle" style="width:16px;height:16px;"></i>
+                    {{ error }}
+                </div>
+                {% endif %}
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="full_name">Nom complet *</label>
+                        <input type="text" id="full_name" name="full_name" class="form-input"
+                               value="{{ edit_user.full_name if edit_user else '' }}"
+                               placeholder="Jean Dupont" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="username">Identifiant *</label>
+                        <input type="text" id="username" name="username" class="form-input"
+                               value="{{ edit_user.username if edit_user else '' }}"
+                               placeholder="jdupont" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="email">Email *</label>
+                        <input type="email" id="email" name="email" class="form-input"
+                               value="{{ edit_user.email if edit_user else '' }}"
+                               placeholder="jean@towt.eu" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="role">Rôle *</label>
+                        <select id="role" name="role" class="form-select">
+                            {% for r in roles %}
+                            <option value="{{ r.value }}" 
+                                    {% if edit_user and edit_user.role == r.value %}selected{% endif %}>
+                                {{ r.label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="password">
+                        Mot de passe {{ '*' if not edit_user else '(laisser vide pour ne pas changer)' }}
+                    </label>
+                    <input type="password" id="password" name="password" class="form-input"
+                           placeholder="{{ '••••••••' if edit_user else 'Mot de passe' }}"
+                           {{ 'required' if not edit_user else '' }}
+                           minlength="4">
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    {{ 'Enregistrer' if edit_user else 'Créer' }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .form-error {
+        background: #fef2f2;
+        color: #dc2626;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        margin-bottom: 16px;
+        border-left: 3px solid #dc2626;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+</style>

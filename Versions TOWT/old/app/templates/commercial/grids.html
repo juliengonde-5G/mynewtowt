@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Grilles tarifaires{% endblock %}
+{% block page_title %}Grilles tarifaires{% endblock %}
+
+{% block topbar_actions %}
+<a href="/commercial/pricing/clients" class="btn btn-secondary btn-sm"><i data-lucide="users"></i> Clients</a>
+<a href="/commercial/pricing/offers" class="btn btn-secondary btn-sm"><i data-lucide="file-text"></i> Offres</a>
+<a href="/commercial/pricing/grids/create" class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Nouvelle grille</a>
+{% endblock %}
+
+{% block content %}
+<div class="grids-page">
+    <!-- Filters -->
+    <form method="get" action="/commercial/pricing/grids" style="display:flex;gap:12px;align-items:end;margin-bottom:20px;flex-wrap:wrap;">
+        <div class="form-group" style="margin:0;min-width:200px;">
+            <label class="form-label" style="font-size:11px;">Client</label>
+            <select name="client_id" class="form-select" onchange="this.form.submit()">
+                <option value="">Tous les clients</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}" {% if selected_client_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin:0;min-width:150px;">
+            <label class="form-label" style="font-size:11px;">Statut</label>
+            <select name="status" class="form-select" onchange="this.form.submit()">
+                <option value="">Tous</option>
+                <option value="draft" {% if selected_status == 'draft' %}selected{% endif %}>Brouillon</option>
+                <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
+                <option value="expired" {% if selected_status == 'expired' %}selected{% endif %}>Expirée</option>
+                <option value="superseded" {% if selected_status == 'superseded' %}selected{% endif %}>Remplacée</option>
+            </select>
+        </div>
+        {% if selected_client_id or selected_status %}
+        <a href="/commercial/pricing/grids" class="btn btn-secondary btn-sm" style="margin-bottom:2px;">Réinitialiser</a>
+        {% endif %}
+    </form>
+
+    {% if grids %}
+    <div class="table-container">
+        <table class="data-table">
+            <thead><tr>
+                <th>Référence</th><th>Client</th><th>Navire</th><th>Validité</th><th>Routes</th><th>Indice</th><th>Statut</th><th style="text-align:right;">Actions</th>
+            </tr></thead>
+            <tbody>
+                {% for grid in grids %}
+                <tr>
+                    <td>
+                        <a href="/commercial/pricing/grids/{{ grid.id }}" style="color:var(--towt-blue);font-weight:600;font-family:'Poppins',sans-serif;text-decoration:none;">
+                            {{ grid.reference }}
+                        </a>
+                    </td>
+                    <td>
+                        {{ grid.client.name if grid.client else '—' }}
+                        {% if grid.client %}
+                        <br><span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;{% if grid.client.client_type == 'freight_forwarder' %}background:#f3e8ff;color:#7c3aed;{% else %}background:#dcfce7;color:#16a34a;{% endif %}">
+                            {{ 'FF' if grid.client.client_type == 'freight_forwarder' else 'Chargeur' }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size:12px;">{{ grid.vessel.name if grid.vessel else 'Défaut' }}</td>
+                    <td style="font-size:12px;">{{ grid.valid_from }} → {{ grid.valid_to }}</td>
+                    <td style="text-align:center;">
+                        <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:#e0f2fe;color:#0369a1;">{{ grid.lines|length }}</span>
+                    </td>
+                    <td style="font-size:12px;font-weight:500;">
+                        {{ '%.2f'|format(grid.adjustment_index or 1.0) }}
+                        {% set pct = ((grid.adjustment_index or 1.0) - 1) * 100 %}
+                        {% if pct > 0 %}<span style="color:#e67e22;font-size:10px;">(+{{ '%.0f'|format(pct) }}%)</span>
+                        {% elif pct < 0 %}<span style="color:#27ae60;font-size:10px;">({{ '%.0f'|format(pct) }}%)</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if grid.status == 'draft' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:#fff3e0;color:#e65100;">Brouillon</span>
+                        {% elif grid.status == 'active' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:#dcfce7;color:#16a34a;">Active</span>
+                        {% elif grid.status == 'expired' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:#fee2e2;color:#dc2626;">Expirée</span>
+                        {% elif grid.status == 'superseded' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:#f1f5f9;color:#64748b;">Remplacée</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align:right;">
+                        <div style="display:flex;gap:4px;justify-content:flex-end;">
+                            <a href="/commercial/pricing/grids/{{ grid.id }}" class="btn btn-secondary btn-sm" style="font-size:11px;"><i data-lucide="eye" style="width:12px;height:12px;"></i></a>
+                            <a href="/commercial/pricing/grids/{{ grid.id }}/edit" class="btn btn-secondary btn-sm" style="font-size:11px;"><i data-lucide="edit" style="width:12px;height:12px;"></i></a>
+                            {% if grid.status != 'active' %}
+                            <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;color:#e74c3c;"
+                                    onclick="deleteGrid({{ grid.id }}, '{{ grid.reference }}')"
+                                    title="Supprimer"><i data-lucide="trash-2" style="width:12px;height:12px;"></i></button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:48px;color:#999;">
+        <i data-lucide="grid-3x3" style="width:48px;height:48px;margin-bottom:16px;opacity:0.3;"></i>
+        <p>Aucune grille tarifaire{% if selected_client_id or selected_status %} avec ces filtres{% endif %}.</p>
+        <a href="/commercial/pricing/grids/create" class="btn btn-primary btn-sm" style="margin-top:12px;">Créer une grille</a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function deleteGrid(id, ref) {
+    if (!confirm(`Supprimer la grille ${ref} et toutes ses lignes tarifaires ?\n\nCette action est irréversible.`)) return;
+    fetch(`/commercial/pricing/grids/${id}/delete`, { method: 'POST' })
+        .then(r => { if (r.ok) location.reload(); else r.text().then(t => alert('Erreur: ' + t)); })
+        .catch(err => alert('Erreur: ' + err));
+}
+</script>
+{% endblock %}

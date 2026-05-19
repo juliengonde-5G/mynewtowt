@@ -1,0 +1,92 @@
+<div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+    <div class="modal" style="max-width:700px;">
+        <div class="modal-header">
+            <h3>Finances — {{ leg.leg_code }}</h3>
+            <span style="font-size:12px;color:#888;">{{ leg.vessel.name }} · {{ leg.departure_port.locode }} → {{ leg.arrival_port.locode }}</span>
+            <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+        </div>
+        <form method="POST" id="fin-form" action="/finance/legs/{{ leg.id }}/edit">
+            {{ csrf_input(request) }}
+            <div class="modal-body">
+                <div class="fin-section">
+                    <div class="fin-section-title revenue">💰 Chiffre d'affaires</div>
+                    {% if order_revenue > 0 or pax_revenue > 0 %}
+                    <div style="font-size:11px;color:var(--towt-green);margin-bottom:8px;">
+                        {% if order_revenue > 0 %}🚢 Cargo : <strong>{{ order_revenue|eur }} €</strong>{% endif %}
+                        {% if pax_revenue > 0 %} · 🧳 Passagers : <strong>{{ pax_revenue|eur }} €</strong>{% endif %}
+                        {% if order_revenue > 0 or pax_revenue > 0 %} · Total auto : <strong>{{ (order_revenue + pax_revenue)|eur }} €</strong>{% endif %}
+                    </div>
+                    {% endif %}
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">Prévisionnel (€)</label>
+                            <input type="text" name="revenue_forecast" class="form-input fin-input"
+                                   value="{{ fin.revenue_forecast if fin.revenue_forecast else ((order_revenue + pax_revenue) if (order_revenue + pax_revenue) else '') }}"></div>
+                        <div class="form-group"><label class="form-label">Réalisé (€)</label>
+                            <input type="text" name="revenue_actual" class="form-input fin-input"
+                                   value="{{ fin.revenue_actual if fin.revenue_actual else '' }}"></div>
+                    </div>
+                </div>
+                <div class="fin-section">
+                    <div class="fin-section-title cost">⚓ Coûts portuaires</div>
+                    <p style="font-size:10px;color:#aaa;margin-bottom:6px;">Défaut config port : {{ defaults.port_f|eur }} €</p>
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">Prévisionnel (€)</label>
+                            <input type="text" name="port_cost_forecast" class="form-input fin-input"
+                                   value="{{ fin.port_cost_forecast if fin.port_cost_forecast else defaults.port_f }}"></div>
+                        <div class="form-group"><label class="form-label">Réalisé (€)</label>
+                            <input type="text" name="port_cost_actual" class="form-input fin-input"
+                                   value="{{ fin.port_cost_actual if fin.port_cost_actual else '' }}"></div>
+                    </div>
+                </div>
+                <div class="fin-section">
+                    <div class="fin-section-title cost">🏗️ Coût d'escale (à quai)</div>
+                    <p style="font-size:10px;color:#aaa;margin-bottom:6px;">{{ defaults.daily_quay|eur }} €/jour × {{ defaults.quay_days }} jours = <strong>{{ defaults.quay_f|eur }} €</strong></p>
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">Prévisionnel (€)</label>
+                            <input type="text" name="quay_cost_forecast" class="form-input fin-input"
+                                   value="{{ fin.quay_cost_forecast if fin.quay_cost_forecast else defaults.quay_f }}"></div>
+                        <div class="form-group"><label class="form-label">Réalisé (€)</label>
+                            <input type="text" name="quay_cost_actual" class="form-input fin-input"
+                                   value="{{ fin.quay_cost_actual if fin.quay_cost_actual else '' }}"></div>
+                    </div>
+                </div>
+                <div class="fin-section">
+                    <div class="fin-section-title cost">🌊 OPEX mer</div>
+                    <p style="font-size:10px;color:#aaa;margin-bottom:6px;">{{ sea_days }} jours × {{ opex_daily|eur }} €/jour = <strong>{{ defaults.sea_f|eur }} €</strong></p>
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">Prévisionnel (€)</label>
+                            <input type="text" name="sea_cost_forecast" class="form-input fin-input"
+                                   value="{{ fin.sea_cost_forecast if fin.sea_cost_forecast else defaults.sea_f }}"></div>
+                        <div class="form-group"><label class="form-label">Réalisé (€)</label>
+                            <input type="text" name="sea_cost_actual" class="form-input fin-input"
+                                   value="{{ fin.sea_cost_actual if fin.sea_cost_actual else '' }}"></div>
+                    </div>
+                </div>
+                <div class="fin-section">
+                    <div class="fin-section-title cost">📦 Opérations (dockers / manutention)</div>
+                    <p style="font-size:10px;color:#aaa;margin-bottom:6px;">Défaut config port : {{ defaults.ops_f|eur }} €</p>
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">Prévisionnel (€)</label>
+                            <input type="text" name="ops_cost_forecast" class="form-input fin-input"
+                                   value="{{ fin.ops_cost_forecast if fin.ops_cost_forecast else defaults.ops_f }}"></div>
+                        <div class="form-group"><label class="form-label">Réalisé (€)</label>
+                            <input type="text" name="ops_cost_actual" class="form-input fin-input"
+                                   value="{{ fin.ops_cost_actual if fin.ops_cost_actual else '' }}"></div>
+                    </div>
+                </div>
+                <div class="form-group"><label class="form-label">Notes</label>
+                    <textarea name="notes" class="form-input" rows="2">{{ fin.notes if fin.notes else '' }}</textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+                <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Enregistrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+<style>
+    .fin-section{margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #f5f5f5}
+    .fin-section-title{font-size:13px;font-weight:600;margin-bottom:8px}
+    .fin-section-title.revenue{color:#059669}.fin-section-title.cost{color:#DC2626}
+    .fin-input{text-align:right;font-family:'Poppins',monospace}
+</style>

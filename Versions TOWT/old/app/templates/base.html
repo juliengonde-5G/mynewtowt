@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}my_newtowt{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="/static/img/favicon_newtowt.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=DM+Serif+Display&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script>
+    // Auto-inject CSRF token into HTMX requests
+    document.addEventListener('htmx:configRequest', function(evt) {
+        var csrf = document.cookie.split('; ').find(function(c){return c.startsWith('towt_csrf=');});
+        if(csrf) evt.detail.headers['x-csrf-token'] = csrf.split('=')[1];
+    });
+    </script>
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <style>
+        .sidebar-clock{padding:6px 16px 10px;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;flex-direction:column;gap:2px}
+        .clock-row{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:rgba(255,255,255,0.7)}
+        .clock-label{font-weight:500;text-transform:uppercase;font-size:9px;letter-spacing:0.5px;color:rgba(255,255,255,0.5);min-width:40px}
+        .clock-time{font-family:'Manrope',system-ui,sans-serif;font-size:12px;font-weight:600;color:rgba(255,255,255,0.9);letter-spacing:0.5px}
+        .sidebar.collapsed .sidebar-clock{display:none}
+        .clock-port-separator{border:none;border-top:1px solid rgba(255,255,255,0.08);margin:2px 0}
+        .tz-input-wrap{display:flex;gap:6px;align-items:center}
+        .tz-input-wrap input[type="time"],.tz-input-wrap input[type="datetime-local"]{flex:1}
+        .tz-select{padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:11px;font-family:'Manrope',system-ui,sans-serif;background:white;min-width:90px}
+        .tz-select:focus{border-color:var(--towt-blue);outline:none}
+        .tz-utc-hint{font-size:10px;color:#888;margin-top:2px}
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    {% block body %}
+    <div class="app-layout">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-logo">
+                    <img src="/static/img/logo_newtowt_white.png" alt="my_newtowt" class="logo-img">
+                </a>
+                <div class="sidebar-clock" id="sidebar-clock"
+                     data-port-tz="{{ port_timezone|default('UTC') }}"
+                     data-port-label="{{ port_tz_label|default('Port') }}">
+                    <div class="clock-row"><span class="clock-label">UTC</span><span class="clock-time" id="clock-utc">--:--</span></div>
+                    <div class="clock-row"><span class="clock-label">Paris</span><span class="clock-time" id="clock-paris">--:--</span></div>
+                    <div id="clock-port-rows"></div>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <span class="nav-section-label">Navigation</span>
+                    <a href="/" class="nav-item {% if active_module == 'dashboard' %}active{% endif %}">
+                        <i data-lucide="layout-dashboard"></i><span>{{ t('nav_dashboard', lang|default('fr')) }}</span>
+                    </a>
+                    {% if has_any_access(user, 'planning') %}
+                    <a href="/planning" class="nav-item {% if active_module == 'planning' %}active{% endif %}">
+                        <i data-lucide="map"></i><span>{{ t('nav_planning', lang|default('fr')) }}</span>
+                    </a>
+                    {% endif %}
+                    {% if has_any_access(user, 'commercial') %}
+                    <a href="/commercial" class="nav-item {% if active_module == 'commercial' %}active{% endif %}">
+                        <i data-lucide="package"></i><span>{{ t('nav_commercial', lang|default('fr')) }}</span>
+                    </a>
+                    {% endif %}
+                    {% if has_any_access(user, 'escale') %}
+                    <a href="/escale" class="nav-item {% if active_module == 'escale' %}active{% endif %}">
+                        <i data-lucide="anchor"></i><span>{{ t('nav_escale', lang|default('fr')) }}</span>
+                    </a>
+                    {% endif %}
+                    {% if has_any_access(user, 'finance') %}
+                    <a href="/finance" class="nav-item {% if active_module == 'finance' %}active{% endif %}">
+                        <i data-lucide="euro"></i><span>{{ t('nav_finance', lang|default('fr')) }}</span>
+                    </a>
+                    {% endif %}
+                    {% if has_any_access(user, 'kpi') %}
+                    <a href="/kpi" class="nav-item {% if active_module == 'kpi' %}active{% endif %}">
+                        <i data-lucide="bar-chart-3"></i><span>{{ t('nav_kpi', lang|default('fr')) }}</span>
+                    </a>
+                    {% endif %}
+                    {% if has_any_access(user, 'captain') %}
+                    <a href="/onboard" class="nav-item {% if active_module == 'captain' %}active{% endif %}">
+                        <i data-lucide="compass"></i><span>On Board</span>
+                    </a>
+                    {% endif %}
+                    {% if has_any_access(user, 'crew') %}
+                    <a href="/crew" class="nav-item {% if active_module == 'crew' %}active{% endif %}">
+                        <i data-lucide="users"></i><span>{{ t('nav_crew', lang|default('fr')) }}</span>
+                    </a>
+                    {% endif %}
+                    {% if has_any_access(user, 'cargo') %}
+                    <a href="/cargo" class="nav-item {% if active_module == 'cargo' %}active{% endif %}">
+                        <i data-lucide="file-box"></i><span>{{ t('nav_cargo', lang|default('fr')) }}</span>
+                    </a>
+                    {% endif %}
+                    {% if has_any_access(user, 'claims') %}
+                    <a href="/claims" class="nav-item {% if active_module == 'claims' %}active{% endif %}">
+                        <i data-lucide="shield-alert"></i><span>Claims</span>
+                    </a>
+                    {% endif %}
+                    {% if has_any_access(user, 'mrv') %}
+                    <a href="/mrv" class="nav-item {% if active_module == 'mrv' %}active{% endif %}">
+                        <i data-lucide="fuel"></i><span>MRV Fuel</span>
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="nav-section">
+                    <span class="nav-section-label">Administration</span>
+                    <a href="/admin/my-account" class="nav-item {% if active_module == 'my-account' %}active{% endif %}">
+                        <i data-lucide="user-cog"></i><span>Mon compte</span>
+                    </a>
+                    {% if user and user.role in ('administrateur', 'admin', 'data_analyst') %}
+                    <a href="/admin/settings" class="nav-item {% if active_module == 'settings' %}active{% endif %}">
+                        <i data-lucide="settings"></i><span>{{ t('nav_settings', lang|default('fr')) }}</span>
+                    </a>
+                    {% endif %}
+                </div>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar"><i data-lucide="user"></i></div>
+                    <div class="user-details">
+                        <span class="user-name">{{ user.full_name if user else '' }}</span>
+                        <span class="user-role">{{ user.role if user else '' }}</span>
+                    </div>
+                </div>
+                <a href="/logout" class="nav-item logout-btn" hx-boost="false">
+                    <i data-lucide="log-out"></i><span>Déconnexion</span>
+                </a>
+            </div>
+        </aside>
+        <main class="main-content">
+            <header class="topbar">
+                <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Basculer la barre latérale">
+                    <i data-lucide="menu"></i>
+                </button>
+                <div class="topbar-title"><h1>{% block page_title %}Tableau de bord{% endblock %}</h1></div>
+                <div class="topbar-actions">{% block topbar_actions %}{% endblock %}</div>
+            </header>
+            <div class="page-content" id="main-content">{% block content %}{% endblock %}</div>
+        </main>
+    </div>
+    {% endblock %}
+    <div id="modal-container"></div>
+    <div id="toast-container" class="toast-container"></div>
+    <script>
+        lucide.createIcons();
+        document.addEventListener('htmx:afterSwap', function(){lucide.createIcons();});
+
+        /* Sidebar toggle — responsive-aware.
+           On desktop (>1024px): toggles `.collapsed` (sidebar is wide by default).
+           On tablet (769-1024px): toggles `.expanded` (sidebar is collapsed by default).
+           On phone (≤768px): sidebar is always collapsed (class is ignored by CSS).
+           User preference is persisted in localStorage and re-applied on resize. */
+        function _isTablet(){
+            return window.matchMedia('(min-width: 769px) and (max-width: 1024px)').matches;
+        }
+        function toggleSidebar(){
+            var sb = document.getElementById('sidebar');
+            if (!sb) return;
+            if (_isTablet()){
+                sb.classList.toggle('expanded');
+                localStorage.setItem('towt_sidebar_tablet', sb.classList.contains('expanded') ? 'expanded' : 'collapsed');
+            } else {
+                sb.classList.toggle('collapsed');
+                localStorage.setItem('towt_sidebar_desktop', sb.classList.contains('collapsed') ? 'collapsed' : 'expanded');
+            }
+        }
+        function _applySidebarPref(){
+            var sb = document.getElementById('sidebar');
+            if (!sb) return;
+            sb.classList.remove('expanded', 'collapsed');
+            if (_isTablet()){
+                if (localStorage.getItem('towt_sidebar_tablet') === 'expanded') {
+                    sb.classList.add('expanded');
+                }
+            } else {
+                if (localStorage.getItem('towt_sidebar_desktop') === 'collapsed') {
+                    sb.classList.add('collapsed');
+                }
+            }
+        }
+        _applySidebarPref();
+        window.addEventListener('resize', _applySidebarPref);
+
+        function showToast(message, type){
+            type = type || 'success';
+            var c = document.getElementById('toast-container');
+            var t = document.createElement('div');
+            t.className = 'toast toast-' + type;
+            t.innerHTML = '<span>' + message + '</span><button onclick="this.parentElement.remove()">×</button>';
+            c.appendChild(t);
+            setTimeout(function(){t.remove();},4000);
+        }
+        // Prevent double-submit on all forms
+        document.addEventListener('submit', function(e) {
+            var form = e.target;
+            var btn = form.querySelector('button[type="submit"], input[type="submit"]');
+            if (btn && !btn.disabled) {
+                btn.disabled = true;
+                btn.style.opacity = '0.6';
+                setTimeout(function() { btn.disabled = false; btn.style.opacity = '1'; }, 5000);
+            }
+        });
+    </script>
+    <script>
+    /* ═══ SIDEBAR CLOCK — UTC / Paris / Next port(s) ═══ */
+    (function(){
+        var el = document.getElementById('sidebar-clock');
+        if(!el) return;
+        var portClocks = []; // [{tz, label, elId}]
+
+        function fmt(tz){
+            try {
+                return new Date().toLocaleTimeString('fr-FR',{timeZone:tz,hour:'2-digit',minute:'2-digit',hour12:false});
+            } catch(e){ return '--:--'; }
+        }
+        function tick(){
+            document.getElementById('clock-utc').textContent = fmt('UTC');
+            document.getElementById('clock-paris').textContent = fmt('Europe/Paris');
+            portClocks.forEach(function(pc){
+                var e = document.getElementById(pc.elId);
+                if(e) e.textContent = fmt(pc.tz);
+            });
+        }
+        tick();
+        setInterval(tick, 30000); // update every 30s (no seconds displayed)
+
+        // Fetch next destination port clocks for vessels at sea
+        fetch('/api/ports/next-clocks')
+            .then(function(r){ return r.json(); })
+            .then(function(clocks){
+                var container = document.getElementById('clock-port-rows');
+                if(!container || !clocks.length) return;
+                container.innerHTML = '<hr class="clock-port-separator">';
+                clocks.forEach(function(c, i){
+                    var elId = 'clock-port-' + i;
+                    var row = document.createElement('div');
+                    row.className = 'clock-row';
+                    row.innerHTML = '<span class="clock-label">' + c.port_name + '</span><span class="clock-time" id="' + elId + '">--:--</span>';
+                    container.appendChild(row);
+                    portClocks.push({tz: c.timezone, label: c.port_name, elId: elId});
+                });
+                tick(); // immediate update
+            })
+            .catch(function(){});
+    })();
+
+    /* ═══ TIMEZONE CONVERSION for time/datetime inputs ═══ */
+    window.TOWT_TZ = {
+        portTz: (document.getElementById('sidebar-clock')||{}).dataset ? document.getElementById('sidebar-clock').dataset.portTz || 'UTC' : 'UTC',
+
+        /* Convert a HH:MM string from one tz to another using a reference date */
+        convertTime: function(timeStr, fromTz, toTz, refDate) {
+            if(!timeStr || timeStr.indexOf(':')<0) return timeStr;
+            try {
+                var parts = timeStr.split(':');
+                var d = refDate ? new Date(refDate) : new Date();
+                // Build an ISO string in the fromTz and convert to toTz
+                var isoStr = d.toISOString().substring(0,10) + 'T' + timeStr + ':00';
+                // Use Intl to get offset
+                var fromOffset = this._getOffset(fromTz, d);
+                var toOffset = this._getOffset(toTz, d);
+                var diffMin = toOffset - fromOffset;
+                var h = parseInt(parts[0]), m = parseInt(parts[1]);
+                var totalMin = h * 60 + m + diffMin;
+                totalMin = ((totalMin % 1440) + 1440) % 1440;
+                var nh = Math.floor(totalMin / 60);
+                var nm = totalMin % 60;
+                return (nh<10?'0':'') + nh + ':' + (nm<10?'0':'') + nm;
+            } catch(e){ return timeStr; }
+        },
+
+        /* Convert a datetime-local string from one tz to another */
+        convertDatetime: function(dtStr, fromTz, toTz) {
+            if(!dtStr) return dtStr;
+            try {
+                var fromOffset = this._getOffset(fromTz, new Date(dtStr));
+                var toOffset = this._getOffset(toTz, new Date(dtStr));
+                var diffMs = (toOffset - fromOffset) * 60000;
+                var d = new Date(new Date(dtStr).getTime() + diffMs);
+                var y = d.getFullYear();
+                var mo = ('0'+(d.getMonth()+1)).slice(-2);
+                var da = ('0'+d.getDate()).slice(-2);
+                var h = ('0'+d.getHours()).slice(-2);
+                var mi = ('0'+d.getMinutes()).slice(-2);
+                return y+'-'+mo+'-'+da+'T'+h+':'+mi;
+            } catch(e){ return dtStr; }
+        },
+
+        /* Get timezone offset in minutes for a given IANA tz at a specific date */
+        _getOffset: function(tz, date) {
+            try {
+                var d = date || new Date();
+                var utcStr = d.toLocaleString('en-US', {timeZone:'UTC'});
+                var tzStr = d.toLocaleString('en-US', {timeZone:tz});
+                var utcDate = new Date(utcStr);
+                var tzDate = new Date(tzStr);
+                return Math.round((tzDate - utcDate) / 60000);
+            } catch(e){ return 0; }
+        },
+
+        /* Resolve 'port_local' to actual IANA timezone */
+        resolve: function(tzValue) {
+            if(tzValue === 'port_local') return this.portTz;
+            return tzValue;
+        },
+
+        /* Get UTC display for a time in a given tz */
+        utcLabel: function(timeStr, tzName, refDate) {
+            if(!timeStr || tzName === 'UTC') return '';
+            var utcTime = this.convertTime(timeStr, this.resolve(tzName), 'UTC', refDate);
+            return utcTime + ' UTC';
+        },
+
+        /* Initialize all .tz-select elements on the page */
+        initAll: function() {
+            document.querySelectorAll('.tz-select').forEach(function(sel){
+                sel.removeEventListener('change', TOWT_TZ._onTzChange);
+                sel.addEventListener('change', TOWT_TZ._onTzChange);
+            });
+            document.querySelectorAll('.tz-input-wrap input[type="time"], .tz-input-wrap input[type="datetime-local"]').forEach(function(inp){
+                inp.removeEventListener('change', TOWT_TZ._onTimeChange);
+                inp.addEventListener('change', TOWT_TZ._onTimeChange);
+            });
+        },
+
+        _onTzChange: function(e) {
+            var wrap = e.target.closest('.tz-input-wrap');
+            if(!wrap) return;
+            var hint = wrap.querySelector('.tz-utc-hint') || wrap.parentElement.querySelector('.tz-utc-hint');
+            var inp = wrap.querySelector('input[type="time"], input[type="datetime-local"]');
+            if(hint && inp && inp.value) {
+                var tzVal = e.target.value;
+                if(inp.type === 'time') {
+                    hint.textContent = TOWT_TZ.utcLabel(inp.value, tzVal);
+                } else {
+                    var utcDt = TOWT_TZ.convertDatetime(inp.value, TOWT_TZ.resolve(tzVal), 'UTC');
+                    hint.textContent = utcDt ? utcDt.replace('T',' ') + ' UTC' : '';
+                }
+            }
+        },
+
+        _onTimeChange: function(e) {
+            var wrap = e.target.closest('.tz-input-wrap');
+            if(!wrap) return;
+            var sel = wrap.querySelector('.tz-select');
+            var hint = wrap.querySelector('.tz-utc-hint') || wrap.parentElement.querySelector('.tz-utc-hint');
+            if(hint && sel && e.target.value) {
+                var tzVal = sel.value;
+                if(e.target.type === 'time') {
+                    hint.textContent = TOWT_TZ.utcLabel(e.target.value, tzVal);
+                } else {
+                    var utcDt = TOWT_TZ.convertDatetime(e.target.value, TOWT_TZ.resolve(tzVal), 'UTC');
+                    hint.textContent = utcDt ? utcDt.replace('T',' ') + ' UTC' : '';
+                }
+            }
+        }
+    };
+    document.addEventListener('DOMContentLoaded', function(){ TOWT_TZ.initAll(); });
+    document.addEventListener('htmx:afterSwap', function(){ TOWT_TZ.initAll(); });
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

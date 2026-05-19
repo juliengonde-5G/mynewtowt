@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Bill of Lading — {{ bl_number }}</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Poppins',system-ui,-apple-system,sans-serif;font-size:11px;color:#333;padding:20px;max-width:900px;margin:0 auto}
+        .no-print{margin-bottom:20px;text-align:center}
+        .no-print button{padding:10px 30px;background:#095561;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
+        .bol-header{border:2px solid #095561;padding:16px;margin-bottom:2px;display:flex;justify-content:space-between}
+        .bol-header h1{font-size:18px;color:#095561}
+        .bol-header .bol-ref{text-align:right;font-size:12px}
+        .bol-header .bol-ref strong{font-size:16px;display:block}
+        .bol-grid{display:grid;grid-template-columns:1fr 1fr;border:1px solid #095561}
+        .bol-cell{padding:10px 14px;border:1px solid #ccc;min-height:60px}
+        .bol-cell .label{font-size:9px;text-transform:uppercase;font-weight:700;color:#095561;margin-bottom:3px;letter-spacing:0.3px}
+        .bol-cell .value{font-size:11px;white-space:pre-line}
+        .bol-cell.full{grid-column:1/-1}
+        table.cargo-table{width:100%;border-collapse:collapse;margin-top:2px;border:1px solid #095561}
+        table.cargo-table th{background:#095561;color:white;padding:6px 8px;font-size:9px;text-transform:uppercase;text-align:left}
+        table.cargo-table td{padding:5px 8px;border:1px solid #ccc;font-size:10px}
+        .bol-footer{margin-top:16px;border:1px solid #095561;padding:12px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+        .sig-box{min-height:80px;border:1px solid #ddd;border-radius:4px;padding:8px}
+        .sig-box .label{font-size:9px;text-transform:uppercase;font-weight:700;color:#095561;margin-bottom:4px}
+        .obl-info{margin-top:8px;padding:8px 14px;border:1px solid #095561;background:#f0f7f8;font-size:10px;display:flex;justify-content:space-between}
+        .fine-print{font-size:8px;color:#999;margin-top:12px;text-align:center}
+        @media print{.no-print{display:none !important}}
+    </style>
+</head>
+<body>
+    <div class="no-print">
+        <button onclick="window.print()">Print / Save as PDF</button>
+    </div>
+
+    <div class="bol-header">
+        <div>
+            <h1>BILL OF LADING</h1>
+            <p style="font-size:11px;color:#666;">TOWT — Transport à la Voile</p>
+            <img src="/static/logo_towt.png" alt="TOWT" style="height:35px;margin-top:6px;" onerror="this.style.display='none'">
+        </div>
+        <div class="bol-ref">
+            <strong>B/L N°</strong>
+            {{ bl_number }}
+            <br><br>
+            <span style="font-size:10px;color:#888;">Date: {{ now.strftime('%d/%m/%Y') }}</span>
+        </div>
+    </div>
+
+    <div class="bol-grid">
+        <div class="bol-cell">
+            <div class="label">Shipper / Expéditeur</div>
+            <div class="value">{{ shipper_address }}</div>
+        </div>
+        <div class="bol-cell">
+            <div class="label">Booking Reference</div>
+            <div class="value">{{ pl.order.reference }}</div>
+        </div>
+        <div class="bol-cell">
+            <div class="label">Consignee / Destinataire</div>
+            <div class="value">{{ consignee_address }}</div>
+        </div>
+        <div class="bol-cell">
+            <div class="label">Notify Party</div>
+            <div class="value">{{ notify_address }}</div>
+        </div>
+        {% if pl.order.leg %}
+        <div class="bol-cell">
+            <div class="label">Vessel / Navire</div>
+            <div class="value">{{ pl.order.leg.vessel.name }}</div>
+        </div>
+        <div class="bol-cell">
+            <div class="label">Voyage N°</div>
+            <div class="value">{{ pl.order.leg.leg_code }}</div>
+        </div>
+        <div class="bol-cell">
+            <div class="label">Port of Loading (POL)</div>
+            <div class="value">{{ pl.order.leg.departure_port.name }} ({{ pl.order.leg.departure_port.locode }})</div>
+        </div>
+        <div class="bol-cell">
+            <div class="label">Port of Discharge (POD)</div>
+            <div class="value">{{ pl.order.leg.arrival_port.name }} ({{ pl.order.leg.arrival_port.locode }})</div>
+        </div>
+        {% endif %}
+    </div>
+
+    <table class="cargo-table">
+        <thead>
+            <tr>
+                <th>Batch</th><th>Description of Goods</th><th>Pallet Type</th>
+                <th>Packages</th><th>Pallets</th><th>Gross Weight (kg)</th><th>Dims (cm)</th>
+                <th>Volume (m³)</th><th>IMO Class</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set total_pallets = namespace(v=0) %}
+            {% set total_weight = namespace(v=0) %}
+            {% set total_packages = namespace(v=0) %}
+            {% for batch in pl.batches %}
+            <tr>
+                <td>#{{ batch.batch_number }}</td>
+                <td>{{ batch.description_of_goods or batch.type_of_goods or '—' }}{% if batch.bio_products == 'Yes' %} BIO{% endif %}</td>
+                <td>{{ batch.pallet_type or '—' }}</td>
+                <td>{{ batch.cases_quantity or '—' }}</td>
+                <td>{{ batch.pallet_quantity or '—' }}</td>
+                <td>{{ batch.weight_kg or '—' }}</td>
+                <td>{{ batch.length_cm or '—' }}×{{ batch.width_cm or '—' }}×{{ batch.height_cm or '—' }}</td>
+                <td>{{ batch.volume_m3 or '—' }}</td>
+                <td>{{ batch.imo_product_class or 'NDG' }}</td>
+            </tr>
+            {% if batch.pallet_quantity %}{% set total_pallets.v = total_pallets.v + batch.pallet_quantity %}{% endif %}
+            {% if batch.weight_kg %}{% set total_weight.v = total_weight.v + batch.weight_kg %}{% endif %}
+            {% if batch.cases_quantity %}{% set total_packages.v = total_packages.v + batch.cases_quantity %}{% endif %}
+            {% endfor %}
+            <tr style="font-weight:700;background:#f0f7f8;">
+                <td colspan="3" style="text-align:right;">TOTAL</td>
+                <td>{{ total_packages.v or '—' }}</td>
+                <td>{{ total_pallets.v }}</td>
+                <td>{{ total_weight.v }} kg</td>
+                <td colspan="3"></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="obl-info">
+        <span><strong>Number of Original Bills of Lading:</strong> 3 (THREE)</span>
+        <span><strong>B/L Reference:</strong> {{ bl_number }}</span>
+    </div>
+
+    <div class="bol-footer">
+        <div class="sig-box">
+            <div class="label">Shipper's Signature</div>
+        </div>
+        <div class="sig-box">
+            <div class="label">Carrier's Signature (TOWT)</div>
+        </div>
+        <div class="sig-box">
+            <div class="label">Date & Place of Issue</div>
+            <div style="margin-top:30px;font-size:10px;">{{ now.strftime('%d/%m/%Y') }}</div>
+        </div>
+    </div>
+
+    <div class="fine-print">
+        TOWT SAS — Transport à la Voile · This Bill of Lading is subject to the provisions of the Hague-Visby Rules.
+        · Number of Original Bills of Lading: THREE (3)
+    </div>
+</body>
+</html>

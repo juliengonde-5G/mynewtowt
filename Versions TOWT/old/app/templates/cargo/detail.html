@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Packing List {{ pl.order.reference }}{% endblock %}
+{% block page_title %}Packing List — {{ pl.order.reference }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/cargo" class="btn btn-secondary btn-sm"><i data-lucide="arrow-left"></i> Retour</a>
+<a href="/cargo/{{ pl.id }}/history" class="btn btn-secondary btn-sm"><i data-lucide="history"></i> Historique</a>
+<a href="/cargo/{{ pl.id }}/excel" class="btn btn-secondary btn-sm"><i data-lucide="file-spreadsheet"></i> Excel</a>
+<a href="/cargo/{{ pl.id }}/arrival-notice" class="btn btn-secondary btn-sm"><i data-lucide="ship"></i> Arrival Notice</a>
+{% if not pl.is_locked %}
+<button class="btn btn-secondary btn-sm" onclick="toggleEditMode()" id="edit-toggle-btn"><i data-lucide="pencil"></i> Modifier</button>
+<button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-modal').style.display='flex'"><i data-lucide="upload"></i> Import Excel</button>
+<form method="POST" action="/cargo/{{ pl.id }}/lock" style="display:inline;">
+    {{ csrf_input(request) }}
+    <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="lock"></i> Verrouiller</button>
+</form>
+{% else %}
+<form method="POST" action="/cargo/{{ pl.id }}/unlock" style="display:inline;">
+    {{ csrf_input(request) }}
+    <button type="submit" class="btn btn-secondary btn-sm"><i data-lucide="unlock"></i> Déverrouiller</button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="cargo-detail" id="cargo-detail">
+    {% if imdg_warnings %}
+    <div style="background:rgba(220,38,38,0.06);border:1px solid rgba(220,38,38,0.2);border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+        <div style="font-weight:600;font-size:12px;color:#DC2626;margin-bottom:6px;">⚠️ IMDG — Marchandises dangereuses : champs requis manquants</div>
+        {% for w in imdg_warnings %}
+        <div style="font-size:11px;color:#991B1B;padding:2px 0;">• {{ w }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    <div class="summary-bar">
+        <div class="summary-item"><span class="summary-label">Commande</span><span class="summary-value" style="font-family:monospace;">{{ pl.order.reference }}</span></div>
+        <div class="summary-item"><span class="summary-label">Client</span><span class="summary-value">{{ pl.order.client_name }}</span></div>
+        {% if pl.order.leg %}
+        <div class="summary-item"><span class="summary-label">Voyage</span><span class="summary-value">{{ pl.order.leg.leg_code }} — {{ pl.order.leg.vessel.name }}</span></div>
+        <div class="summary-item"><span class="summary-label">Route</span><span class="summary-value">{{ pl.order.leg.departure_port.country_code|flag }} {{ pl.order.leg.departure_port.locode }} → {{ pl.order.leg.arrival_port.country_code|flag }} {{ pl.order.leg.arrival_port.locode }}</span></div>
+        {% endif %}
+        <div class="summary-item"><span class="summary-label">Statut</span>
+            {% if pl.status == 'draft' %}<span class="badge badge-draft">Brouillon</span>
+            {% elif pl.status == 'submitted' %}<span class="badge badge-submitted">Soumis</span>
+            {% elif pl.status == 'reviewed' %}<span class="badge badge-reviewed">Examiné</span>
+            {% elif pl.status == 'locked' %}<span class="badge badge-locked">Verrouillé</span>{% endif %}
+        </div>
+        <div class="summary-item"><span class="summary-label">Complétude</span>
+            <div class="progress-bar" style="width:120px;"><div class="progress-fill" style="width:{{ pl.completion_pct }}%"></div><span class="progress-text">{{ pl.completion_pct }}%</span></div>
+        </div>
+        <div class="summary-item"><span class="summary-label">Lien client</span>
+            <input type="text" value="{{ site_url }}/p/{{ pl.token }}" class="form-input" style="font-size:10px;padding:4px 6px;width:220px;" readonly onclick="this.select()">
+        </div>
+    </div>
+
+    {% set total_batch_palettes = pl.batches|map(attribute='pallet_quantity')|select('ne', None)|sum %}
+    {% set order_palettes = pl.order.quantity_palettes or 0 %}
+    {% if total_batch_palettes != order_palettes and pl.batches|length > 0 and (total_batch_palettes > 0 or order_palettes > 0) %}
+    <div class="palette-alert {% if total_batch_palettes > order_palettes %}over{% else %}under{% endif %}">
+        ⚠️ <strong>Écart palettes :</strong> {{ total_batch_palettes }} dans les batchs vs {{ order_palettes }} commandée{{ 's' if order_palettes != 1 }}.
+        {% if total_batch_palettes > order_palettes %}Excédent de {{ total_batch_palettes - order_palettes }}.
+        {% else %}Manque {{ order_palettes - total_batch_palettes }}.{% endif %}
+    </div>
+    {% elif total_batch_palettes == order_palettes and order_palettes > 0 %}
+    <div class="palette-alert ok">✅ {{ total_batch_palettes }}/{{ order_palettes }} palettes — Conforme</div>
+    {% endif %}
+
+    <form method="POST" action="/cargo/{{ pl.id }}/edit" id="edit-form">
+        {{ csrf_input(request) }}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 12px;">
+        <h3 style="font-size:16px;margin:0;">📦 Batchs ({{ pl.batches|length }})</h3>
+        <button type="submit" class="btn btn-primary edit-actions" style="padding:6px 16px;font-size:12px;">💾 Enregistrer les modifications</button>
+    </div>
+
+    {% for batch in pl.batches %}
+    {% set p = 'batch_' ~ batch.id ~ '_' %}
+    <div class="batch-card {% if pl.is_locked %}locked{% endif %}">
+        <div class="batch-header">
+            <h4>Batch #{{ batch.batch_number }}{% if batch.customer_batch_id %} — {{ batch.customer_batch_id }}{% endif %}</h4>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <a href="/cargo/{{ pl.id }}/bol/{{ batch.id }}" class="btn btn-sm btn-primary" title="Generer le Bill of Lading pour ce batch"><i data-lucide="file-text" style="width:14px;height:14px;"></i> BL</a>
+                <span style="font-size:11px;color:#888;">{% if batch.pallet_quantity %}{{ batch.pallet_quantity }} pal.{% endif %}{% if batch.weight_kg %} · {{ batch.weight_kg }} kg{% endif %}</span>
+            </div>
+        </div>
+        <div class="batch-grid">
+            <div class="batch-section">
+                <h5>🚢 Voyage (TOWT)</h5>
+                <div class="field-row"><span class="fl">Voyage</span><span class="fv">{{ batch.voyage_id or '—' }}</span></div>
+                <div class="field-row"><span class="fl">Navire</span><span class="fv">{{ batch.vessel or '—' }}</span></div>
+                <div class="field-row"><span class="fl">Date charg.</span><span class="fv">{{ batch.loading_date.strftime('%d/%m/%Y') if batch.loading_date else '—' }}</span></div>
+                <div class="field-row"><span class="fl">POL</span><span class="fv">{{ batch.pol_code or '—' }}</span></div>
+                <div class="field-row"><span class="fl">POD</span><span class="fv">{{ batch.pod_code or '—' }}</span></div>
+                <div class="field-row"><span class="fl">Booking</span><span class="fv">{{ batch.booking_confirmation or '—' }}</span></div>
+                <div class="field-row"><span class="fl">Fret/pal.</span><span class="fv">{{ batch.freight_rate or '—' }} €</span></div>
+                <div class="field-row"><span class="fl">N° BL</span><span class="fv" style="font-weight:600;color:var(--towt-blue);">{{ batch.bill_of_lading_id or '—' }}</span></div>
+            </div>
+            <div class="batch-section">
+                <h5>👤 Client</h5>
+                <div class="field-row"><span class="fl">Client</span><span class="fv view-val {% if not batch.customer_name %}missing{% endif %}">{{ batch.customer_name or '⚠' }}</span><input type="text" name="{{ p }}customer_name" value="{{ batch.customer_name or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Transitaire</span><span class="fv view-val">{{ batch.freight_forwarder or '—' }}</span><input type="text" name="{{ p }}freight_forwarder" value="{{ batch.freight_forwarder or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Code trans.</span><span class="fv view-val">{{ batch.code_transitaire or '—' }}</span><input type="text" name="{{ p }}code_transitaire" value="{{ batch.code_transitaire or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">N° PO</span><span class="fv view-val">{{ batch.po_number or '—' }}</span><input type="text" name="{{ p }}po_number" value="{{ batch.po_number or '' }}" class="form-input edit-input"></div>
+            </div>
+            <div class="batch-section">
+                <h5>📤 Expéditeur</h5>
+                <div class="field-row"><span class="fl">Nom</span><span class="fv view-val {% if not batch.shipper_name %}missing{% endif %}">{{ batch.shipper_name or '⚠' }}</span><input type="text" name="{{ p }}shipper_name" value="{{ batch.shipper_name or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Adresse</span><span class="fv view-val {% if not batch.shipper_address %}missing{% endif %}">{{ batch.shipper_address or '⚠' }}</span><input type="text" name="{{ p }}shipper_address" value="{{ batch.shipper_address or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">CP</span><span class="fv view-val {% if not batch.shipper_postal %}missing{% endif %}">{{ batch.shipper_postal or '⚠' }}</span><input type="text" name="{{ p }}shipper_postal" value="{{ batch.shipper_postal or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Ville</span><span class="fv view-val {% if not batch.shipper_city %}missing{% endif %}">{{ batch.shipper_city or '⚠' }}</span><input type="text" name="{{ p }}shipper_city" value="{{ batch.shipper_city or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Pays</span><span class="fv view-val {% if not batch.shipper_country %}missing{% endif %}">{{ batch.shipper_country or '⚠' }}</span><input type="text" name="{{ p }}shipper_country" value="{{ batch.shipper_country or '' }}" class="form-input edit-input"></div>
+                <h5 style="margin-top:10px;">🔔 Notify</h5>
+                <div class="field-row"><span class="fl">Nom</span><span class="fv view-val {% if not batch.notify_name %}missing{% endif %}">{{ batch.notify_name or '⚠' }}</span><input type="text" name="{{ p }}notify_name" value="{{ batch.notify_name or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Adresse</span><span class="fv view-val {% if not batch.notify_address %}missing{% endif %}">{{ batch.notify_address or '⚠' }}</span><input type="text" name="{{ p }}notify_address" value="{{ batch.notify_address or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">CP</span><span class="fv view-val {% if not batch.notify_postal %}missing{% endif %}">{{ batch.notify_postal or '⚠' }}</span><input type="text" name="{{ p }}notify_postal" value="{{ batch.notify_postal or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Ville</span><span class="fv view-val {% if not batch.notify_city %}missing{% endif %}">{{ batch.notify_city or '⚠' }}</span><input type="text" name="{{ p }}notify_city" value="{{ batch.notify_city or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Pays</span><span class="fv view-val {% if not batch.notify_country %}missing{% endif %}">{{ batch.notify_country or '⚠' }}</span><input type="text" name="{{ p }}notify_country" value="{{ batch.notify_country or '' }}" class="form-input edit-input"></div>
+                <h5 style="margin-top:10px;">📥 Consignee</h5>
+                <div class="field-row"><span class="fl">Nom</span><span class="fv view-val {% if not batch.consignee_name %}missing{% endif %}">{{ batch.consignee_name or '⚠' }}</span><input type="text" name="{{ p }}consignee_name" value="{{ batch.consignee_name or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Adresse</span><span class="fv view-val {% if not batch.consignee_address %}missing{% endif %}">{{ batch.consignee_address or '⚠' }}</span><input type="text" name="{{ p }}consignee_address" value="{{ batch.consignee_address or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">CP</span><span class="fv view-val {% if not batch.consignee_postal %}missing{% endif %}">{{ batch.consignee_postal or '⚠' }}</span><input type="text" name="{{ p }}consignee_postal" value="{{ batch.consignee_postal or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Ville</span><span class="fv view-val {% if not batch.consignee_city %}missing{% endif %}">{{ batch.consignee_city or '⚠' }}</span><input type="text" name="{{ p }}consignee_city" value="{{ batch.consignee_city or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Pays</span><span class="fv view-val {% if not batch.consignee_country %}missing{% endif %}">{{ batch.consignee_country or '⚠' }}</span><input type="text" name="{{ p }}consignee_country" value="{{ batch.consignee_country or '' }}" class="form-input edit-input"></div>
+            </div>
+            <div class="batch-section">
+                <h5>📦 Marchandise</h5>
+                <div class="field-row"><span class="fl">Palette</span><span class="fv view-val">{{ batch.pallet_type or '—' }}</span><input type="text" name="{{ p }}pallet_type" value="{{ batch.pallet_type or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Nature</span><span class="fv view-val {% if not batch.type_of_goods %}missing{% endif %}">{{ batch.type_of_goods or '⚠' }}</span><input type="text" name="{{ p }}type_of_goods" value="{{ batch.type_of_goods or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Description</span><span class="fv view-val">{{ batch.description_of_goods or '—' }}</span><input type="text" name="{{ p }}description_of_goods" value="{{ batch.description_of_goods or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Bio</span><span class="fv view-val">{{ batch.bio_products or '—' }}</span><input type="text" name="{{ p }}bio_products" value="{{ batch.bio_products or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Nb palettes</span><span class="fv view-val {% if not batch.pallet_quantity %}missing{% endif %}">{{ batch.pallet_quantity or '⚠' }}</span><input type="number" name="{{ p }}pallet_quantity" value="{{ batch.pallet_quantity or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">IMO</span><span class="fv view-val">{{ batch.imo_product_class or '—' }}</span><input type="text" name="{{ p }}imo_product_class" value="{{ batch.imo_product_class or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Poids (kg)</span><span class="fv view-val {% if not batch.weight_kg %}missing{% endif %}">{{ batch.weight_kg or '⚠' }}</span><input type="text" name="{{ p }}weight_kg" value="{{ batch.weight_kg or '' }}" class="form-input edit-input"></div>
+                <div class="field-row"><span class="fl">Dim. L×l×H</span><span class="fv view-val">{{ batch.length_cm or '—' }}×{{ batch.width_cm or '—' }}×{{ batch.height_cm or '—' }}</span><input type="text" name="{{ p }}length_cm" value="{{ batch.length_cm or '' }}" class="form-input edit-input" placeholder="L" style="width:30%"><input type="text" name="{{ p }}width_cm" value="{{ batch.width_cm or '' }}" class="form-input edit-input" placeholder="l" style="width:30%"><input type="text" name="{{ p }}height_cm" value="{{ batch.height_cm or '' }}" class="form-input edit-input" placeholder="H" style="width:30%"></div>
+                <div class="field-row"><span class="fl">Surface</span><span class="fv">{{ batch.surface_m2 or '—' }} m²</span></div>
+                <div class="field-row"><span class="fl">Val. (USD)</span><span class="fv view-val">{{ batch.cargo_value_usd or '—' }}</span><input type="text" name="{{ p }}cargo_value_usd" value="{{ batch.cargo_value_usd or '' }}" class="form-input edit-input"></div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    </form>
+
+    {% if not pl.is_locked %}
+    <form method="POST" action="/cargo/{{ pl.id }}/add-batch" style="margin-top:12px;">
+        {{ csrf_input(request) }}
+        <button type="submit" class="btn-add-batch">＋ Ajouter un batch</button>
+    </form>
+    {% endif %}
+</div>
+
+<div class="import-modal" id="import-modal" onclick="if(event.target===this) this.style.display='none'">
+    <div class="import-modal-content">
+        <h3 style="margin-bottom:16px;">📥 Importer un fichier Excel</h3>
+        <p style="font-size:12px;color:#888;margin-bottom:16px;">Le fichier doit respecter le format du template TOWT. Les batchs existants seront remplacés.</p>
+        <form method="POST" action="/cargo/{{ pl.id }}/import-excel" enctype="multipart/form-data">
+            {{ csrf_input(request) }}
+            <input type="file" name="file" accept=".xlsx,.xls" class="form-input" required style="margin-bottom:16px;">
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('import-modal').style.display='none'">Annuler</button>
+                <button type="submit" class="btn btn-primary">📥 Importer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .summary-bar{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:16px 20px;display:flex;gap:24px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+    .summary-item{display:flex;flex-direction:column;gap:2px}.summary-label{font-size:10px;text-transform:uppercase;font-weight:600;color:#888}.summary-value{font-size:13px;font-weight:500}
+    .palette-alert{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;font-size:13px}
+    .palette-alert.under{background:#FEF2F2;color:#DC2626;border:1px solid #FECACA}
+    .palette-alert.over{background:#FFFBEB;color:#D97706;border:1px solid #FDE68A}
+    .palette-alert.ok{background:#ECFDF5;color:#16a34a;border:1px solid #A7F3D0}
+    .batch-card{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);margin-bottom:16px;overflow:hidden}
+    .batch-card.locked{border-left:4px solid var(--towt-green)}
+    .batch-header{padding:14px 20px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between}
+    .batch-header h4{margin:0;font-size:14px}
+    .batch-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0}
+    @media(max-width:1000px){.batch-grid{grid-template-columns:1fr}}
+    .batch-section{padding:16px 20px;border-right:1px solid #f5f5f5}.batch-section:last-child{border-right:none}
+    .batch-section h5{font-size:12px;color:var(--towt-blue);margin:0 0 10px;display:flex;align-items:center;gap:6px}
+    .client-tag{font-size:9px;background:rgba(245,158,11,0.12);color:#D97706;padding:1px 6px;border-radius:100px;font-weight:600}
+    .field-row{display:flex;align-items:center;justify-content:space-between;padding:3px 0;font-size:12px;border-bottom:1px solid #fafafa;gap:4px}
+    .fl{color:#888;font-weight:500;flex-shrink:0;min-width:70px}.fv{font-weight:500;text-align:right}.fv.missing{color:#DC2626;font-weight:600}
+    /* Edit mode: inputs hidden by default, shown when .editing class active */
+    .edit-input{display:none !important;font-size:11px !important;padding:3px 6px !important;flex:1;min-width:0}
+    .edit-actions{display:none !important}
+    .editing .edit-input{display:inline-block !important}
+    .editing .view-val{display:none !important}
+    .editing .edit-actions{display:flex !important}
+    .progress-bar{position:relative;height:20px;background:#f0f0f0;border-radius:100px;overflow:hidden}
+    .progress-fill{height:100%;background:linear-gradient(90deg,var(--towt-blue),var(--towt-green));border-radius:100px}
+    .progress-text{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:10px;font-weight:700}
+    .badge-draft{background:rgba(96,165,250,0.12);color:#2563EB;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600}
+    .badge-submitted{background:rgba(245,158,11,0.12);color:#D97706;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600}
+    .badge-reviewed{background:rgba(139,92,246,0.12);color:#7C3AED;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600}
+    .badge-locked{background:rgba(34,197,94,0.12);color:#16a34a;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600}
+    .import-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:1000;align-items:center;justify-content:center}
+    .import-modal-content{background:white;border-radius:12px;padding:24px;max-width:500px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2)}
+    .btn-add-batch{background:#ecfdf5;color:#16a34a;border:1px dashed #86efac;width:100%;padding:14px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;text-align:center}
+    .btn-add-batch:hover{background:#dcfce7}
+</style>
+<script>
+var isEditing = false;
+function toggleEditMode() {
+    isEditing = !isEditing;
+    var el = document.getElementById('cargo-detail');
+    var btn = document.getElementById('edit-toggle-btn');
+    if (isEditing) {
+        el.classList.add('editing');
+        btn.innerHTML = '<i data-lucide="x"></i> Annuler';
+    } else {
+        el.classList.remove('editing');
+        btn.innerHTML = '<i data-lucide="pencil"></i> Modifier';
+    }
+    lucide.createIcons();
+}
+</script>
+{% endblock %}

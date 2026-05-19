@@ -1,0 +1,50 @@
+<div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+    <div class="modal" style="max-width:500px;">
+        <div class="modal-header">
+            <h3>Modifier affectation — {{ assignment.member.full_name }}</h3>
+            <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+        </div>
+        <form method="POST" action="/crew/assignments/{{ assignment.id }}/edit">
+            {{ csrf_input(request) }}
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Navire *</label>
+                    <select name="vessel_id" class="form-select" required>
+                        {% for v in vessels %}
+                        <option value="{{ v.id }}" {% if v.id == assignment.vessel_id %}selected{% endif %}>{{ v.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Date d'embarquement *</label>
+                        <input type="date" name="embark_date" class="form-input" required
+                               value="{{ assignment.embark_date.strftime('%Y-%m-%d') if assignment.embark_date else '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Date de debarquement</label>
+                        <input type="date" name="disembark_date" class="form-input"
+                               value="{{ assignment.disembark_date.strftime('%Y-%m-%d') if assignment.disembark_date else '' }}">
+                        <p style="font-size:10px;color:#888;">Vide = toujours embarque</p>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Statut</label>
+                    <select name="status" class="form-select">
+                        <option value="active" {% if assignment.status == 'active' %}selected{% endif %}>Actif (embarque)</option>
+                        <option value="planned" {% if assignment.status == 'planned' %}selected{% endif %}>Planifie</option>
+                        <option value="completed" {% if assignment.status == 'completed' %}selected{% endif %}>Termine</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <textarea name="notes" class="form-input" rows="2">{{ assignment.notes or '' }}</textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+                <button type="submit" class="btn btn-primary"><i data-lucide="save"></i> Enregistrer</button>
+            </div>
+        </form>
+    </div>
+</div>

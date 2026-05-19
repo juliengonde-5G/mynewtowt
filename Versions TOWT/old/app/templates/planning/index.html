@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Planification{% endblock %}
+{% block page_title %}Planification{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Critical Leaflet CSS inline — fallback if CDN CSS fails -->
+<style>
+.leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,
+.leaflet-tile-container,.leaflet-pane>svg,.leaflet-pane>canvas,
+.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute;left:0;top:0;}
+.leaflet-container{overflow:hidden;-webkit-tap-highlight-color:transparent;}
+.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow{-webkit-user-select:none;-moz-user-select:none;user-select:none;-webkit-user-drag:none;}
+.leaflet-tile{filter:inherit;visibility:hidden;}
+.leaflet-tile-loaded{visibility:inherit;}
+.leaflet-container img{max-width:none!important;max-height:none!important;}
+.leaflet-tile-pane{z-index:200;}.leaflet-overlay-pane{z-index:400;}
+.leaflet-shadow-pane{z-index:500;}.leaflet-marker-pane{z-index:600;}
+.leaflet-tooltip-pane{z-index:650;}.leaflet-popup-pane{z-index:700;}
+.leaflet-control{position:relative;z-index:800;pointer-events:auto;}
+.leaflet-top,.leaflet-bottom{position:absolute;z-index:1000;pointer-events:none;}
+.leaflet-top{top:0;}.leaflet-right{right:0;}.leaflet-bottom{bottom:0;}.leaflet-left{left:0;}
+.leaflet-zoom-anim .leaflet-zoom-animated{transition:transform .25s cubic-bezier(0,0,.25,1);}
+.leaflet-interactive{cursor:pointer;}.leaflet-grab{cursor:grab;}
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="/planning/pdf/commercial?year={{ current_year }}" class="btn btn-secondary btn-sm" hx-boost="false" target="_blank"><i data-lucide="file-text"></i> Support commercial</a>
+<a href="/planning/export/csv" class="btn btn-secondary btn-sm" hx-boost="false"><i data-lucide="download"></i> CSV</a>
+<a href="/planning/ports" class="btn btn-secondary btn-sm"><i data-lucide="anchor"></i> Vue Port</a>
+<button class="btn btn-primary btn-sm" onclick="openLegModal()"><i data-lucide="plus"></i> Nouvelle escale</button>
+{% endblock %}
+
+{% block content %}
+<div class="planning-page">
+    <div class="planning-filters">
+        <div class="vessel-tabs">
+            {% for v in vessels %}
+            <a href="/planning?vessel={{ v.code }}&year={{ current_year }}"
+               class="vessel-tab {% if selected_vessel == v.code %}active{% endif %}">
+                <i data-lucide="ship"></i> {{ v.name }}
+            </a>
+            {% endfor %}
+        </div>
+        <div class="year-selector">
+            {% for y in years %}
+            <a href="/planning?vessel={{ selected_vessel }}&year={{ y }}"
+               class="year-btn {% if current_year == y %}active{% endif %}">{{ y }}</a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="view-toggle">
+        <button class="view-btn active" onclick="showView('table')" id="btn-table"><i data-lucide="table"></i> Tableau</button>
+        <button class="view-btn" onclick="showView('gantt')" id="btn-gantt"><i data-lucide="gantt-chart"></i> Gantt</button>
+        <button class="view-btn" onclick="showView('map')" id="btn-map"><i data-lucide="globe"></i> Carte</button>
+    </div>
+
+    <!-- TABLE VIEW -->
+    <div id="view-table" class="view-panel">
+        {% if legs %}
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Code</th><th>Départ</th><th>Arrivée</th>
+                        <th>ETD</th><th>ETA</th><th>Durée</th>
+                        <th>Dist.</th><th>Statut</th><th style="text-align:right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for leg in legs %}
+                    {% set is_completed = (leg.status == 'completed' or (leg.ata and leg.atd)) %}
+                    {% set is_current = (leg.ata and not leg.atd) %}
+                    <tr class="{% if is_completed %}leg-completed{% elif is_current %}leg-current{% endif %}">
+                        <td><strong style="font-family:monospace;color:var(--towt-blue);">{{ leg.leg_code }}</strong>
+                            {% if is_completed %}<i data-lucide="lock" style="width:12px;height:12px;color:#aaa;"></i>{% endif %}
+                        </td>
+                        <td>
+                            <span class="port-badge">{{ leg.departure_port.country_code|flag }} {{ leg.departure_port.locode }}</span>
+                            <span style="font-size:12px;color:#888;">{{ leg.departure_port.name }}</span>
+                        </td>
+                        <td>
+                            <span class="port-badge">{{ leg.arrival_port.country_code|flag }} {{ leg.arrival_port.locode }}</span>
+                            <span style="font-size:12px;color:#888;">{{ leg.arrival_port.name }}</span>
+                        </td>
+                        <td>{{ leg.etd.strftime('%d/%m/%Y') if leg.etd else '—' }}</td>
+                        <td>{{ leg.eta.strftime('%d/%m/%Y') if leg.eta else '—' }}</td>
+                        <td>{{ ((leg.estimated_duration_hours or 0) / 24)|round(1) }} j.</td>
+                        <td>{{ leg.computed_distance|int if leg.computed_distance else (leg.distance_nm|int if leg.distance_nm else '—') }} NM</td>
+                        <td><span class="badge badge-{{ leg.status }}">{{ leg.status|replace('_',' ')|capitalize }}</span></td>
+                        <td style="text-align:right;">
+                            <div style="display:flex;gap:4px;justify-content:flex-end;">
+                                {% if not is_completed %}
+                                <button class="btn btn-sm btn-secondary" onclick="openEditLegModal({{ leg.id }})"><i data-lucide="pencil"></i></button>
+                                <button class="btn btn-sm btn-danger" hx-delete="/planning/legs/{{ leg.id }}" hx-confirm="ATTENTION : Supprimer {{ leg.leg_code }} ({{ leg.departure_port_locode }} → {{ leg.arrival_port_locode }}) ? Les dates des autres escales ne seront PAS recalculees."><i data-lucide="trash-2"></i></button>
+                                {% else %}
+                                <button class="btn btn-sm btn-secondary" onclick="openEditLegModal({{ leg.id }})" title="Consulter"><i data-lucide="eye"></i></button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i data-lucide="map" style="width:48px;height:48px;color:var(--towt-sky);"></i>
+            <h3>Aucune escale planifiée</h3>
+            <p>{{ vessel_obj.name if vessel_obj else '' }} — {{ current_year }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- GANTT VIEW -->
+    <div id="view-gantt" class="view-panel" style="display:none;">
+        <div class="gantt-container" id="gantt-chart">
+            <div style="text-align:center;padding:60px;color:#888;">Chargement...</div>
+        </div>
+    </div>
+
+    <!-- MAP VIEW -->
+    <div id="view-map" class="view-panel" style="display:none;">
+        <div class="map-container">
+            <div id="leaflet-map" style="width:100%;height:550px;border-radius:8px;"></div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-container"></div>
+
+<style>
+    .planning-filters{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+    .year-selector{display:flex;gap:4px;background:white;padding:4px;border-radius:var(--radius);box-shadow:var(--shadow)}
+    .year-btn{padding:6px 14px;border-radius:var(--radius);font-size:13px;font-weight:500;color:var(--towt-gray)}
+    .year-btn:hover{background:var(--towt-light)}.year-btn.active{background:var(--towt-green);color:white}
+    .view-toggle{display:flex;gap:4px;margin-bottom:16px;background:white;padding:4px;border-radius:var(--radius);box-shadow:var(--shadow);width:fit-content}
+    .view-btn{display:flex;align-items:center;gap:6px;padding:8px 16px;border:none;border-radius:var(--radius);font-family:'Poppins',sans-serif;font-size:13px;font-weight:500;color:var(--towt-gray);background:none;cursor:pointer}
+    .view-btn:hover{background:var(--towt-light)}.view-btn.active{background:var(--towt-blue);color:white}
+    .view-btn i{width:16px;height:16px}
+    .port-badge{display:inline-block;background:var(--towt-light);padding:2px 6px;border-radius:4px;font-size:11px;font-weight:600;color:var(--towt-blue);font-family:monospace}
+    .text-danger{color:var(--danger)!important;font-weight:500}
+    .gantt-container{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px;overflow-x:auto;min-height:200px}
+    .gantt-row{display:flex;align-items:center;min-height:40px;border-bottom:1px solid #f5f5f5}
+    .gantt-label{width:180px;flex-shrink:0;padding:8px;font-size:12px;font-weight:500;font-family:monospace}
+    .gantt-bars{flex:1;position:relative;height:32px}
+    .gantt-bar{position:absolute;height:24px;top:4px;border-radius:4px;font-size:10px;color:white;display:flex;align-items:center;padding:0 6px;cursor:pointer;white-space:nowrap;overflow:hidden}
+    .gantt-bar:hover{opacity:0.85}
+    .gantt-bar.v1{background:var(--towt-blue)}.gantt-bar.v2{background:var(--towt-green)}.gantt-bar.v3{background:var(--towt-sky-dark)}.gantt-bar.v4{background:var(--towt-gray)}
+    .gantt-bar.completed{opacity:0.4}.gantt-bar.current{box-shadow:0 0 0 2px #F59E0B,0 0 8px rgba(245,158,11,0.4)}
+    .gantt-route{font-size:10px;color:#999;font-weight:400;font-family:sans-serif;line-height:1.2}
+    .gantt-months{display:flex;border-bottom:2px solid var(--towt-light);margin-bottom:4px}
+    .gantt-months-pad{width:180px;flex-shrink:0}
+    .gantt-month{flex:1;text-align:center;font-size:11px;font-weight:600;color:#888;padding:8px 0;border-left:1px solid #f0f0f0}
+    .map-container{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px;position:relative}
+    .leaflet-container *,.leaflet-container *::before,.leaflet-container *::after{box-sizing:content-box;margin:0;padding:0;}
+    tr.leg-completed{opacity:0.45}
+    tr.leg-current{background:rgba(245,158,11,0.08);border-left:3px solid #F59E0B}
+    .leaflet-legend{background:white;padding:10px 14px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.15);font-family:'Poppins',sans-serif;font-size:12px;}
+</style>
+
+<script>
+    var VESSEL = {{ selected_vessel|default('null', true) }};
+    var YEAR = {{ current_year }};
+    var ganttData = null;
+    var leafletMap = null;
+
+    window.setPort = function(target, locode, name) {
+        var s = document.getElementById(target + '_search');
+        var h = document.getElementById(target + '_hidden');
+        if (s) s.value = locode + ' - ' + (name || locode);
+        if (h) h.value = locode;
+        var dd = document.getElementById(target + '_dropdown');
+        if (dd) dd.classList.remove('show');
+    };
+
+    window.initPortSearch = function() {
+        document.querySelectorAll('.port-search-input').forEach(function(input) {
+            var target = input.dataset.target;
+            var timer = null;
+            input.addEventListener('input', function() {
+                clearTimeout(timer);
+                var q = input.value.trim();
+                var dd = document.getElementById(target + '_dropdown');
+                if (q.length < 2) { dd.classList.remove('show'); return; }
+                timer = setTimeout(function() {
+                    fetch('/api/ports/search?q=' + encodeURIComponent(q) + '&limit=10')
+                        .then(function(r) { return r.json(); })
+                        .then(function(ports) {
+                            dd.innerHTML = '';
+                            ports.forEach(function(p) {
+                                var div = document.createElement('div');
+                                div.className = 'port-option';
+                                div.innerHTML = '<span><span class="code">' + p.locode + '</span> ' + p.name + '</span><span class="country">' + p.country_code + '</span>';
+                                div.addEventListener('mousedown', function(e) { e.preventDefault(); setPort(target, p.locode, p.name); });
+                                dd.appendChild(div);
+                            });
+                            dd.classList.add('show');
+                        });
+                }, 250);
+            });
+            input.addEventListener('blur', function() { setTimeout(function() { document.getElementById(target + '_dropdown').classList.remove('show'); }, 300); });
+        });
+    };
+
+    window.openLegModal = function() {
+        fetch('/planning/legs/create?vessel=' + VESSEL + '&year=' + YEAR).then(function(r){return r.text();}).then(function(html){
+            document.getElementById('modal-container').innerHTML = html; lucide.createIcons(); initPortSearch(); initFormSubmit();
+        });
+    };
+    window.openEditLegModal = function(legId) {
+        fetch('/planning/legs/' + legId + '/edit').then(function(r){return r.text();}).then(function(html){
+            document.getElementById('modal-container').innerHTML = html; lucide.createIcons(); initPortSearch(); initFormSubmit();
+        });
+    };
+    window.closeModal = function() { document.getElementById('modal-container').innerHTML = ''; };
+
+    window.initFormSubmit = function() {
+        var form = document.getElementById('leg-form');
+        if (!form) return;
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            fetch(form.action, { method: 'POST', body: new FormData(form) })
+                .then(function(r) {
+                    if (r.redirected) { window.location.href = r.url; }
+                    else if (r.ok) { window.location.href = '/planning?vessel=' + VESSEL + '&year=' + YEAR; }
+                    else { r.json().then(function(d){ alert(d.detail || 'Erreur'); }).catch(function(){ window.location.href = '/planning?vessel=' + VESSEL + '&year=' + YEAR; }); }
+                }).catch(function() { window.location.reload(); });
+        });
+    };
+
+    function showView(view) {
+        document.querySelectorAll('.view-panel').forEach(function(p){p.style.display='none';});
+        document.querySelectorAll('.view-btn').forEach(function(b){b.classList.remove('active');});
+        document.getElementById('view-' + view).style.display = 'block';
+        document.getElementById('btn-' + view).classList.add('active');
+        if (view === 'gantt' && !ganttData) loadGantt();
+        if (view === 'map') loadLeafletMap();
+    }
+
+    // ── GANTT ──
+    function loadGantt() {
+        var url = '/planning/api/gantt?year=' + YEAR + (VESSEL ? '&vessel=' + VESSEL : '');
+        fetch(url).then(function(r){return r.json();}).then(function(data){ ganttData = data; renderGantt(); });
+    }
+    function renderGantt() {
+        var el = document.getElementById('gantt-chart');
+        if (!ganttData || ganttData.length === 0) { el.innerHTML = '<div style="text-align:center;padding:60px;color:#888;">Aucune escale</div>'; return; }
+        var months = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
+        var yStart = new Date(YEAR, 0, 1).getTime();
+        var yEnd = new Date(YEAR, 11, 31).getTime();
+        var total = yEnd - yStart;
+        var now = Date.now();
+
+        var html = '<div class="gantt-months"><div class="gantt-months-pad"></div>';
+        months.forEach(function(m){html += '<div class="gantt-month">' + m + '</div>';});
+        html += '</div>';
+        ganttData.forEach(function(leg) {
+            var s = leg.etd ? new Date(leg.etd).getTime() : null;
+            var e = leg.eta ? new Date(leg.eta).getTime() : null;
+            if (!s) return;
+            var end = e || (s + (leg.duration_hours || 240) * 3600000);
+            var left = Math.max(0, ((s - yStart) / total) * 100);
+            var width = Math.max(1, ((end - s) / total) * 100);
+            var cls = 'gantt-bar v' + leg.vessel_code;
+            if (leg.status === 'completed') cls += ' completed';
+            else if (s <= now && end >= now) cls += ' current';
+            html += '<div class="gantt-row"><div class="gantt-label"><span class="gantt-route">' + leg.dep_locode + ' → ' + leg.arr_locode + '</span><br><strong>' + leg.code + '</strong></div>';
+            html += '<div class="gantt-bars"><div class="' + cls + '" style="left:' + left + '%;width:' + width + '%;" onclick="openEditLegModal(' + leg.id + ')" title="' + leg.dep_locode + '→' + leg.arr_locode + '">';
+            html += leg.dep_locode + '→' + leg.arr_locode + '</div></div></div>';
+        });
+        el.innerHTML = html;
+    }
+
+    // ── LEAFLET MAP ──
+    function loadLeafletMap() {
+        if (typeof L === 'undefined') {
+            document.getElementById('leaflet-map').innerHTML = '<div style="text-align:center;padding:60px;color:#c00;">Erreur : la librairie cartographique (Leaflet) n\'a pas pu être chargée. Vérifiez votre connexion internet.</div>';
+            return;
+        }
+
+        var mapEl = document.getElementById('leaflet-map');
+        if (leafletMap) {
+            setTimeout(function(){ leafletMap.invalidateSize(); }, 200);
+            setTimeout(function(){ leafletMap.invalidateSize(); }, 600);
+            return;
+        }
+
+        leafletMap = L.map('leaflet-map').setView([20, -20], 3);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 18
+        }).addTo(leafletMap);
+
+        // Force recalculation after container becomes visible
+        setTimeout(function(){ leafletMap.invalidateSize(); }, 200);
+        setTimeout(function(){ leafletMap.invalidateSize(); }, 600);
+        setTimeout(function(){ leafletMap.invalidateSize(); }, 1500);
+        if (window.ResizeObserver) {
+            new ResizeObserver(function(){ leafletMap.invalidateSize(); }).observe(mapEl);
+        }
+
+        var vesselColors = {1:'#095561', 2:'#87BD2B', 3:'#5BA4B5', 4:'#393939'};
+        var vesselNames = {1:'Anemos', 2:'Artemis', 3:'Atlantis', 4:'Atlas'};
+
+        fetch('/planning/api/map?year=' + YEAR + (VESSEL ? '&vessel=' + VESSEL : ''))
+            .then(function(r){ return r.json(); })
+            .then(function(routes) {
+                if (!routes || routes.length === 0) {
+                    document.getElementById('leaflet-map').insertAdjacentHTML('beforeend',
+                        '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1000;background:rgba(255,255,255,0.9);padding:16px 24px;border-radius:8px;color:#888;font-size:14px;">Aucune route à afficher (coordonnées ports manquantes ?)</div>');
+                    return;
+                }
+                var bounds = [];
+                var portMarkers = {};
+
+                routes.forEach(function(r) {
+                    var color = vesselColors[r.vessel_code] || '#888';
+                    var from = [r.dep_lat, r.dep_lon];
+                    var to = [r.arr_lat, r.arr_lon];
+                    bounds.push(from, to);
+
+                    var isCompleted = (r.status === 'completed');
+                    L.polyline([from, to], {
+                        color: color,
+                        weight: isCompleted ? 2 : 3,
+                        opacity: isCompleted ? 0.35 : 0.85,
+                        dashArray: isCompleted ? '6 8' : null
+                    }).bindTooltip('<strong>' + r.code + '</strong><br>' + r.dep_locode + ' → ' + r.arr_locode)
+                      .addTo(leafletMap);
+
+                    // Port markers (deduplicated)
+                    if (!portMarkers[r.dep_locode]) {
+                        portMarkers[r.dep_locode] = L.circleMarker(from, {
+                            radius: 6, color: '#333', fillColor: color, fillOpacity: 0.9, weight: 2
+                        }).bindTooltip(r.dep_locode).addTo(leafletMap);
+                    }
+                    if (!portMarkers[r.arr_locode]) {
+                        portMarkers[r.arr_locode] = L.circleMarker(to, {
+                            radius: 6, color: '#333', fillColor: color, fillOpacity: 0.9, weight: 2
+                        }).bindTooltip(r.arr_locode).addTo(leafletMap);
+                    }
+                });
+
+                if (bounds.length > 0) leafletMap.fitBounds(bounds, {padding: [40, 40]});
+                leafletMap.invalidateSize();
+
+                // Legend control
+                var legend = L.control({position: 'bottomleft'});
+                legend.onAdd = function() {
+                    var div = L.DomUtil.create('div', 'leaflet-legend');
+                    var used = {};
+                    routes.forEach(function(r){ used[r.vessel_code] = true; });
+                    var html = '';
+                    Object.keys(used).forEach(function(vc){
+                        html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">';
+                        html += '<div style="width:12px;height:12px;border-radius:50%;background:' + vesselColors[vc] + ';"></div>';
+                        html += '<span>' + (vesselNames[vc] || vc) + '</span></div>';
+                    });
+                    html += '<div style="display:flex;align-items:center;gap:6px;margin-top:4px;"><span style="border-top:2px dashed #999;width:18px;display:inline-block;"></span><span>Terminé</span></div>';
+                    div.innerHTML = html;
+                    return div;
+                };
+                legend.addTo(leafletMap);
+                setTimeout(function(){ leafletMap.invalidateSize(); }, 100);
+            })
+            .catch(function(err) {
+                console.error('Erreur chargement carte:', err);
+                document.getElementById('leaflet-map').insertAdjacentHTML('beforeend',
+                    '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1000;background:rgba(255,255,255,0.9);padding:16px 24px;border-radius:8px;color:#c00;font-size:14px;">Erreur lors du chargement des données de la carte.</div>');
+            });
+    }
+
+    // Handle HTMX errors (e.g. delete blocked by linked orders)
+    document.body.addEventListener('htmx:responseError', function(evt) {
+        try {
+            var detail = JSON.parse(evt.detail.xhr.responseText);
+            alert(detail.detail || 'Erreur');
+        } catch(e) {
+            alert('Erreur: ' + evt.detail.xhr.statusText);
+        }
+    });
+</script>
+
+{% endblock %}

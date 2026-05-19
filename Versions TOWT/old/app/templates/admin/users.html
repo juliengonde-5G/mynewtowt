@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}TOWT - Gestion des utilisateurs{% endblock %}
+{% block page_title %}Gestion des utilisateurs{% endblock %}
+
+{% block topbar_actions %}
+<a href="/admin/users/import/template" class="btn btn-secondary btn-sm" hx-boost="false" title="Télécharger le template Excel">
+    <i data-lucide="download"></i> Template Excel
+</a>
+<button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-file').click()" title="Importer depuis Excel">
+    <i data-lucide="upload"></i> Importer Excel
+</button>
+<form id="import-form" method="POST" action="/admin/users/import" enctype="multipart/form-data" style="display:none;">
+    {{ csrf_input(request) }}
+    <input type="file" id="import-file" name="file" accept=".xlsx,.xls" onchange="document.getElementById('import-form').submit()">
+</form>
+<button class="btn btn-primary" onclick="openModal()">
+    <i data-lucide="user-plus"></i>
+    Nouvel utilisateur
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="users-page">
+    {% if request.query_params.get('import_success') %}
+    <div style="background:#dcfce7;border:1px solid #86efac;color:#166534;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px;">
+        ✓ {{ request.query_params.get('import_success') }}
+        {% if request.query_params.get('import_detail') %}
+        <div style="margin-top:6px;font-size:12px;color:#15803d;">{{ request.query_params.get('import_detail') }}</div>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% if request.query_params.get('import_error') %}
+    <div style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px;">
+        ✗ {{ request.query_params.get('import_error') }}
+        {% if request.query_params.get('import_detail') %}
+        <div style="margin-top:6px;font-size:12px;color:#b91c1c;">{{ request.query_params.get('import_detail') }}</div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Stats -->
+    <div class="stats-grid" style="margin-bottom: 24px;">
+        <div class="stat-card">
+            <div class="stat-card-icon blue">
+                <i data-lucide="users"></i>
+            </div>
+            <div class="stat-card-body">
+                <span class="stat-card-value">{{ users | length }}</span>
+                <span class="stat-card-label">Utilisateurs</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-icon green">
+                <i data-lucide="user-check"></i>
+            </div>
+            <div class="stat-card-body">
+                <span class="stat-card-value">{{ users | selectattr('is_active') | list | length }}</span>
+                <span class="stat-card-label">Actifs</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Users table -->
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Utilisateur</th>
+                    <th>Email</th>
+                    <th>Rôle</th>
+                    <th>Statut</th>
+                    <th>Créé le</th>
+                    <th style="text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div class="avatar-sm {% if u.is_active %}active{% else %}inactive{% endif %}">
+                                {{ u.full_name[0] | upper }}
+                            </div>
+                            <div>
+                                <div style="font-weight:500;">{{ u.full_name }}</div>
+                                <div style="font-size:12px; color:#888;">@{{ u.username }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>{{ u.email }}</td>
+                    <td>
+                        <span class="role-badge role-{{ u.role }}">{{ u.role | capitalize }}</span>
+                    </td>
+                    <td>
+                        {% if u.is_active %}
+                        <span class="badge badge-completed">Actif</span>
+                        {% else %}
+                        <span class="badge badge-cancelled">Inactif</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size:12px; color:#888;">
+                        {{ u.created_at.strftime('%d/%m/%Y') if u.created_at else '—' }}
+                    </td>
+                    <td style="text-align:right;">
+                        <div class="action-buttons">
+                            <button class="btn btn-sm btn-secondary"
+                                    onclick="openEditModal({{ u.id }})"
+                                    title="Modifier">
+                                <i data-lucide="pencil"></i>
+                            </button>
+                            {% if u.id != user.id %}
+                            <button class="btn btn-sm {% if u.is_active %}btn-warning{% else %}btn-success{% endif %}"
+                                    hx-post="/admin/users/{{ u.id }}/toggle"
+                                    hx-confirm="{{ 'Désactiver' if u.is_active else 'Réactiver' }} {{ u.full_name }} ?"
+                                    title="{{ 'Désactiver' if u.is_active else 'Réactiver' }}">
+                                <i data-lucide="{{ 'user-x' if u.is_active else 'user-check' }}"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger"
+                                    hx-delete="/admin/users/{{ u.id }}"
+                                    hx-confirm="Supprimer définitivement {{ u.full_name }} ?"
+                                    title="Supprimer">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal container -->
+<div id="modal-container"></div>
+
+<style>
+    .avatar-sm {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 14px;
+        color: white;
+        flex-shrink: 0;
+    }
+    .avatar-sm.active { background: var(--towt-blue); }
+    .avatar-sm.inactive { background: #ccc; }
+
+    .role-badge {
+        display: inline-flex;
+        padding: 3px 10px;
+        border-radius: 100px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+    .role-admin { background: rgba(135,189,43,0.15); color: #5a8010; }
+    .role-manager { background: rgba(9,85,97,0.1); color: var(--towt-blue); }
+    .role-operator { background: rgba(158,198,210,0.2); color: var(--towt-sky-dark); }
+    .role-viewer { background: rgba(57,57,57,0.1); color: var(--towt-gray); }
+
+    .action-buttons {
+        display: flex;
+        gap: 4px;
+        justify-content: flex-end;
+    }
+
+    .btn-warning {
+        background: var(--warning);
+        color: white;
+    }
+    .btn-warning:hover { background: #d97706; }
+</style>
+
+<script>
+    function openModal() {
+        fetch('/admin/users/create', { headers: {'HX-Request': 'true'} })
+            .then(r => r.text())
+            .then(html => {
+                document.getElementById('modal-container').innerHTML = html;
+                lucide.createIcons();
+            });
+    }
+
+    function openEditModal(userId) {
+        fetch(`/admin/users/${userId}/edit`, { headers: {'HX-Request': 'true'} })
+            .then(r => r.text())
+            .then(html => {
+                document.getElementById('modal-container').innerHTML = html;
+                lucide.createIcons();
+            });
+    }
+
+    function closeModal() {
+        document.getElementById('modal-container').innerHTML = '';
+    }
+</script>
+{% endblock %}

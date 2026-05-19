@@ -1,0 +1,241 @@
+<div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+    <div class="modal" style="max-width:700px;">
+        <div class="modal-header">
+            <h3>{{ 'Modifier ' ~ edit_leg.leg_code if edit_leg else 'Nouvelle escale' }}</h3>
+            <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+        </div>
+
+        <form method="POST" id="leg-form"
+              action="{{ '/planning/legs/' ~ edit_leg.id ~ '/edit' if edit_leg else '/planning/legs/create' }}">
+            {{ csrf_input(request) }}
+
+            <div class="modal-body">
+                {% if error %}
+                <div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;border-left:3px solid #dc2626;">
+                    {{ error }}
+                </div>
+                {% endif %}
+
+                <!-- Navire + Année -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Navire *</label>
+                        <select name="vessel_id" class="form-select" required>
+                            {% for v in vessels %}
+                            <option value="{{ v.id }}"
+                                {% if edit_leg and edit_leg.vessel_id == v.id %}selected
+                                {% elif not edit_leg and selected_vessel == v.code %}selected{% endif %}>
+                                {{ v.code }} - {{ v.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Année *</label>
+                        <input type="number" name="year" class="form-input"
+                               value="{{ edit_leg.year if edit_leg else current_year }}"
+                               min="2025" max="2030" required>
+                    </div>
+                </div>
+
+                <!-- Ports -->
+                <div class="form-row">
+                    <div class="form-group" style="position:relative;">
+                        <label class="form-label">Port de départ *</label>
+                        {% if not edit_leg and last_arr_locode %}
+                        <input type="text" id="dep_search" class="form-input port-search-input"
+                               data-target="dep"
+                               value="{{ last_arr_locode }} - {{ last_arr_name }}"
+                               autocomplete="off" style="background:#f0faf0;">
+                        <input type="hidden" name="departure_port" id="dep_hidden"
+                               value="{{ last_arr_locode }}">
+                        {% else %}
+                        <input type="text" id="dep_search" class="form-input port-search-input"
+                               data-target="dep"
+                               placeholder="Code ou nom du port..."
+                               value="{{ (edit_leg.departure_port_locode ~ ' - ' ~ edit_leg.departure_port.name) if edit_leg else '' }}"
+                               autocomplete="off">
+                        <input type="hidden" name="departure_port" id="dep_hidden"
+                               value="{{ edit_leg.departure_port_locode if edit_leg else '' }}">
+                        {% endif %}
+                        <div class="port-dropdown" id="dep_dropdown"></div>
+                        <div class="shortcut-row">
+                            {% for s in shortcuts %}
+                            <span class="shortcut-chip" onclick="setPort('dep', '{{ s.locode }}', '{{ s.name }}')">{{ s.locode }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="form-group" style="position:relative;">
+                        <label class="form-label">Port d'arrivée *</label>
+                        <input type="text" id="arr_search" class="form-input port-search-input"
+                               data-target="arr"
+                               placeholder="Code ou nom du port..."
+                               value="{{ (edit_leg.arrival_port_locode ~ ' - ' ~ edit_leg.arrival_port.name) if edit_leg else '' }}"
+                               autocomplete="off">
+                        <input type="hidden" name="arrival_port" id="arr_hidden"
+                               value="{{ edit_leg.arrival_port_locode if edit_leg else '' }}">
+                        <div class="port-dropdown" id="arr_dropdown"></div>
+                        <div class="shortcut-row">
+                            {% for s in shortcuts %}
+                            <span class="shortcut-chip" onclick="setPort('arr', '{{ s.locode }}', '{{ s.name }}')">{{ s.locode }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dates -->
+                <div class="form-section-title">Planning</div>
+                {% if not edit_leg and is_first_leg %}
+                <p style="font-size:12px;color:#888;margin-bottom:8px;">
+                    Première escale — saisissez la date de départ.
+                </p>
+                <div class="form-group">
+                    <label class="form-label">ETD (départ prévu) *</label>
+                    <div class="tz-input-wrap">
+                        <input type="datetime-local" name="etd" class="form-input" required>
+                        <select name="etd_tz" class="tz-select">
+                            {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                            <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <span class="tz-utc-hint"></span>
+                </div>
+                {% elif not edit_leg %}
+                <p style="font-size:12px;color:var(--towt-blue);margin-bottom:8px;">
+                    {% if prev_eta_str %}
+                    ETA précédente : <strong>{{ prev_eta_str }}</strong> → ETD calculé (+{{ default_port_stay }}j)
+                    {% endif %}
+                </p>
+                <div class="form-group">
+                    <label class="form-label">ETD (départ prévu)</label>
+                    <div class="tz-input-wrap">
+                        <input type="datetime-local" name="etd" class="form-input"
+                               value="{{ computed_etd_str }}" style="background:#f0faf0;">
+                        <select name="etd_tz" class="tz-select">
+                            {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                            <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <span class="tz-utc-hint"></span>
+                </div>
+                {% endif %}
+
+                {% if edit_leg %}
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">ETD (départ prévu)</label>
+                        <div class="tz-input-wrap">
+                            <input type="datetime-local" name="etd" class="form-input"
+                                   value="{{ edit_leg.etd.strftime('%Y-%m-%dT%H:%M') if edit_leg.etd else '' }}">
+                            <select name="etd_tz" class="tz-select">
+                                {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                                <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <span class="tz-utc-hint"></span>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">ETA (arrivée prévue)</label>
+                        <div class="tz-input-wrap">
+                            <input type="datetime-local" name="eta" class="form-input"
+                                   value="{{ edit_leg.eta.strftime('%Y-%m-%dT%H:%M') if edit_leg.eta else '' }}">
+                            <select name="eta_tz" class="tz-select">
+                                {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                                <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <span class="tz-utc-hint"></span>
+                    </div>
+                </div>
+                <div class="form-section-title">Réalisé</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">ATD (départ réel)</label>
+                        <div class="tz-input-wrap">
+                            <input type="datetime-local" name="atd" class="form-input"
+                                   value="{{ edit_leg.atd.strftime('%Y-%m-%dT%H:%M') if edit_leg.atd else '' }}">
+                            <select name="atd_tz" class="tz-select">
+                                {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                                <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <span class="tz-utc-hint"></span>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">ATA (arrivée réelle)</label>
+                        <div class="tz-input-wrap">
+                            <input type="datetime-local" name="ata" class="form-input"
+                                   value="{{ edit_leg.ata.strftime('%Y-%m-%dT%H:%M') if edit_leg.ata else '' }}">
+                            <select name="ata_tz" class="tz-select">
+                                {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                                <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <span class="tz-utc-hint"></span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Statut</label>
+                    <select name="status" class="form-select">
+                        <option value="planned" {% if edit_leg.status == 'planned' %}selected{% endif %}>Planifié</option>
+                        <option value="in_progress" {% if edit_leg.status == 'in_progress' %}selected{% endif %}>En cours</option>
+                        <option value="completed" {% if edit_leg.status == 'completed' %}selected{% endif %}>Terminé</option>
+                    </select>
+                </div>
+                {% endif %}
+
+                <!-- Navigation -->
+                <div class="form-section-title">Navigation</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+                    <div class="form-group">
+                        <label class="form-label">Vitesse (nœuds)</label>
+                        <input type="text" name="speed_knots" class="form-input"
+                               value="{{ edit_leg.speed_knots if edit_leg and edit_leg.speed_knots else default_speed }}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Élongation</label>
+                        <input type="text" name="elongation_coeff" class="form-input"
+                               value="{{ edit_leg.elongation_coeff if edit_leg and edit_leg.elongation_coeff else default_elongation }}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Escale (jours)</label>
+                        <input type="text" name="port_stay_days" class="form-input"
+                               value="{{ edit_leg.port_stay_days if edit_leg and edit_leg.port_stay_days else default_port_stay }}">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <textarea name="notes" class="form-input" rows="2">{{ edit_leg.notes if edit_leg and edit_leg.notes else '' }}</textarea>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    {{ 'Enregistrer' if edit_leg else 'Créer' }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .form-section-title {font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--towt-blue);margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--towt-light);}
+    .port-dropdown {position:absolute;top:calc(100% - 26px);left:0;right:0;background:white;border:1px solid #e0e0e0;border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);}
+    .port-dropdown.show {display:block;}
+    .port-option {padding:8px 12px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between;}
+    .port-option:hover {background:var(--towt-light);}
+    .port-option .code {font-weight:600;font-family:monospace;color:var(--towt-blue);}
+    .port-option .country {font-size:11px;color:#888;}
+    .shortcut-row {display:flex;gap:4px;margin-top:6px;}
+    .shortcut-chip {padding:4px 10px;border:1px solid var(--towt-green);border-radius:100px;background:rgba(135,189,43,0.1);color:var(--towt-green);font-size:11px;font-weight:600;font-family:monospace;cursor:pointer;user-select:none;}
+    .shortcut-chip:hover {background:var(--towt-green);color:white;}
+</style>

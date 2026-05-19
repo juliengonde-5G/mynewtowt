@@ -1,0 +1,181 @@
+{% extends "cargo/portal_base.html" %}
+{% block portal_title %}{{ t('cp_packing_list', lang) }}{% endblock %}
+{% block extra_css %}
+.ib{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);padding:16px 20px;margin-bottom:20px;display:flex;gap:24px;flex-wrap:wrap}
+.ibi{display:flex;flex-direction:column;gap:2px}
+.ibl{font-size:10px;text-transform:uppercase;font-weight:700;color:#888;letter-spacing:.5px}
+.ibv{font-size:14px;font-weight:600;color:#095561}
+.lkb{background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;padding:16px;margin-bottom:20px;text-align:center;color:#dc2626;font-weight:600}
+.svb{background:#ecfdf5;border:1px solid #86efac;border-radius:12px;padding:16px;margin-bottom:20px;text-align:center;color:#16a34a;font-weight:600}
+.bc{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:16px;overflow:hidden;border-left:4px solid #095561}
+.bh{padding:14px 20px;background:#f8fafb;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between}
+.bh h3{font-size:15px;color:#095561}
+.bb{padding:20px}
+.tf{background:#f0f7f8;border-radius:8px;padding:14px;margin-bottom:16px}
+.tf h4{font-size:11px;text-transform:uppercase;color:#095561;margin-bottom:8px;letter-spacing:.5px}
+.tg{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.ti{font-size:12px}.ti .tl{color:#888;font-size:10px;display:block}.ti .tv{font-weight:600}
+.st{font-size:12px;font-weight:700;color:#095561;margin:16px 0 10px;padding-bottom:4px;border-bottom:2px solid #095561;text-transform:uppercase;letter-spacing:.5px}
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:600px){.fg{grid-template-columns:1fr}}
+.fgi{display:flex;flex-direction:column;gap:3px}.fgi.full{grid-column:1/-1}
+.fl{font-size:11px;font-weight:600;color:#555}
+.fi,.fs,.ft{padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:'Poppins',system-ui,sans-serif;transition:border-color .2s}
+.fi:focus,.fs:focus,.ft:focus{outline:none;border-color:#095561;box-shadow:0 0 0 2px rgba(9,85,97,.1)}
+.ft{resize:vertical;min-height:60px}
+.btn{padding:10px 24px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.bp{background:#095561;color:#fff}.bp:hover{background:#0a6b79}
+.bd{background:#fee2e2;color:#dc2626;font-size:12px;padding:6px 12px}.bd:hover{background:#fca5a5}
+.ba{background:#ecfdf5;color:#16a34a;border:1px dashed #86efac;width:100%;padding:14px;border-radius:12px;font-size:14px;justify-content:center}.ba:hover{background:#dcfce7}
+.ab{display:flex;justify-content:space-between;align-items:center;margin-top:20px;gap:12px;flex-wrap:wrap}
+.fh{font-size:10px;color:#888;font-style:italic;margin-top:2px}
+.btn-secondary{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1}.btn-secondary:hover{background:#e2e8f0}
+{% endblock %}
+
+{% block portal_content %}
+<h1>📦 {{ t('cp_packing_list', lang) }}</h1>
+
+{% if pl.is_locked %}<div class="lkb">🔒 {{ t('pl_locked_msg', lang) }}</div>{% endif %}
+{% if request.query_params.get('saved') %}<div class="svb">✅ {{ t('pl_saved_msg', lang) }}</div>{% endif %}
+
+<div class="ib">
+  {% if pl.order.leg %}
+  <div class="ibi"><span class="ibl">{{ t('f_voyage', lang) }}</span><span class="ibv">{{ pl.order.leg.leg_code }}</span></div>
+  <div class="ibi"><span class="ibl">{{ t('f_vessel', lang) }}</span><span class="ibv">{{ pl.order.leg.vessel.name }}</span></div>
+  <div class="ibi"><span class="ibl">{{ t('f_loading_date', lang) }}</span><span class="ibv">{{ pl.order.leg.departure_port.name }} ({{ pl.order.leg.departure_port.locode }})</span></div>
+  <div class="ibi"><span class="ibl">Destination</span><span class="ibv">{{ pl.order.leg.arrival_port.name }} ({{ pl.order.leg.arrival_port.locode }})</span></div>
+  <div class="ibi"><span class="ibl">ETD</span><span class="ibv">{{ pl.order.leg.etd.strftime('%d/%m/%Y') if pl.order.leg.etd else '—' }}</span></div>
+  {% endif %}
+  <div class="ibi"><span class="ibl">{{ t('f_pallet_quantity', lang) }}</span><span class="ibv">{{ pl.order.quantity_palettes }}</span></div>
+</div>
+
+<form method="POST" action="/p/{{ pl.token }}/save">
+    {{ csrf_input(request) }}
+{% for batch in pl.batches %}
+{% set p = 'batch_' ~ batch.id ~ '_' %}
+<div class="bc">
+  <div class="bh">
+    <h3>📦 {{ t('pl_batch', lang) }} #{{ batch.batch_number }}</h3>
+    {% if not pl.is_locked and pl.batches|length > 1 %}
+    <button type="button" class="bd btn" onclick="if(confirm('{{ t('cp_delete_batch_confirm', lang) }}'))fetch('/p/{{ pl.token }}/batch/{{ batch.id }}',{method:'DELETE'}).then(()=>location.reload())">✕ {{ t('delete', lang) }}</button>
+    {% endif %}
+  </div>
+  <div class="bb">
+    <div class="tf">
+      <h4>🚢 {{ t('pl_voyage_info', lang) }}</h4>
+      <div class="tg">
+        <div class="ti"><span class="tl">{{ t('f_voyage', lang) }}</span><span class="tv">{{ batch.voyage_id or '—' }}</span></div>
+        <div class="ti"><span class="tl">{{ t('f_vessel', lang) }}</span><span class="tv">{{ batch.vessel or '—' }}</span></div>
+        <div class="ti"><span class="tl">{{ t('f_loading_date', lang) }}</span><span class="tv">{{ batch.loading_date.strftime('%d/%m/%Y') if batch.loading_date else '—' }}</span></div>
+        <div class="ti"><span class="tl">POL</span><span class="tv">{{ batch.pol_code or '—' }}</span></div>
+        <div class="ti"><span class="tl">POD</span><span class="tv">{{ batch.pod_code or '—' }}</span></div>
+        <div class="ti"><span class="tl">{{ t('f_booking_ref', lang) }}</span><span class="tv">{{ batch.booking_confirmation or '—' }}</span></div>
+        <div class="ti"><span class="tl">{{ t('f_freight_rate', lang) }}</span><span class="tv">{{ batch.freight_rate or '—' }} €</span></div>
+      </div>
+    </div>
+
+    {% if not pl.is_locked %}
+    <div class="st">👤 {{ t('pl_shipper_section', lang) }}</div>
+    <div class="fg">
+      <div class="fgi"><label class="fl">{{ t('f_customer_name', lang) }} *</label><input type="text" name="{{ p }}customer_name" class="fi" value="{{ batch.customer_name or '' }}"></div>
+      <div class="fgi"><label class="fl">{{ t('f_freight_forwarder', lang) }}</label><input type="text" name="{{ p }}freight_forwarder" class="fi" value="{{ batch.freight_forwarder or '' }}"></div>
+      <div class="fgi"><label class="fl">{{ t('f_code_transitaire', lang) }}</label><input type="text" name="{{ p }}code_transitaire" class="fi" value="{{ batch.code_transitaire or '' }}"></div>
+      <div class="fgi"><label class="fl">{{ t('f_shipper_name', lang) }} *</label><input type="text" name="{{ p }}shipper_name" class="fi" value="{{ batch.shipper_name or '' }}"></div>
+      <div class="fgi full"><label class="fl">{{ t('f_shipper_address', lang) }} *</label><textarea name="{{ p }}shipper_address" class="ft">{{ batch.shipper_address or '' }}</textarea></div>
+      <div class="fgi"><label class="fl">{{ t('f_po_number', lang) }}</label><input type="text" name="{{ p }}po_number" class="fi" value="{{ batch.po_number or '' }}"></div>
+      <div class="fgi"><label class="fl">{{ t('f_batch_id', lang) }}</label><input type="text" name="{{ p }}customer_batch_id" class="fi" value="{{ batch.customer_batch_id or '' }}"></div>
+      <div class="fgi full"><label class="fl">{{ t('f_notify_address', lang) }}</label><textarea name="{{ p }}notify_address" class="ft">{{ batch.notify_address or '' }}</textarea></div>
+      <div class="fgi full"><label class="fl">{{ t('f_consignee_address', lang) }} *</label><textarea name="{{ p }}consignee_address" class="ft">{{ batch.consignee_address or '' }}</textarea></div>
+    </div>
+
+    <div class="st">📦 {{ t('pl_goods_section', lang) }}</div>
+    <div class="fg">
+      <div class="fgi"><label class="fl">{{ t('f_pallet_type', lang) }}</label>
+        <select name="{{ p }}pallet_type" class="fs">
+          <option value="">—</option>
+          <option value="EPAL" {% if batch.pallet_type=='EPAL' %}selected{% endif %}>EPAL (80×120)</option>
+          <option value="USPAL" {% if batch.pallet_type=='USPAL' %}selected{% endif %}>USPAL (100×120)</option>
+          <option value="PORTPAL" {% if batch.pallet_type=='PORTPAL' %}selected{% endif %}>PORTPAL</option>
+          <option value="Other" {% if batch.pallet_type=='Other' %}selected{% endif %}>{{ t('f_other', lang) }}</option>
+        </select>
+      </div>
+      <div class="fgi"><label class="fl">{{ t('f_type_of_goods', lang) }} *</label><input type="text" name="{{ p }}type_of_goods" class="fi" value="{{ batch.type_of_goods or '' }}"></div>
+      <div class="fgi"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="hidden" name="{{ p }}bio_products" value="No">
+        <input type="checkbox" name="{{ p }}bio_products" value="Yes" {% if batch.bio_products=='Yes' %}checked{% endif %} style="width:18px;height:18px;accent-color:#095561;cursor:pointer">
+        {{ t('f_bio_products', lang) }}
+      </label></div>
+      <div class="fgi"><label class="fl">{{ t('f_pallet_quantity', lang) }} *</label><input type="number" name="{{ p }}pallet_quantity" class="fi" min="1" value="{{ batch.pallet_quantity or '' }}"></div>
+      <div class="fgi"><label class="fl">{{ t('f_cases_quantity', lang) }}</label><input type="number" name="{{ p }}cases_quantity" class="fi" value="{{ batch.cases_quantity or '' }}"></div>
+      <div class="fgi"><label class="fl">{{ t('f_units_per_case', lang) }}</label><input type="number" name="{{ p }}units_per_case" class="fi" value="{{ batch.units_per_case or '' }}"></div>
+      <div class="fgi"><label class="fl">{{ t('f_imo_class', lang) }}</label>
+        <select name="{{ p }}imo_product_class" class="fs">
+          <option value="">—</option>
+          {% for cls in imo_classes %}<option value="{{ cls }}" {% if batch.imo_product_class==cls %}selected{% endif %}>{{ cls }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="fgi"><label class="fl">{{ t('f_cargo_value', lang) }}</label><input type="text" name="{{ p }}cargo_value_usd" class="fi" value="{{ batch.cargo_value_usd or '' }}"></div>
+    </div>
+
+    <div class="st">📐 {{ t('pl_dimensions_section', lang) }}</div>
+    <div class="fg">
+      <div class="fgi"><label class="fl">{{ t('f_length', lang) }} *</label><input type="text" name="{{ p }}length_cm" class="fi" value="{{ batch.length_cm or '' }}" required><span class="fh">{{ t('help_length', lang) }}</span></div>
+      <div class="fgi"><label class="fl">{{ t('f_width', lang) }} *</label><input type="text" name="{{ p }}width_cm" class="fi" value="{{ batch.width_cm or '' }}" required><span class="fh">{{ t('help_width', lang) }}</span></div>
+      <div class="fgi"><label class="fl">{{ t('f_height', lang) }} *</label><input type="text" name="{{ p }}height_cm" class="fi" value="{{ batch.height_cm or '' }}" required><span class="fh">{{ t('help_height', lang) }}</span></div>
+      <div class="fgi"><label class="fl">{{ t('f_weight', lang) }} *</label><input type="text" name="{{ p }}weight_kg" class="fi" value="{{ batch.weight_kg or '' }}" required><span class="fh">{{ t('help_weight', lang) }}</span></div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+
+{% if not pl.is_locked %}
+<div class="ab">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <form method="POST" action="/p/{{ pl.token }}/batch/add" style="display:inline;"><button type="submit" class="btn ba" style="width:auto;padding:10px 20px;">＋ {{ t('pl_add_batch', lang) }}</button></form>
+        {{ csrf_input(request) }}
+    <a href="/p/{{ pl.token }}/template" class="btn btn-secondary">📥 {{ t('download_template', lang) }}</a>
+    <button type="button" class="btn btn-secondary" onclick="document.getElementById('import-modal').style.display='flex'">📤 {{ t('import_excel', lang) }}</button>
+  </div>
+  <button type="submit" class="btn bp">💾 {{ t('save', lang) }}</button>
+</div>
+{% endif %}
+</form>
+
+<!-- Import Excel Modal -->
+<div id="import-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:1000;align-items:center;justify-content:center;" onclick="if(event.target===this) this.style.display='none'">
+    <div style="background:white;border-radius:12px;padding:24px;max-width:500px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+        <h3 style="margin-bottom:8px;color:#095561;">📤 {{ t('import_excel_title', lang) }}</h3>
+        <p style="font-size:12px;color:#888;margin-bottom:16px;">{{ t('import_excel_desc', lang) }}</p>
+        <form method="POST" action="/p/{{ pl.token }}/import" enctype="multipart/form-data">
+            {{ csrf_input(request) }}
+            <input type="file" name="file" accept=".xlsx,.xls" class="fi" required style="margin-bottom:16px;">
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('import-modal').style.display='none'">{{ t('cancel', lang) }}</button>
+                <button type="submit" class="btn bp">📤 {{ t('import_excel', lang) }}</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Auto-fill pallet dimensions based on pallet type
+var PALLET_DIMS = {
+  'EPAL':    {length: 120, width: 80},
+  'USPAL':   {length: 120, width: 100},
+  'PORTPAL': {length: 120, width: 100}
+};
+document.querySelectorAll('select[name$="_pallet_type"]').forEach(function(sel){
+  sel.addEventListener('change', function(){
+    var prefix = this.name.replace('pallet_type','');
+    var dims = PALLET_DIMS[this.value];
+    if(dims){
+      var lf = document.querySelector('input[name="'+prefix+'length_cm"]');
+      var wf = document.querySelector('input[name="'+prefix+'width_cm"]');
+      if(lf) lf.value = dims.length;
+      if(wf) wf.value = dims.width;
+    }
+  });
+});
+</script>
+{% endblock %}

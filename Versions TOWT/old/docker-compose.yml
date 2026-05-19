@@ -1,0 +1,42 @@
+services:
+  app:
+    build: .
+    container_name: towt-app-v2
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-towt_planning}
+      - SECRET_KEY=${SECRET_KEY:?set SECRET_KEY in .env (>=32 chars)}
+      - APP_ENV=${APP_ENV:-production}
+      - DEBUG=${DEBUG:-false}
+    volumes:
+      - ./app:/app/app
+    depends_on:
+      db:
+        condition: service_healthy
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: towt-db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:?set POSTGRES_USER in .env}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      - POSTGRES_DB=${POSTGRES_DB:-towt_planning}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Postgres is NOT published on the host anymore. Use
+    # `docker exec towt-db psql -U towt_admin -d towt_planning`
+    # or an SSH tunnel when you really need external access.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-towt_admin}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

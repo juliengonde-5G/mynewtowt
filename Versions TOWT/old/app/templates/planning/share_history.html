@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Liens partagés{% endblock %}
+{% block page_title %}Historique des liens partagés{% endblock %}
+
+{% block topbar_actions %}
+<a href="/planning/pdf/commercial" class="btn-outline" style="font-size:12px;">← Retour au support commercial</a>
+{% endblock %}
+
+{% block content %}
+<style>
+    .shares-table{width:100%;border-collapse:collapse;font-size:12px;}
+    .shares-table th{background:#095561;color:white;padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.3px;font-weight:600;}
+    .shares-table td{padding:8px 12px;border-bottom:1px solid #eee;vertical-align:top;}
+    .shares-table tr:nth-child(even){background:#f9fafb;}
+    .shares-table tr:hover{background:#eef4f6;}
+    .share-token{font-family:monospace;font-size:11px;color:#095561;font-weight:700;}
+    .share-badge{display:inline-block;padding:2px 8px;border-radius:100px;font-size:10px;font-weight:600;}
+    .share-badge.active{background:#e8f5e9;color:#2e7d32;}
+    .share-badge.inactive{background:#fce4ec;color:#c62828;}
+    .share-filters{font-size:11px;color:#666;}
+    .share-filters span{display:inline-block;padding:1px 6px;background:#f0f7f8;border-radius:3px;margin:1px 2px;font-size:10px;}
+    .share-recipient{font-weight:600;color:#333;}
+    .share-company{color:#888;font-size:11px;}
+    .share-notes{font-size:11px;color:#888;font-style:italic;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .share-actions{display:flex;gap:6px;}
+    .share-btn{padding:4px 10px;border:1px solid #ddd;border-radius:4px;font-size:11px;cursor:pointer;background:white;color:#555;text-decoration:none;font-family:'Poppins',system-ui;}
+    .share-btn:hover{border-color:#095561;color:#095561;}
+    .share-btn.danger:hover{border-color:#dc2626;color:#dc2626;}
+    .share-btn.copy{background:#095561;color:white;border-color:#095561;}
+    .share-btn.copy:hover{background:#0a6b79;}
+    .empty-state{text-align:center;padding:40px;color:#888;}
+    .summary-bar{display:flex;gap:16px;margin-bottom:20px;padding:12px 16px;background:#f0f7f8;border-radius:8px;font-size:13px;}
+    .summary-bar strong{color:#095561;}
+</style>
+
+<div class="summary-bar">
+    <span><strong>{{ shares|length }}</strong> lien{{ 's' if shares|length > 1 }} généré{{ 's' if shares|length > 1 }}</span>
+    <span><strong>{{ shares|selectattr('is_active')|list|length }}</strong> actif{{ 's' if shares|selectattr('is_active')|list|length > 1 }}</span>
+    <span><strong>{{ shares|rejectattr('is_active')|list|length }}</strong> désactivé{{ 's' if shares|rejectattr('is_active')|list|length > 1 }}</span>
+</div>
+
+{% if shares %}
+<div class="card" style="overflow-x:auto;">
+    <table class="shares-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Destinataire</th>
+                <th>Libellé</th>
+                <th>Filtres</th>
+                <th>Notes</th>
+                <th>Créé par</th>
+                <th>Statut</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for share in shares %}
+            <tr {% if not share.is_active %}style="opacity:0.5;"{% endif %}>
+                <td style="white-space:nowrap;">{{ share.created_at.strftime('%d/%m/%Y %H:%M') if share.created_at else '—' }}</td>
+                <td>
+                    <div class="share-recipient">{{ share.recipient_name or '—' }}</div>
+                    {% if share.recipient_company %}<div class="share-company">{{ share.recipient_company }}</div>{% endif %}
+                    {% if share.recipient_email %}<div style="font-size:11px;color:#095561;">{{ share.recipient_email }}</div>{% endif %}
+                </td>
+                <td>{{ share.label or '—' }}</td>
+                <td class="share-filters">
+                    {% if share.vessel_code %}<span>🚢 {{ vessels_map.get(share.vessel_code, share.vessel_code) }}</span>{% endif %}
+                    {% if share.origin_locode %}<span>📍 {{ share.origin_locode }}</span>{% endif %}
+                    {% if share.destination_locode %}<span>🎯 {{ share.destination_locode }}</span>{% endif %}
+                    <span>📅 {{ share.year }}</span>
+                    <span>{{ '🇬🇧' if share.lang == 'en' else '🇫🇷' }} {{ share.lang|upper }}</span>
+                    {% if share.legs_ids %}<span>✏️ {{ share.legs_ids.split(',')|length }} legs</span>{% endif %}
+                    {% if not share.vessel_code and not share.origin_locode and not share.destination_locode and not share.legs_ids %}
+                    <span>Tous les départs</span>
+                    {% endif %}
+                </td>
+                <td><div class="share-notes" title="{{ share.notes or '' }}">{{ share.notes or '—' }}</div></td>
+                <td>{{ users_map.get(share.created_by, '—') }}</td>
+                <td>
+                    {% if share.is_active %}
+                    <span class="share-badge active">Actif</span>
+                    {% else %}
+                    <span class="share-badge inactive">Désactivé</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="share-actions">
+                        {% if share.is_active %}
+                        <a href="/planning/share/{{ share.token }}" target="_blank" class="share-btn">🔗 Ouvrir</a>
+                        <button class="share-btn copy" onclick="copyLink(this, '{{ share.token }}')">📋 Copier</button>
+                        {% endif %}
+                        <form method="POST" action="/planning/pdf/commercial/shares/{{ share.id }}/toggle" style="margin:0;">
+                            {{ csrf_input(request) }}
+                            <button type="submit" class="share-btn {% if share.is_active %}danger{% endif %}">
+                                {% if share.is_active %}🚫 Désactiver{% else %}✅ Réactiver{% endif %}
+                            </button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <p style="font-size:16px;margin-bottom:8px;">Aucun lien partagé</p>
+    <p>Générez un lien depuis le <a href="/planning/pdf/commercial">support commercial</a>.</p>
+</div>
+{% endif %}
+
+<script>
+function copyLink(btn, token) {
+    var url = window.location.origin + '/planning/share/' + token;
+    navigator.clipboard.writeText(url).then(function() {
+        var orig = btn.innerHTML;
+        btn.innerHTML = '✅ Copié !';
+        setTimeout(function(){ btn.innerHTML = orig; }, 2000);
+    });
+}
+</script>
+{% endblock %}

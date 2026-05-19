@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TOWT — {% block portal_title %}{{ t('cp_packing_list', lang) }}{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Poppins',sans-serif;background:#f4f7f8;color:#333;min-height:100vh;display:flex;flex-direction:column}
+.ph{background:linear-gradient(135deg,#095561,#0a6b7a);color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.plogo{display:flex;align-items:center;gap:12px}
+.plogo img{height:42px}
+.plogo-t{font-size:18px;font-weight:700;letter-spacing:1px}
+.plogo-s{font-size:11px;opacity:.7}
+.ph-r{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ltog{display:inline-flex;gap:4px}
+.lb{padding:3px 10px;border-radius:100px;font-size:10px;font-weight:600;text-decoration:none;color:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.2)}
+.lb.active{color:#fff;background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.4)}
+.pref{font-size:12px;opacity:.8;background:rgba(255,255,255,.1);padding:4px 10px;border-radius:100px}
+.play{display:flex;flex:1;min-height:calc(100vh - 70px)}
+.psb{width:240px;background:#fff;border-right:1px solid #e5e7eb;padding:16px 0;flex-shrink:0;display:flex;flex-direction:column}
+.pnav{display:flex;flex-direction:column;gap:2px;padding:0 8px;flex:1}
+.pnav a{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;text-decoration:none;color:#555;font-size:13px;font-weight:500;transition:all .15s}
+.pnav a:hover{background:#f0f7f8;color:#095561}
+.pnav a.active{background:rgba(9,85,97,.08);color:#095561;font-weight:600}
+.ni{width:20px;text-align:center;font-size:16px;flex-shrink:0}
+.nbdg{margin-left:auto;font-size:10px;background:#dc2626;color:#fff;padding:1px 6px;border-radius:100px;font-weight:600}
+.ndiv{height:1px;background:#f0f0f0;margin:8px 14px}
+.psf{padding:12px 16px;border-top:1px solid #f0f0f0;font-size:10px;color:#aaa;text-align:center}
+.pmain{flex:1;padding:24px;overflow-y:auto;max-width:960px}
+.pmain h1{font-size:20px;color:#095561;margin-bottom:16px}
+.mbt{display:none;background:none;border:none;color:#fff;font-size:24px;cursor:pointer;padding:4px}
+@media(max-width:768px){.psb{position:fixed;left:-260px;top:0;height:100vh;z-index:100;box-shadow:4px 0 20px rgba(0,0,0,.15);transition:left .3s}.psb.open{left:0}.mbt{display:block}.pmain{padding:16px}.sov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:99}.sov.show{display:block}}
+.card{background:#fff;border-radius:12px;box-shadow:0 1px 6px rgba(0,0,0,.06);padding:20px;margin-bottom:16px}
+.card h2{font-size:16px;color:#095561;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #f0f0f0}
+.igrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.ibox{background:#f8fafb;border-radius:8px;padding:12px}
+.ibox .il{font-size:10px;text-transform:uppercase;color:#888;font-weight:600}
+.ibox .iv{font-size:14px;font-weight:600;color:#095561;margin-top:2px}
+.csec{line-height:1.7;font-size:14px;color:#444}
+.csec h3{color:#095561;margin:20px 0 8px;font-size:15px}
+.csec ul{margin:8px 0 8px 20px}.csec li{margin-bottom:4px}
+.mth{max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:8px 0}
+.mb{max-width:80%;padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.4}
+.mb-c{align-self:flex-end;background:rgba(9,85,97,.08);color:#095561;border-bottom-right-radius:4px}
+.mb-co{align-self:flex-start;background:#f0f0f0;color:#333;border-bottom-left-radius:4px}
+.mm{font-size:10px;color:#aaa;margin-top:3px}
+.mib{display:flex;gap:8px;margin-top:12px}
+.mib textarea{flex:1;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;font-family:'Poppins',system-ui,sans-serif;resize:none;min-height:44px}
+.mib button{padding:10px 20px;background:#095561;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer}
+.cc{display:flex;gap:10px;align-items:center;padding:10px;background:#f8fafb;border-radius:8px}
+.cc .cr{font-size:10px;text-transform:uppercase;font-weight:700;color:#095561}
+.cc .cn{font-size:13px;font-weight:600}
+{% block extra_css %}{% endblock %}
+</style>
+</head>
+<body>
+<div class="ph">
+  <div class="plogo">
+    <button class="mbt" onclick="tSB()">☰</button>
+    <img src="/static/img/logo_towt_white.png" alt="TOWT">
+    <div><div class="plogo-t">TOWT</div><div class="plogo-s">Transoceanic Wind Transport</div></div>
+  </div>
+  <div class="ph-r">
+    <span class="pref">{{ pl.order.reference }} · {{ pl.order.client_name }}</span>
+    <div class="ltog">
+      {% for code, lbl in SUPPORTED_LANGUAGES.items() %}
+      <a href="/p/{{ pl.token }}{{ page_suffix|default('') }}?lang={{ code }}" class="lb {% if lang==code %}active{% endif %}">{{ lbl }}</a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+<div class="sov" id="sov" onclick="tSB()"></div>
+<div class="play">
+  <div class="psb" id="psb">
+    <nav class="pnav">
+      <a href="/p/{{ pl.token }}/packing?lang={{ lang }}" class="{% if active_page=='packing' %}active{% endif %}"><span class="ni">📦</span>{{ t('cp_packing_list', lang) }}</a>
+      <a href="/p/{{ pl.token }}/vessel?lang={{ lang }}" class="{% if active_page=='vessel' %}active{% endif %}"><span class="ni">🚢</span>{{ t('cp_vessel', lang) }}</a>
+      <a href="/p/{{ pl.token }}/voyage?lang={{ lang }}" class="{% if active_page=='voyage' %}active{% endif %}"><span class="ni">🗺️</span>{{ t('cp_voyage', lang) }}</a>
+      <a href="/p/{{ pl.token }}/stowage?lang={{ lang }}" class="{% if active_page=='stowage' %}active{% endif %}"><span class="ni">📐</span>{{ t('cp_stowage', lang) if t('cp_stowage', lang) != 'cp_stowage' else 'Position' }}</a>
+      <div class="ndiv"></div>
+      <a href="/p/{{ pl.token }}/documents?lang={{ lang }}" class="{% if active_page=='docs' %}active{% endif %}"><span class="ni">📄</span>{{ t('cp_documents', lang) }}</a>
+      <a href="/p/{{ pl.token }}/guide?lang={{ lang }}" class="{% if active_page=='guide' %}active{% endif %}"><span class="ni">📖</span>Guide</a>
+      <a href="/p/{{ pl.token }}/messages?lang={{ lang }}" class="{% if active_page=='messages' %}active{% endif %}"><span class="ni">💬</span>{{ t('cp_messages', lang) }}{% if unread_messages %}<span class="nbdg">{{ unread_messages }}</span>{% endif %}</a>
+    </nav>
+    <div class="psf">
+      <a href="/p/{{ pl.token }}/privacy?lang={{ lang }}" style="color:#888;font-size:10px;text-decoration:underline;">
+        {% if lang == 'fr' %}Politique de confidentialité{% elif lang == 'es' %}Política de privacidad{% elif lang == 'pt-br' %}Política de privacidade{% else %}Privacy Policy{% endif %}
+      </a><br>
+      TOWT — Les Docks, 52 quai Frissard<br>76600 Le Havre
+    </div>
+  </div>
+  <div class="pmain">{% block portal_content %}{% endblock %}</div>
+</div>
+<!-- Cookie consent -->
+<div id="ckb" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#1a1a2e;color:#fff;padding:14px 24px;z-index:200;font-size:12px;box-shadow:0 -2px 10px rgba(0,0,0,.2);align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+  <span>{% if lang == 'fr' %}Ce site utilise uniquement des cookies strictement nécessaires. <a href="/p/{{ pl.token }}/privacy?lang={{ lang }}" style="color:#87BD2B;">En savoir plus</a>{% elif lang == 'es' %}Este sitio solo utiliza cookies estrictamente necesarias.{% else %}This site uses only strictly necessary cookies. <a href="/p/{{ pl.token }}/privacy?lang={{ lang }}" style="color:#87BD2B;">Learn more</a>{% endif %}</span>
+  <button onclick="document.getElementById('ckb').style.display='none';try{localStorage.setItem('towt_cookies_ok','1')}catch(e){}" style="background:#87BD2B;color:#fff;border:none;padding:6px 18px;border-radius:4px;font-weight:600;cursor:pointer;font-size:12px;">OK</button>
+</div>
+<script>
+function tSB(){document.getElementById('psb').classList.toggle('open');document.getElementById('sov').classList.toggle('show');}
+(function(){try{if(!localStorage.getItem('towt_cookies_ok')){document.getElementById('ckb').style.display='flex';}}catch(e){}})();
+</script>
+</body>
+</html>

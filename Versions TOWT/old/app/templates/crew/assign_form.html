@@ -1,0 +1,28 @@
+<div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+    <div class="modal" style="max-width:500px;">
+        <div class="modal-header">
+            <h3>Embarquer {{ member.full_name }}</h3>
+            <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+        </div>
+        <form method="POST" action="/crew/members/{{ member.id }}/assign">
+            {{ csrf_input(request) }}
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Navire *</label>
+                    <select name="vessel_id" class="form-select" required>
+                        {% for v in vessels %}<option value="{{ v.id }}">{{ v.name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Date d'embarquement *</label><input type="date" name="embark_date" class="form-input" required></div>
+                    <div class="form-group"><label class="form-label">Date de débarquement</label><input type="date" name="disembark_date" class="form-input"><p style="font-size:10px;color:#888;">Vide = toujours embarqué</p></div>
+                </div>
+                <div class="form-group"><label class="form-label">Notes</label><textarea name="notes" class="form-input" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+                <button type="submit" class="btn btn-primary"><i data-lucide="ship"></i> Embarquer</button>
+            </div>
+        </form>
+    </div>
+</div>

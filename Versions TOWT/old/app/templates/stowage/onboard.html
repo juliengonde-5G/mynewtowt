@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% from "stowage/vessel_svg.html" import vessel_topdown, vessel_legend %}
+
+{% block topbar_actions %}
+<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+  <a href="/onboard?vessel={{ leg.vessel.code }}&leg_id={{ leg.id }}" class="btn btn-sm btn-secondary">On Board</a>
+  <a href="/stowage/leg/{{ leg.id }}/print" target="_blank" class="btn btn-sm btn-secondary">Imprimer</a>
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+  .stowage-stats { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .stat-box { background: white; border-radius: 8px; padding: 0.75rem 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); text-align: center; }
+  .stat-value { font-size: 1.5rem; font-weight: 700; color: var(--towt-blue); }
+  .stat-label { font-size: 0.75rem; color: var(--towt-gray); text-transform: uppercase; }
+
+  .vessel-views { margin-bottom: 1rem; }
+  .vessel-deck-plan { background: white; border-radius: 8px; padding: 1rem; margin-bottom: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .vessel-svg { width: 100%; height: auto; }
+  .vessel-label, .zone-code-text, .zone-weight, .zone-batch-count { font-family: 'Poppins', system-ui; }
+  .deck-label { font-size: 11px; fill: var(--towt-blue); font-weight: 600; font-family: 'Poppins', system-ui; }
+  .hold-label { font-size: 10px; fill: var(--towt-blue); font-weight: 600; font-family: 'Poppins', system-ui; text-anchor: middle; }
+  .zone-code-text { font-size: 8px; fill: var(--towt-gray); font-weight: 500; }
+  .zone-count { font-size: 14px; fill: var(--towt-blue); font-weight: 700; font-family: 'Poppins', system-ui; }
+  .zone-weight { font-size: 10px; fill: var(--towt-gray); }
+  .zone-interactive rect { cursor: grab; transition: opacity 0.15s, stroke-width 0.15s; }
+  .zone-interactive:hover rect { opacity: 0.85; stroke-width: 2; }
+  .zone-interactive.drag-over rect { stroke: var(--towt-green) !important; stroke-width: 3 !important; }
+
+  .vessel-legend { display: flex; gap: 1rem; flex-wrap: wrap; padding: 0.5rem 0; font-size: 0.8rem; }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-swatch { width: 16px; height: 16px; border-radius: 3px; display: inline-block; }
+  .deck-plan-title { margin: 0 0 0.25rem 0; font-size: 0.9rem; color: var(--towt-blue); }
+
+  .zone-batches { margin-top: 1rem; }
+  .batch-card { background: white; border: 1px solid #dee2e6; border-radius: 6px; padding: 8px 12px; margin-bottom: 4px;
+    cursor: grab; transition: box-shadow 0.15s; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; }
+  .batch-card:active { cursor: grabbing; }
+  .batch-card.dragging { opacity: 0.5; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+  .batch-card-info { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+  .badge-dg { background: var(--danger); color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.7rem; font-weight: 600; }
+  .badge-stack { background: var(--towt-green); color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.7rem; }
+
+  .drop-feedback { position: fixed; top: 20px; right: 20px; padding: 10px 20px; border-radius: 8px; color: white; font-weight: 600;
+    z-index: 9999; display: none; font-size: 0.9rem; }
+  .drop-feedback.success { background: var(--towt-green); display: block; }
+  .drop-feedback.error { background: var(--danger); display: block; }
+</style>
+
+<h2 style="margin-bottom:1rem;">Chargement navire — {{ leg.leg_code }} ({{ leg.vessel.name }})</h2>
+
+<div class="stowage-stats">
+  <div class="stat-box">
+    <div class="stat-value">{{ total_palettes }}</div>
+    <div class="stat-label">Palettes chargees</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-value">{{ fill_rate }}%</div>
+    <div class="stat-label">Remplissage</div>
+  </div>
+</div>
+
+<div class="vessel-views">
+  <div class="deck-plans">
+    {{ vessel_topdown(zones, dangerous_zones, "SUP", "Cale superieure", interactive=true) }}
+    {{ vessel_topdown(zones, dangerous_zones, "MIL", "Cale intermediaire", interactive=true) }}
+    {{ vessel_topdown(zones, dangerous_zones, "INF", "Cale inferieure", interactive=true) }}
+  </div>
+  {{ vessel_legend() }}
+</div>
+
+{# Batch cards per zone for drag & drop #}
+<div class="zone-batches">
+  <h3>Batches par zone</h3>
+  {% for zone_code in zone_order %}
+    {% set zone = zones[zone_code] %}
+    {% if zone.batches %}
+    <div class="section-block" style="margin-bottom:0.75rem;" data-zone="{{ zone_code }}"
+         ondrop="dropBatch(event, '{{ zone_code }}')" ondragover="allowDrop(event)">
+      <h4 class="section-title" style="display:flex;justify-content:space-between;margin:0 0 0.5rem 0;">
+        <span>{{ zone_code }} — {{ zone.label }}</span>
+        <span style="font-weight:400;color:var(--towt-gray);">{{ zone.total_palettes }} pal. | {{ "%.1f"|format(zone.total_weight_kg / 1000) }}t</span>
+      </h4>
+      {% for b in zone.batches %}
+      <div class="batch-card" draggable="true"
+           ondragstart="dragBatch(event, {{ b.plan_id }})"
+           data-plan-id="{{ b.plan_id }}"
+           id="batch-card-{{ b.plan_id }}">
+        <div class="batch-card-info">
+          <strong>#{{ b.batch_number }}</strong>
+          <span>{{ b.client_name }}</span>
+          <span>{{ b.pallet_quantity }} pal. {{ b.pallet_format }}</span>
+          <span>{{ "%.0f"|format(b.weight_total_kg) }} kg</span>
+          {% if b.is_dangerous %}<span class="badge-dg">IMO {{ b.imo_class }}</span>{% endif %}
+          {% if b.stackable %}<span class="badge-stack">Stack</span>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endfor %}
+</div>
+
+<div id="drop-feedback" class="drop-feedback"></div>
+
+<script>
+let draggedPlanId = null;
+
+function dragBatch(e, planId) {
+  draggedPlanId = planId;
+  e.dataTransfer.setData('text/plain', planId);
+  e.target.classList.add('dragging');
+}
+
+function allowDrop(e) {
+  e.preventDefault();
+  const zone = e.currentTarget.closest('[data-zone]');
+  if (zone) zone.classList.add('drag-over');
+}
+
+document.addEventListener('dragend', function(e) {
+  document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+  document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+});
+
+document.addEventListener('dragleave', function(e) {
+  const zone = e.target.closest('[data-zone]');
+  if (zone) zone.classList.remove('drag-over');
+});
+
+function dropBatch(e, zoneCode) {
+  e.preventDefault();
+  document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+
+  if (!draggedPlanId) return;
+
+  const feedback = document.getElementById('drop-feedback');
+  const formData = new FormData();
+  formData.append('zone_code', zoneCode);
+
+  fetch('/stowage/leg/{{ leg.id }}/move/' + draggedPlanId, {
+    method: 'POST',
+    body: formData,
+    headers: { 'HX-Request': 'true' }
+  })
+  .then(response => {
+    if (response.ok) {
+      feedback.textContent = 'Batch deplace vers ' + zoneCode;
+      feedback.className = 'drop-feedback success';
+      feedback.style.display = 'block';
+      setTimeout(() => { window.location.reload(); }, 800);
+    } else {
+      return response.text().then(text => {
+        let msg = 'Erreur de deplacement';
+        try { msg = JSON.parse(text).detail || msg; } catch(e) {}
+        feedback.textContent = msg;
+        feedback.className = 'drop-feedback error';
+        feedback.style.display = 'block';
+        setTimeout(() => { feedback.style.display = 'none'; }, 3000);
+      });
+    }
+  })
+  .catch(() => {
+    feedback.textContent = 'Erreur reseau';
+    feedback.className = 'drop-feedback error';
+    feedback.style.display = 'block';
+    setTimeout(() => { feedback.style.display = 'none'; }, 3000);
+  });
+
+  draggedPlanId = null;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Commercial{% endblock %}
+{% block page_title %}Commercial{% endblock %}
+
+{% block topbar_actions %}
+<a href="/commercial/pricing/clients" class="btn btn-secondary btn-sm"><i data-lucide="users"></i> Clients</a>
+<a href="/commercial/pricing/grids/create" class="btn btn-secondary btn-sm"><i data-lucide="grid-3x3"></i> Nouvelle grille</a>
+<button class="btn btn-primary btn-sm" onclick="openOrderModal()"><i data-lucide="plus"></i> Nouvel ordre</button>
+{% endblock %}
+
+{% block content %}
+<div class="commercial-page">
+
+    <!-- ═══ TABS ═══════════════════════════════════════════ -->
+    <div class="status-tabs" style="margin-bottom:20px;display:flex;gap:6px;flex-wrap:wrap;">
+        <a href="/commercial" class="status-tab {% if active_tab == 'dashboard' %}active{% endif %}">📊 Tableau de bord</a>
+        <a href="/commercial?tab=grids" class="status-tab {% if active_tab == 'grids' %}active{% endif %}">📋 Grilles tarifaires</a>
+        <a href="/commercial?tab=offers" class="status-tab {% if active_tab == 'offers' %}active{% endif %}">📄 Offres</a>
+        <a href="/commercial?tab=orders" class="status-tab {% if active_tab == 'orders' %}active{% endif %}">🚢 Ordres de transport</a>
+    </div>
+
+    <!-- ═══ DASHBOARD TAB ══════════════════════════════════ -->
+    {% if active_tab == 'dashboard' %}
+    <div class="dashboard-tab">
+        <!-- KPI Cards -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:12px;margin-bottom:24px;">
+            <div style="background:#fff;border-radius:10px;padding:16px;border:1px solid #eee;text-align:center;">
+                <div style="font-size:28px;font-weight:700;color:var(--towt-blue);">{{ kpi.total_grids_active }}</div>
+                <div style="font-size:11px;color:#888;margin-top:4px;">Grilles actives</div>
+            </div>
+            <div style="background:#fff;border-radius:10px;padding:16px;border:1px solid #eee;text-align:center;">
+                <div style="font-size:28px;font-weight:700;color:var(--towt-sky-dark);">{{ kpi.total_offers }}</div>
+                <div style="font-size:11px;color:#888;margin-top:4px;">Offres émises</div>
+            </div>
+            <div style="background:#fff;border-radius:10px;padding:16px;border:1px solid #eee;text-align:center;">
+                <div style="font-size:28px;font-weight:700;color:var(--warning);">{{ kpi.total_offers_pending }}</div>
+                <div style="font-size:11px;color:#888;margin-top:4px;">Offres en cours</div>
+            </div>
+            <div style="background:#fff;border-radius:10px;padding:16px;border:1px solid #eee;text-align:center;">
+                <div style="font-size:28px;font-weight:700;color:var(--towt-green);">{{ kpi.total_offers_accepted }}</div>
+                <div style="font-size:11px;color:#888;margin-top:4px;">Offres acceptées</div>
+            </div>
+            <div style="background:#fff;border-radius:10px;padding:16px;border:1px solid #eee;text-align:center;">
+                <div style="font-size:28px;font-weight:700;color:var(--towt-blue);">{{ kpi.total_orders }}</div>
+                <div style="font-size:11px;color:#888;margin-top:4px;">Ordres de transport</div>
+            </div>
+            <div style="background:#fff;border-radius:10px;padding:16px;border:1px solid #eee;text-align:center;">
+                <div style="font-size:28px;font-weight:700;color:var(--towt-green);">{{ '{:,.0f}'.format(kpi.total_ca).replace(',', ' ') }} €</div>
+                <div style="font-size:11px;color:#888;margin-top:4px;">CA total</div>
+            </div>
+        </div>
+
+        <!-- Performance par grille -->
+        <h3 style="margin:0 0 12px;color:var(--towt-blue);font-size:15px;">Performance par grille tarifaire</h3>
+        {% if grids %}
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr>
+                    <th>Grille</th><th>Client</th><th>Statut</th><th>Validité</th>
+                    <th style="text-align:center;">Offres émises</th>
+                    <th style="text-align:center;">Offres acceptées</th>
+                    <th style="text-align:center;">Ordres générés</th>
+                    <th style="text-align:right;">CA généré</th>
+                    <th style="text-align:center;">Conversion</th>
+                </tr></thead>
+                <tbody>
+                    {% for grid in grids %}
+                    {% set gk = grid_kpis.get(grid.id, {}) %}
+                    <tr>
+                        <td><a href="/commercial/pricing/grids/{{ grid.id }}" style="color:var(--towt-blue);font-weight:600;font-family:'Poppins',sans-serif;text-decoration:none;">{{ grid.reference }}</a></td>
+                        <td>{{ grid.client.name if grid.client else '—' }}</td>
+                        <td>
+                            {% if grid.status == 'draft' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;background:#fff3e0;color:#e65100;">Brouillon</span>
+                            {% elif grid.status == 'active' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;background:#dcfce7;color:#16a34a;">Active</span>
+                            {% elif grid.status == 'expired' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;background:#fee2e2;color:#dc2626;">Expirée</span>
+                            {% elif grid.status == 'superseded' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;background:#f1f5f9;color:#64748b;">Remplacée</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size:12px;">{{ grid.valid_from }} → {{ grid.valid_to }}</td>
+                        <td style="text-align:center;font-weight:500;">{{ gk.get('nb_offers', 0) }}</td>
+                        <td style="text-align:center;font-weight:500;color:#27ae60;">{{ gk.get('nb_offers_accepted', 0) }}</td>
+                        <td style="text-align:center;font-weight:500;color:var(--towt-blue);">{{ gk.get('nb_orders', 0) }}</td>
+                        <td style="text-align:right;font-weight:600;">{{ '{:,.0f}'.format(gk.get('ca', 0)).replace(',', ' ') }} €</td>
+                        <td style="text-align:center;">
+                            {% if gk.get('nb_offers', 0) > 0 %}
+                            {% set conv = (gk.get('nb_orders', 0) / gk.get('nb_offers', 1) * 100) %}
+                            <span style="font-weight:600;{% if conv >= 50 %}color:#27ae60;{% elif conv >= 20 %}color:#e67e22;{% else %}color:#e74c3c;{% endif %}">{{ '%.0f'|format(conv) }}%</span>
+                            {% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="text-align:center;padding:32px;color:#999;">
+            <p>Aucune grille tarifaire créée.</p>
+            <a href="/commercial/pricing/grids/create" class="btn btn-primary btn-sm" style="margin-top:8px;">Créer une grille</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ═══ GRIDS TAB ══════════════════════════════════════ -->
+    {% elif active_tab == 'grids' %}
+    <div class="grids-tab">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+            <a href="/commercial/pricing/grids/create" class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Nouvelle grille</a>
+        </div>
+        {% if grids %}
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr>
+                    <th>Référence</th><th>Client</th><th>Navire</th><th>Validité</th><th>Routes</th><th>Indice</th><th>Statut</th><th style="text-align:right;">Actions</th>
+                </tr></thead>
+                <tbody>
+                    {% for grid in grids %}
+                    <tr>
+                        <td><a href="/commercial/pricing/grids/{{ grid.id }}" style="color:var(--towt-blue);font-weight:600;font-family:'Poppins',sans-serif;text-decoration:none;">{{ grid.reference }}</a></td>
+                        <td>{{ grid.client.name if grid.client else '—' }}
+                            {% if grid.client %}<br><span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;{% if grid.client.client_type == 'freight_forwarder' %}background:#f3e8ff;color:#7c3aed;{% else %}background:#dcfce7;color:#16a34a;{% endif %}">{{ 'FF' if grid.client.client_type == 'freight_forwarder' else 'Chargeur' }}</span>{% endif %}
+                        </td>
+                        <td style="font-size:12px;">{{ grid.vessel.name if grid.vessel else 'Défaut' }}</td>
+                        <td style="font-size:12px;">{{ grid.valid_from }} → {{ grid.valid_to }}</td>
+                        <td style="text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:#e0f2fe;color:#0369a1;">{{ grid.lines|length }}</span></td>
+                        <td style="font-size:12px;font-weight:500;">{{ '%.2f'|format(grid.adjustment_index or 1.0) }}</td>
+                        <td>
+                            {% if grid.status == 'active' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;background:#dcfce7;color:#16a34a;">Active</span>
+                            {% elif grid.status == 'draft' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;background:#fff3e0;color:#e65100;">Brouillon</span>
+                            {% elif grid.status == 'expired' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;background:#fee2e2;color:#dc2626;">Expirée</span>
+                            {% else %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;background:#f1f5f9;color:#64748b;">{{ grid.status }}</span>{% endif %}
+                        </td>
+                        <td style="text-align:right;">
+                            <a href="/commercial/pricing/grids/{{ grid.id }}" class="btn btn-secondary btn-sm" style="font-size:11px;"><i data-lucide="eye" style="width:12px;height:12px;"></i></a>
+                            <a href="/commercial/pricing/grids/{{ grid.id }}/offer/create" class="btn btn-secondary btn-sm" style="font-size:11px;" title="Émettre offre"><i data-lucide="file-text" style="width:12px;height:12px;"></i></a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="text-align:center;padding:48px;color:#999;">
+            <i data-lucide="grid-3x3" style="width:48px;height:48px;margin-bottom:16px;opacity:0.3;"></i>
+            <p>Aucune grille tarifaire.</p>
+            <a href="/commercial/pricing/grids/create" class="btn btn-primary btn-sm" style="margin-top:8px;">Créer une grille</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ═══ OFFERS TAB ═════════════════════════════════════ -->
+    {% elif active_tab == 'offers' %}
+    <div class="offers-tab">
+        <!-- Offer stats -->
+        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+            {% set draft_ct = offers|selectattr('status', 'equalto', 'draft')|list|length %}
+            {% set sent_ct = offers|selectattr('status', 'equalto', 'sent')|list|length %}
+            {% set accepted_ct = offers|selectattr('status', 'equalto', 'accepted')|list|length %}
+            {% set rejected_ct = offers|selectattr('status', 'equalto', 'rejected')|list|length %}
+            {% set expired_ct = offers|selectattr('status', 'equalto', 'expired')|list|length %}
+            <div style="background:#fff3e0;border-radius:8px;padding:8px 14px;font-size:12px;"><strong style="color:#e65100;">{{ draft_ct }}</strong> brouillon{{ 's' if draft_ct > 1 }}</div>
+            <div style="background:#e3f2fd;border-radius:8px;padding:8px 14px;font-size:12px;"><strong style="color:#1565c0;">{{ sent_ct }}</strong> en cours</div>
+            <div style="background:#dcfce7;border-radius:8px;padding:8px 14px;font-size:12px;"><strong style="color:#16a34a;">{{ accepted_ct }}</strong> validée{{ 's' if accepted_ct > 1 }}</div>
+            <div style="background:#fee2e2;border-radius:8px;padding:8px 14px;font-size:12px;"><strong style="color:#dc2626;">{{ rejected_ct }}</strong> refusée{{ 's' if rejected_ct > 1 }}</div>
+            <div style="background:#f1f5f9;border-radius:8px;padding:8px 14px;font-size:12px;"><strong style="color:#64748b;">{{ expired_ct }}</strong> échue{{ 's' if expired_ct > 1 }}</div>
+        </div>
+
+        {% if offers %}
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr>
+                    <th>Référence</th><th>Client</th><th>Grille</th><th>Validité</th><th>Statut</th><th>Envoyée</th><th>Document</th><th style="text-align:right;">Actions</th>
+                </tr></thead>
+                <tbody>
+                    {% for offer in offers %}
+                    <tr>
+                        <td><strong style="color:var(--towt-blue);font-family:'Poppins',sans-serif;">{{ offer.reference }}</strong></td>
+                        <td>{{ offer.client.name if offer.client else '—' }}</td>
+                        <td>
+                            {% if offer.rate_grid %}
+                            <a href="/commercial/pricing/grids/{{ offer.rate_grid.id }}" style="color:var(--towt-blue);font-size:12px;">{{ offer.rate_grid.reference }}</a>
+                            {% else %}—{% endif %}
+                        </td>
+                        <td style="font-size:12px;">{{ offer.validity_date }}</td>
+                        <td>
+                            {% if offer.status == 'draft' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;background:#fff3e0;color:#e65100;">Brouillon</span>
+                            {% elif offer.status == 'sent' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;background:#e3f2fd;color:#1565c0;">En cours</span>
+                            {% elif offer.status == 'accepted' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;background:#dcfce7;color:#16a34a;">Validée</span>
+                            {% elif offer.status == 'rejected' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;background:#fee2e2;color:#dc2626;">Refusée</span>
+                            {% elif offer.status == 'expired' %}<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;background:#f1f5f9;color:#64748b;">Échue</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size:11px;">{{ offer.sent_at.strftime('%d/%m/%Y') if offer.sent_at else '—' }}</td>
+                        <td>
+                            {% if offer.document_filename %}
+                            <a href="/commercial/pricing/offers/{{ offer.id }}/download" class="btn btn-secondary btn-sm" style="font-size:10px;"><i data-lucide="download" style="width:11px;height:11px;"></i> DOCX</a>
+                            {% else %}—{% endif %}
+                        </td>
+                        <td style="text-align:right;">
+                            <div style="display:flex;gap:4px;justify-content:flex-end;">
+                                {% if offer.status == 'draft' %}
+                                <form method="post" action="/commercial/pricing/offers/{{ offer.id }}/status" style="margin:0;"><input type="hidden" name="status" value="sent"><button type="submit" class="btn btn-sm" style="font-size:10px;background:#3498db;color:#fff;">Envoyée</button></form>
+                                    {{ csrf_input(request) }}
+                                {% elif offer.status == 'sent' %}
+                                <form method="post" action="/commercial/pricing/offers/{{ offer.id }}/status" style="margin:0;"><input type="hidden" name="status" value="accepted"><button type="submit" class="btn btn-sm" style="font-size:10px;background:#27ae60;color:#fff;">Validée</button></form>
+                                    {{ csrf_input(request) }}
+                                <form method="post" action="/commercial/pricing/offers/{{ offer.id }}/status" style="margin:0;"><input type="hidden" name="status" value="rejected"><button type="submit" class="btn btn-sm" style="font-size:10px;background:#e74c3c;color:#fff;">Refusée</button></form>
+                                    {{ csrf_input(request) }}
+                                <form method="post" action="/commercial/pricing/offers/{{ offer.id }}/status" style="margin:0;"><input type="hidden" name="status" value="expired"><button type="submit" class="btn btn-sm" style="font-size:10px;background:#95a5a6;color:#fff;">Échue</button></form>
+                                    {{ csrf_input(request) }}
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="text-align:center;padding:48px;color:#999;">
+            <i data-lucide="file-text" style="width:48px;height:48px;margin-bottom:16px;opacity:0.3;"></i>
+            <p>Aucune offre émise.</p>
+            <a href="/commercial?tab=grids" class="btn btn-primary btn-sm" style="margin-top:8px;">Émettre depuis une grille</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ═══ ORDERS TAB ═════════════════════════════════════ -->
+    {% elif active_tab == 'orders' %}
+    <div class="orders-tab">
+        <!-- Order status filter -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
+            <a href="/commercial?tab=orders" class="status-tab {% if not selected_status %}active{% endif %}" style="font-size:11px;">Tous</a>
+            {% for k, v in statuses.items() %}
+            <a href="/commercial?tab=orders&status={{ k }}" class="status-tab {% if selected_status == k %}active{% endif %}" style="font-size:11px;">{{ v }}</a>
+            {% endfor %}
+        </div>
+
+        {% if orders %}
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr>
+                    <th>Réf.</th><th>Client</th><th>Palettes</th><th>Prix unit.</th><th>Total</th>
+                    <th>Route</th><th>Grille</th><th>Affectation</th><th>Statut</th><th>PJ</th><th style="text-align:right;">Actions</th>
+                </tr></thead>
+                <tbody>
+                    {% for order in orders %}
+                    <tr>
+                        <td><strong style="font-family:'Poppins',sans-serif;color:var(--towt-blue);">{{ order.reference }}</strong></td>
+                        <td>{{ order.client_name }}{% if order.client_contact %}<br><span style="font-size:10px;color:#888;">{{ order.client_contact }}</span>{% endif %}</td>
+                        <td>{{ order.quantity_palettes }} <span class="palette-badge {{ order.palette_format or 'EPAL' }}">{{ order.palette_format or 'EPAL' }}</span></td>
+                        <td style="font-size:12px;">{{ '%.2f'|format(order.unit_price or 0) }} €</td>
+                        <td style="font-weight:600;">{{ '%.2f'|format(order.total_price or 0) }} €</td>
+                        <td style="font-size:11px;">
+                            {% if order.departure_locode or order.arrival_locode %}{{ order.departure_locode or '?' }} → {{ order.arrival_locode or '?' }}{% else %}—{% endif %}
+                        </td>
+                        <td style="font-size:11px;">
+                            {% if order.rate_grid %}
+                            <a href="/commercial/pricing/grids/{{ order.rate_grid.id }}" style="color:var(--towt-blue);">{{ order.rate_grid.reference }}</a>
+                            {% else %}<span style="color:#ccc;">—</span>{% endif %}
+                        </td>
+                        <td style="font-size:11px;">
+                            {% if order.leg %}
+                            <span style="color:var(--towt-blue);font-weight:500;">{{ order.leg.vessel.name }}</span><br>
+                            <span style="font-family:'Poppins',sans-serif;">{{ order.leg.leg_code }}</span>
+                            {% else %}<span style="color:#ccc;">—</span>{% endif %}
+                        </td>
+                        <td><span class="badge badge-{{ order.status }}">{{ statuses.get(order.status, order.status) }}</span></td>
+                        <td>
+                            {% if order.attachment_filename %}
+                            <a href="/commercial/orders/{{ order.id }}/attachment" target="_blank" style="font-size:11px;">📎</a>
+                            {% else %}<span style="color:#ccc;">—</span>{% endif %}
+                        </td>
+                        <td style="text-align:right;">
+                            <div style="display:flex;gap:4px;justify-content:flex-end;">
+                                <button class="btn btn-sm btn-secondary" onclick="openEditOrderModal({{ order.id }})" title="Modifier"><i data-lucide="pencil"></i></button>
+                                <button class="btn btn-sm btn-secondary" onclick="openAssignModal({{ order.id }})" title="Affecter"><i data-lucide="link"></i></button>
+                                <button class="btn btn-sm btn-secondary" onclick="openUploadModal({{ order.id }})" title="PJ"><i data-lucide="paperclip"></i></button>
+                                <button class="btn btn-sm btn-danger" hx-delete="/commercial/orders/{{ order.id }}" hx-confirm="Supprimer {{ order.reference }} ?"><i data-lucide="trash-2"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i data-lucide="package" style="width:48px;height:48px;color:var(--towt-sky);"></i>
+            <h3>Aucun ordre de transport{% if selected_status %} avec ce statut{% endif %}</h3>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+</div>
+
+<div id="modal-container"></div>
+<div id="upload-modal-container"></div>
+
+<style>
+    .status-tab{padding:6px 16px;border-radius:100px;font-size:12px;font-weight:500;color:#888;border:1px solid #eee;background:white;text-decoration:none;}
+    .status-tab:hover{border-color:var(--towt-sky);}.status-tab.active{background:var(--towt-blue);color:white;border-color:var(--towt-blue);}
+    .palette-badge{padding:2px 8px;border-radius:100px;font-size:10px;font-weight:600;}
+    .palette-badge.EPAL{background:rgba(9,85,97,0.1);color:var(--towt-blue);}
+    .palette-badge.USPAL{background:rgba(245,158,11,0.1);color:#D97706;}
+    .palette-badge.PORTPAL{background:rgba(139,92,246,0.1);color:#7C3AED;}
+</style>
+
+<script>
+    function openOrderModal() { loadModal('/commercial/orders/create'); }
+    function openEditOrderModal(id) { loadModal('/commercial/orders/' + id + '/edit'); }
+    function openAssignModal(id) { loadModal('/commercial/orders/' + id + '/assign'); }
+
+    function openUploadModal(oid) {
+        var html = '<div class="modal-overlay" onclick="if(event.target===this) closeUploadModal()">';
+        html += '<div class="modal" style="max-width:500px;"><div class="modal-header"><h3>📎 Pièce jointe</h3>';
+        html += '<button class="modal-close" onclick="closeUploadModal()"><i data-lucide="x"></i></button></div>';
+        html += '<form method="POST" action="/commercial/orders/' + oid + '/upload" enctype="multipart/form-data" id="upload-form">';
+        html += '{{ csrf_input(request) }}';
+        html += '<div class="modal-body"><div class="form-group"><label class="form-label">Fichier (PDF ou Word)</label>';
+        html += '<input type="file" name="file" accept=".pdf,.doc,.docx" class="form-input" required></div></div>';
+        html += '<div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeUploadModal()">Annuler</button>';
+        html += '<button type="submit" class="btn btn-primary"><i data-lucide="upload"></i> Envoyer</button></div>';
+        html += '</form></div></div>';
+        document.getElementById('upload-modal-container').innerHTML = html;
+        lucide.createIcons();
+        document.getElementById('upload-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            fetch(this.action, { method: 'POST', body: new FormData(this) })
+                .then(function(r) { window.location.href = '/commercial?tab=orders'; })
+                .catch(function() { window.location.reload(); });
+        });
+    }
+    function closeUploadModal() { document.getElementById('upload-modal-container').innerHTML = ''; }
+    window.closeModal = function() { document.getElementById('modal-container').innerHTML = ''; };
+
+    function loadModal(url) {
+        fetch(url).then(function(r){return r.text();}).then(function(html){
+            document.getElementById('modal-container').innerHTML = html;
+            lucide.createIcons();
+            document.getElementById('modal-container').querySelectorAll('script').forEach(function(s){
+                var ns = document.createElement('script'); ns.textContent = s.textContent;
+                document.body.appendChild(ns); document.body.removeChild(ns);
+            });
+            initFormSubmit();
+        });
+    }
+
+    window.initFormSubmit = function() {
+        var form = document.getElementById('order-form') || document.getElementById('assign-form');
+        if (!form) return;
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            fetch(form.action, { method: 'POST', body: new FormData(form) })
+                .then(function(r){ if(r.redirected) window.location.href=r.url; else window.location.href='/commercial?tab=orders'; })
+                .catch(function(){ window.location.reload(); });
+        });
+    };
+</script>
+{% endblock %}

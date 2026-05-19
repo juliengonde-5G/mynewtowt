@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Escale {{ leg.leg_code }} — {{ leg.vessel.name }}</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:'Poppins',system-ui,-apple-system,sans-serif;font-size:12px;color:#333;padding:24px;max-width:800px;margin:0 auto;}
+        .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #095561;padding-bottom:12px;margin-bottom:20px;}
+        .header h1{font-size:18px;color:#095561;margin:0;}
+        .header h2{font-size:14px;color:#555;font-weight:400;margin-top:4px;}
+        .print-info{font-size:10px;color:#999;text-align:right;}
+        .section{margin-bottom:20px;}
+        .section h3{font-size:13px;color:#095561;border-bottom:1px solid #ddd;padding-bottom:4px;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;}
+        .info-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px;}
+        .info-item{background:#f8f9fa;padding:8px 10px;border-radius:4px;}
+        .info-label{font-size:10px;color:#888;text-transform:uppercase;font-weight:600;}
+        .info-value{font-size:13px;font-weight:600;color:#333;margin-top:2px;}
+        table{width:100%;border-collapse:collapse;font-size:11px;}
+        th{background:#095561;color:white;padding:6px 8px;text-align:left;font-weight:600;}
+        td{padding:5px 8px;border-bottom:1px solid #eee;}
+        tr:nth-child(even){background:#f9f9f9;}
+        .type-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase;}
+        .type-badge.commerciale{background:#E8F5E9;color:#2E7D32;}.type-badge.technique{background:#FFF8E1;color:#F57F17;}
+        .type-badge.armement{background:#E3F2FD;color:#1565C0;}.type-badge.portuaire{background:#E0F2F1;color:#00695C;}
+        .footer{margin-top:30px;border-top:1px solid #ddd;padding-top:8px;font-size:10px;color:#999;display:flex;justify-content:space-between;}
+        @media print{body{padding:12px;} .no-print{display:none;}}
+    </style>
+</head>
+<body>
+    <div class="no-print" style="margin-bottom:16px;text-align:right;">
+        <button onclick="window.print()" style="padding:8px 20px;background:#095561;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;">🖨 Imprimer / PDF</button>
+        <button onclick="window.close()" style="padding:8px 20px;background:#eee;color:#333;border:none;border-radius:4px;cursor:pointer;font-size:13px;margin-left:8px;">Fermer</button>
+    </div>
+
+    <div class="header">
+        <div>
+            <h1>🚢 Rapport d'escale — {{ leg.leg_code }}</h1>
+            <h2>{{ leg.vessel.name }} · {{ leg.departure_port.country_code|flag }} {{ leg.departure_port.name }} → {{ leg.arrival_port.country_code|flag }} {{ leg.arrival_port.name }}</h2>
+        </div>
+        <div class="print-info">
+            TOWT<br>
+            Généré le {{ now.strftime('%d/%m/%Y %H:%M') }}
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>Informations du leg</h3>
+        <div class="info-grid">
+            <div class="info-item"><div class="info-label">ETD</div><div class="info-value">{{ leg.etd.strftime('%d/%m/%Y %H:%M') if leg.etd else '—' }}</div></div>
+            <div class="info-item"><div class="info-label">ETA</div><div class="info-value">{{ leg.eta.strftime('%d/%m/%Y %H:%M') if leg.eta else '—' }}</div></div>
+            <div class="info-item"><div class="info-label">ATA</div><div class="info-value" style="color:#2E7D32;">{{ leg.ata.strftime('%d/%m/%Y %H:%M') if leg.ata else '—' }}</div></div>
+            <div class="info-item"><div class="info-label">ATD</div><div class="info-value" style="color:#2E7D32;">{{ leg.atd.strftime('%d/%m/%Y %H:%M') if leg.atd else '—' }}</div></div>
+        </div>
+        <div class="info-grid" style="grid-template-columns:1fr 1fr 1fr;">
+            <div class="info-item"><div class="info-label">Distance</div><div class="info-value">{{ leg.computed_distance|int if leg.computed_distance else '—' }} NM</div></div>
+            <div class="info-item"><div class="info-label">Durée</div><div class="info-value">{{ ((leg.estimated_duration_hours or 0) / 24)|round(1) }} j.</div></div>
+            <div class="info-item"><div class="info-label">Escale</div><div class="info-value">{{ leg.port_stay_days or 3 }} j.</div></div>
+        </div>
+    </div>
+
+    {% if operations %}
+    <div class="section">
+        <h3>Opérations ({{ operations|length }})</h3>
+        <table>
+            <thead><tr><th>Type</th><th>Action</th><th>Prévu</th><th>Réel</th><th>Intervenant</th><th>Notes</th></tr></thead>
+            <tbody>
+                {% for op in operations %}
+                <tr>
+                    <td><span class="type-badge {{ op.operation_type }}">{{ op.operation_type }}</span></td>
+                    <td><strong>{{ action_labels.get(op.action, op.action|replace('_',' ')|capitalize) }}</strong></td>
+                    <td>{{ op.planned_start.strftime('%d/%m %H:%M') if op.planned_start else '—' }}{% if op.planned_end and op.planned_end != op.planned_start %} → {{ op.planned_end.strftime('%H:%M') }}{% endif %}</td>
+                    <td>{{ op.actual_start.strftime('%d/%m %H:%M') if op.actual_start else '—' }}{% if op.actual_end and op.actual_end != op.actual_start %} → {{ op.actual_end.strftime('%H:%M') }}{% endif %}</td>
+                    <td>{{ op.intervenant or '' }}</td>
+                    <td style="max-width:120px;font-size:10px;color:#666;">{{ op.description or '' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if docker_shifts %}
+    <div class="section">
+        <h3>Shifts Dockers ({{ docker_shifts|length }})</h3>
+        <table>
+            <thead><tr><th>Cale</th><th>Prévu</th><th>Réel</th><th>Pal. prév.</th><th>Pal. réel</th><th>Prod. réelle</th><th>Écart</th></tr></thead>
+            <tbody>
+                {% for ds in docker_shifts %}
+                <tr>
+                    <td><strong>{{ ds.hold|capitalize }}</strong></td>
+                    <td>{{ ds.planned_start.strftime('%d/%m %H:%M') if ds.planned_start else '—' }} → {{ ds.planned_end.strftime('%H:%M') if ds.planned_end else '—' }}</td>
+                    <td>{{ ds.actual_start.strftime('%d/%m %H:%M') if ds.actual_start else '—' }} → {{ ds.actual_end.strftime('%H:%M') if ds.actual_end else '—' }}</td>
+                    <td>{{ ds.planned_palettes or '—' }}</td>
+                    <td>{{ ds.actual_palettes or '—' }}</td>
+                    <td>{% if ds.actual_rate is not none %}{{ ds.actual_rate }} pal/h{% else %}—{% endif %}</td>
+                    <td>{% if ds.rate_delta_pct is not none %}{{ '%+.0f'|format(ds.rate_delta_pct) }}%{% else %}—{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        <span>TOWT — Transport à la voile</span>
+        <span>Escale {{ leg.leg_code }} · {{ leg.vessel.name }}</span>
+    </div>
+</body>
+</html>

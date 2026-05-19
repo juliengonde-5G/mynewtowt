@@ -1,0 +1,57 @@
+<div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+    <div class="modal" style="max-width:500px;">
+        <div class="modal-header">
+            <h3>{% if vessel %}{{ vessel.name }}{% else %}Nouveau navire{% endif %}</h3>
+            <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+        </div>
+        <form method="POST" action="{% if vessel %}/admin/vessels/{{ vessel.id }}/edit{% else %}/admin/vessels/create{% endif %}">
+            {{ csrf_input(request) }}
+            <div class="modal-body">
+                {% if error %}
+                <div class="alert alert-error">{{ error }}</div>
+                {% endif %}
+
+                {% if not vessel %}
+                <div class="form-group">
+                    <label class="form-label">Code navire (numéro unique)</label>
+                    <input type="number" name="code" class="form-input" required min="1" placeholder="ex: 5">
+                </div>
+                {% endif %}
+
+                <div class="form-group">
+                    <label class="form-label">Nom</label>
+                    <input type="text" name="name" class="form-input" value="{{ vessel.name if vessel else '' }}" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Numéro IMO</label>
+                    <input type="text" name="imo_number" class="form-input" value="{{ vessel.imo_number or '' if vessel else '' }}" placeholder="ex: 9876543">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Pavillon</label>
+                    <input type="text" name="flag" class="form-input" value="{{ vessel.flag or '' if vessel else '' }}" placeholder="ex: France">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Port en lourd (DWT)</label>
+                    <input type="text" name="dwt" class="form-input" value="{{ vessel.dwt or '' if vessel else '' }}" placeholder="ex: 1200">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Vitesse par défaut (noeuds)</label>
+                    <input type="text" name="default_speed" class="form-input" value="{{ vessel.default_speed if vessel else '8' }}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Coefficient d'élongation</label>
+                    <input type="text" name="default_elongation" class="form-input" value="{{ vessel.default_elongation if vessel else '1.25' }}">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+                <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> {% if vessel %}Enregistrer{% else %}Créer{% endif %}</button>
+            </div>
+        </form>
+    </div>
+</div>

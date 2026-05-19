@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Journal d'activité{% endblock %}
+{% block page_title %}Journal d'activité{% endblock %}
+
+{% block topbar_actions %}
+<a href="/admin/activity-log/export/csv{% if selected_module %}?module={{ selected_module }}{% endif %}" class="btn btn-outline btn-sm"><i data-lucide="download"></i> Export CSV</a>
+<a href="/admin/settings" class="btn btn-outline btn-sm"><i data-lucide="arrow-left"></i> Retour paramètres</a>
+{% endblock %}
+
+{% block content %}
+<style>
+.log-filters { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:end; }
+.log-filters .filter-group { display:flex; flex-direction:column; gap:4px; }
+.log-filters label { font-size:0.75rem; font-weight:600; color:#64748b; text-transform:uppercase; }
+.log-filters select, .log-filters input { padding:6px 10px; border:1px solid #e2e8f0; border-radius:6px; font-size:0.85rem; }
+.log-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.72rem; font-weight:600; text-transform:uppercase; }
+.log-badge.create { background:#dcfce7; color:#166534; }
+.log-badge.update { background:#dbeafe; color:#1e40af; }
+.log-badge.delete { background:#fee2e2; color:#991b1b; }
+.log-badge.login { background:#f3e8ff; color:#6b21a8; }
+.log-badge.lock { background:#fef3c7; color:#92400e; }
+.log-badge.unlock { background:#e0f2fe; color:#075985; }
+.log-badge.default { background:#f1f5f9; color:#475569; }
+.log-module { font-size:0.75rem; padding:2px 6px; border-radius:4px; background:#f1f5f9; color:#334155; font-weight:500; }
+.log-detail { color:#64748b; font-size:0.85rem; max-width:400px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.log-timestamp { font-size:0.82rem; color:#475569; white-space:nowrap; }
+.log-user { font-weight:500; color:#1e293b; }
+.pagination { display:flex; justify-content:center; gap:8px; margin-top:16px; }
+.pagination a, .pagination span { padding:6px 12px; border:1px solid #e2e8f0; border-radius:6px; font-size:0.85rem; text-decoration:none; color:#475569; }
+.pagination span.current { background:#095561; color:white; border-color:#095561; }
+.log-stats { font-size:0.82rem; color:#64748b; margin-bottom:8px; }
+</style>
+
+<div class="log-filters">
+    <form method="get" action="/admin/activity-log" style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
+        <div class="filter-group">
+            <label>Module</label>
+            <select name="module" onchange="this.form.submit()">
+                <option value="">Tous les modules</option>
+                {% for m in modules %}
+                <option value="{{ m }}" {% if selected_module == m %}selected{% endif %}>{{ m }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>Utilisateur</label>
+            <input type="text" name="username" value="{{ search_username }}" placeholder="Rechercher..." />
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Filtrer</button>
+        {% if selected_module or search_username %}
+        <a href="/admin/activity-log" class="btn btn-outline btn-sm">Réinitialiser</a>
+        {% endif %}
+    </form>
+</div>
+
+<div class="log-stats">{{ total }} entrée{{ 's' if total > 1 else '' }} — Page {{ page }}/{{ total_pages }}</div>
+
+<div class="table-container">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date/Heure</th>
+                <th>Utilisateur</th>
+                <th>Module</th>
+                <th>Action</th>
+                <th>Détail</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for e in entries %}
+            <tr>
+                <td class="log-timestamp">{{ e.timestamp.strftime('%d/%m/%Y %H:%M') if e.timestamp else '' }}</td>
+                <td class="log-user">{{ e.username or '—' }}</td>
+                <td><span class="log-module">{{ e.module }}</span></td>
+                <td>
+                    {% set action_class = 'default' %}
+                    {% if e.action in ('create', 'add_batch', 'assign') %}{% set action_class = 'create' %}
+                    {% elif e.action in ('update', 'update_port', 'update_cargo', 'update_opex', 'update_language', 'port_status', 'status', 'payment_status', 'doc_status', 'save_doc', 'import_excel') %}{% set action_class = 'update' %}
+                    {% elif e.action in ('delete', 'delete_attachment') %}{% set action_class = 'delete' %}
+                    {% elif e.action == 'login' %}{% set action_class = 'login' %}
+                    {% elif e.action in ('lock', 'lock_legs') %}{% set action_class = 'lock' %}
+                    {% elif e.action in ('unlock', 'unlock_leg') %}{% set action_class = 'unlock' %}
+                    {% endif %}
+                    <span class="log-badge {{ action_class }}">{{ e.action }}</span>
+                </td>
+                <td class="log-detail" title="{{ e.detail or '' }}">{{ e.detail or '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align:center; color:#94a3b8; padding:32px;">Aucune activité enregistrée</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="/admin/activity-log?page={{ page - 1 }}{% if selected_module %}&module={{ selected_module }}{% endif %}{% if search_username %}&username={{ search_username }}{% endif %}">&laquo; Préc.</a>
+    {% endif %}
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+        <span class="current">{{ p }}</span>
+        {% elif p <= 3 or p > total_pages - 2 or (p >= page - 1 and p <= page + 1) %}
+        <a href="/admin/activity-log?page={{ p }}{% if selected_module %}&module={{ selected_module }}{% endif %}{% if search_username %}&username={{ search_username }}{% endif %}">{{ p }}</a>
+        {% elif p == 4 or p == total_pages - 2 %}
+        <span>…</span>
+        {% endif %}
+    {% endfor %}
+    {% if page < total_pages %}
+    <a href="/admin/activity-log?page={{ page + 1 }}{% if selected_module %}&module={{ selected_module }}{% endif %}{% if search_username %}&username={{ search_username }}{% endif %}">Suiv. &raquo;</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

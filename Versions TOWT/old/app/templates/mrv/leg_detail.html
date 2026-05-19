@@ -1,0 +1,461 @@
+{% extends "base.html" %}
+{% block title %}MRV — {{ leg.leg_code }}{% endblock %}
+{% block page_title %}MRV — {{ leg.leg_code }}{% endblock %}
+
+{% block topbar_actions %}
+<div style="display:flex;gap:8px;align-items:center;">
+    <a href="/mrv?vessel={{ leg.vessel.code }}&year={{ leg.year }}" class="btn btn-secondary" style="font-size:0.8rem;">
+        <i data-lucide="arrow-left" style="width:14px;height:14px;"></i> {{ t('back', lang) }}
+    </a>
+    {% if can_edit_mrv %}
+    <form method="POST" action="/mrv/leg/{{ leg.id }}/recalculate" style="display:inline;">
+        {{ csrf_input(request) }}
+        <button type="submit" class="btn btn-secondary" style="font-size:0.8rem;">
+            <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> {{ t('mrv_recalculate', lang) }}
+        </button>
+    </form>
+    {% endif %}
+    <a href="/mrv/export/dnv-csv?vessel={{ leg.vessel.code }}&year={{ leg.year }}"
+       class="btn btn-secondary" style="font-size:0.8rem;">
+        <i data-lucide="download" style="width:14px;height:14px;"></i> DNV CSV
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+    /* Force Poppins on all form elements */
+    input,select,textarea,button,.btn,.events-table,.sof-chip{font-family:'Poppins',sans-serif;}
+
+    .leg-header{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
+    .leg-info{background:var(--bg-primary);border-radius:10px;padding:16px;border:1px solid var(--border-color);}
+    .leg-info h3{font-size:0.9rem;margin-bottom:8px;color:var(--text-primary);}
+    .leg-info .detail{font-size:0.82rem;color:var(--text-secondary);margin-bottom:3px;}
+    .leg-info .detail b{color:var(--text-primary);}
+
+    .summary-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:20px;}
+    .summary-item{background:var(--bg-primary);border-radius:8px;padding:12px;border:1px solid var(--border-color);text-align:center;}
+    .summary-item .label{font-size:0.7rem;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;}
+    .summary-item .val{font-size:1.2rem;font-weight:700;color:var(--text-primary);}
+
+    .quality-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.7rem;font-weight:600;text-transform:uppercase;}
+    .quality-ok{background:#dcfce7;color:#166534;}
+    .quality-warning{background:#fef3c7;color:#92400e;}
+    .quality-error{background:#fecaca;color:#991b1b;}
+    .quality-pending{background:#e5e7eb;color:#6b7280;}
+
+    .events-table{width:100%;border-collapse:collapse;font-size:0.78rem;}
+    .events-table th{text-align:left;padding:8px 6px;font-size:0.68rem;text-transform:uppercase;
+        letter-spacing:0.5px;color:var(--text-secondary);border-bottom:2px solid var(--border-color);white-space:nowrap;}
+    .events-table td{padding:8px 6px;border-bottom:1px solid var(--border-color);vertical-align:top;}
+    .events-table tr:hover{background:var(--bg-secondary);}
+    .events-table .num{text-align:right;font-variant-numeric:tabular-nums;}
+
+    .sof-suggestions{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;margin-bottom:16px;}
+    .sof-suggestions h4{font-size:0.8rem;color:#1e40af;margin-bottom:8px;}
+    .sof-chip{display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid #93c5fd;
+        border-radius:6px;padding:4px 10px;font-size:0.78rem;margin:2px;}
+
+    .add-form{background:var(--bg-primary);border-radius:10px;padding:16px;border:1px solid var(--border-color);margin-top:20px;}
+    .add-form h3{font-size:0.9rem;margin-bottom:12px;}
+    .form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;}
+    .form-grid .form-group{margin-bottom:0;}
+    .form-grid label{font-size:0.72rem;color:var(--text-secondary);display:block;margin-bottom:2px;}
+    .form-grid input,.form-grid select{width:100%;padding:6px 8px;border:1px solid var(--border-color);
+        border-radius:6px;font-size:0.82rem;background:var(--bg-primary);}
+    .form-section-title{grid-column:1/-1;font-size:0.78rem;font-weight:600;color:var(--primary);
+        border-bottom:1px solid var(--border-color);padding-bottom:4px;margin-top:4px;}
+
+    .edit-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);
+        z-index:1000;align-items:center;justify-content:center;}
+    .edit-modal.active{display:flex;}
+    .edit-modal-content{background:var(--bg-primary);border-radius:12px;padding:24px;max-width:700px;
+        width:95%;max-height:90vh;overflow-y:auto;}
+
+    .quality-detail{font-size:0.72rem;color:var(--text-secondary);max-width:200px;line-height:1.3;}
+    .btn-xs{padding:3px 8px;font-size:0.72rem;border-radius:4px;}
+    .delete-btn{color:#dc2626;cursor:pointer;border:none;background:none;font-size:0.78rem;}
+    .delete-btn:hover{text-decoration:underline;}
+</style>
+
+<!-- Leg Header -->
+<div class="leg-header">
+    <div class="leg-info">
+        <h3>{{ leg.leg_code }} — {{ leg.vessel.name if leg.vessel else '' }}</h3>
+        <div class="detail"><b>{{ t('mrv_route', lang) }}:</b> {{ leg.departure_port.name if leg.departure_port else leg.departure_port_locode }} &rarr; {{ leg.arrival_port.name if leg.arrival_port else leg.arrival_port_locode }}</div>
+        <div class="detail"><b>ETD:</b> {{ leg.etd.strftime('%d/%m/%Y %H:%M') if leg.etd else '—' }} &nbsp; <b>ETA:</b> {{ leg.eta.strftime('%d/%m/%Y %H:%M') if leg.eta else '—' }}</div>
+        <div class="detail"><b>Distance:</b> {{ leg.computed_distance or leg.distance_nm or '—' }} NM &nbsp; <b>Lightship:</b> {{ leg.vessel.lightship_mt or '—' }} mt</div>
+        <div class="detail"><b>IMO:</b> {{ leg.vessel.imo_number or '—' }}</div>
+    </div>
+    <div class="leg-info">
+        <h3>{{ t('mrv_quality_summary', lang) }}</h3>
+        <div class="detail">
+            <span class="quality-badge quality-ok">{{ quality_counts.ok }} OK</span>
+            <span class="quality-badge quality-warning">{{ quality_counts.warning }} {{ t('mrv_warnings', lang) }}</span>
+            <span class="quality-badge quality-error">{{ quality_counts.error }} {{ t('mrv_errors', lang) }}</span>
+            <span class="quality-badge quality-pending">{{ quality_counts.pending }} {{ t('mrv_pending', lang) }}</span>
+        </div>
+        <div class="detail" style="margin-top:8px;"><b>{{ t('mrv_co2_factor_label', lang) }}:</b> {{ co2_factor }} t CO&#8322;/t fuel</div>
+        <div class="detail"><b>{{ t('mrv_density_label', lang) }}:</b> {{ params.avg_mdo_density }} t/m³</div>
+        <div class="detail"><b>{{ t('mrv_admissible_deviation', lang) }}:</b> {{ params.mdo_admissible_deviation }} mt</div>
+    </div>
+</div>
+
+<!-- Summary -->
+<div class="summary-row">
+    <div class="summary-item">
+        <div class="label">{{ t('mrv_events_count', lang) }}</div>
+        <div class="val">{{ events|length }}</div>
+    </div>
+    <div class="summary-item">
+        <div class="label">{{ t('mrv_total_consumption_label', lang) }}</div>
+        <div class="val">{{ total_consumption }} mt</div>
+    </div>
+    <div class="summary-item">
+        <div class="label">{{ t('mrv_co2_emissions', lang) }}</div>
+        <div class="val">{{ total_co2 }} mt</div>
+    </div>
+</div>
+
+<!-- SOF Suggestions -->
+{% if sof_suggestions and can_edit_mrv %}
+<div class="sof-suggestions">
+    <h4><i data-lucide="link" style="width:14px;height:14px;vertical-align:middle;"></i> {{ t('mrv_sof_suggestions', lang) }}</h4>
+    {% for sof in sof_suggestions %}
+    <form method="POST" action="/mrv/events/from-sof" style="display:inline;">
+        {{ csrf_input(request) }}
+        <input type="hidden" name="sof_event_id" value="{{ sof.id }}">
+        <input type="hidden" name="leg_id" value="{{ leg.id }}">
+        <button type="submit" class="sof-chip" style="cursor:pointer;">
+            <i data-lucide="plus-circle" style="width:12px;height:12px;color:#2563eb;"></i>
+            {{ sof.event_type }} — {{ sof.event_date.strftime('%d/%m') if sof.event_date else '' }} {{ sof.event_time or '' }}
+            ({{ sof.event_label[:40] }})
+        </button>
+    </form>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Events Table -->
+{% if events %}
+<div class="mrv-card" style="background:var(--bg-primary);border-radius:10px;padding:16px;border:1px solid var(--border-color);overflow-x:auto;">
+    <table class="events-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>{{ t('mrv_date_utc', lang) }}</th>
+                <th>{{ t('mrv_time_utc', lang) }}</th>
+                <th>{{ t('mrv_event', lang) }}</th>
+                <th class="num">{{ t('mrv_port_me', lang) }}</th>
+                <th class="num">{{ t('mrv_stbd_me', lang) }}</th>
+                <th class="num">{{ t('mrv_fwd_gen', lang) }}</th>
+                <th class="num">{{ t('mrv_aft_gen', lang) }}</th>
+                <th class="num">ROB (mt)</th>
+                <th class="num">Cargo (mt)</th>
+                <th class="num">{{ t('mrv_me_cons', lang) }}</th>
+                <th class="num">{{ t('mrv_ae_cons', lang) }}</th>
+                <th class="num">{{ t('mrv_total', lang) }}</th>
+                <th class="num">{{ t('mrv_rob_calc', lang) }}</th>
+                <th class="num">{{ t('mrv_dist_nm', lang) }}</th>
+                <th>{{ t('mrv_quality', lang) }}</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for evt in events %}
+            {% set type_key = 'mrv_type_' + evt.event_type %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ evt.timestamp_utc.strftime('%Y-%m-%d') if evt.timestamp_utc else '' }}</td>
+                <td>{{ evt.timestamp_utc.strftime('%H:%M') if evt.timestamp_utc else '' }}</td>
+                <td>
+                    <b>{{ t(type_key, lang) }}</b>
+                    {% if evt.event_type == 'departure' and evt.bunkering_qty_mt %}
+                    <br><span style="font-size:0.68rem;color:#059669;">+{{ evt.bunkering_qty_mt }}mt bunk.</span>
+                    {% endif %}
+                </td>
+                <td class="num">{{ '%.1f'|format(evt.port_me_do_counter) if evt.port_me_do_counter is not none else '' }}</td>
+                <td class="num">{{ '%.1f'|format(evt.stbd_me_do_counter) if evt.stbd_me_do_counter is not none else '' }}</td>
+                <td class="num">{{ '%.1f'|format(evt.fwd_gen_do_counter) if evt.fwd_gen_do_counter is not none else '' }}</td>
+                <td class="num">{{ '%.1f'|format(evt.aft_gen_do_counter) if evt.aft_gen_do_counter is not none else '' }}</td>
+                <td class="num">{{ '%.1f'|format(evt.rob_mt) if evt.rob_mt is not none else '' }}</td>
+                <td class="num">{{ '%.1f'|format(evt.cargo_mrv_mt) if evt.cargo_mrv_mt is not none else '' }}</td>
+                <td class="num">{{ '%.3f'|format(evt.me_consumption_mdo) if evt.me_consumption_mdo else '' }}</td>
+                <td class="num">{{ '%.3f'|format(evt.ae_consumption_mdo) if evt.ae_consumption_mdo else '' }}</td>
+                <td class="num"><b>{{ '%.3f'|format(evt.total_consumption_mdo) if evt.total_consumption_mdo else '' }}</b></td>
+                <td class="num">{{ '%.1f'|format(evt.rob_calculated) if evt.rob_calculated is not none else '' }}</td>
+                <td class="num">{{ '%.0f'|format(evt.distance_nm) if evt.distance_nm else '' }}</td>
+                <td>
+                    <span class="quality-badge quality-{{ evt.quality_status or 'pending' }}">{{ (evt.quality_status or 'pending')|upper }}</span>
+                    {% if evt.quality_notes %}
+                    <div class="quality-detail" title="{{ evt.quality_notes }}">{{ evt.quality_notes[:80] }}{% if evt.quality_notes|length > 80 %}...{% endif %}</div>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if can_edit_mrv %}
+                    <button class="btn-xs btn btn-secondary" onclick="openEditModal({{ evt.id }})">{{ t('edit', lang) }}</button>
+                    <button class="delete-btn"
+                            hx-delete="/mrv/events/{{ evt.id }}" hx-confirm="{{ t('mrv_confirm_delete', lang) }}"
+                            hx-target="closest tr" hx-swap="outerHTML">{{ t('delete', lang) }}</button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div style="background:var(--bg-primary);border-radius:10px;padding:40px;border:1px solid var(--border-color);text-align:center;color:var(--text-secondary);">
+    <i data-lucide="fuel" style="width:48px;height:48px;margin-bottom:12px;opacity:0.3;"></i>
+    <p>{{ t('mrv_no_events', lang) }}</p>
+    {% if sof_suggestions %}
+    <p style="font-size:0.82rem;">{{ t('mrv_use_sof', lang) }}</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Add Event Form -->
+{% if can_edit_mrv %}
+<div class="add-form" id="add-form">
+    <h3><i data-lucide="plus-circle" style="width:16px;height:16px;vertical-align:middle;"></i> {{ t('mrv_add_event', lang) }}</h3>
+    <form method="POST" action="/mrv/events/add">
+        {{ csrf_input(request) }}
+        <input type="hidden" name="leg_id" value="{{ leg.id }}">
+
+        <div class="form-grid">
+            <div class="form-section-title">{{ t('mrv_event_info', lang) }}</div>
+
+            <div class="form-group">
+                <label>{{ t('mrv_event_type', lang) }} *</label>
+                <select name="event_type" id="event_type" required onchange="toggleBunkering()">
+                    {% for code, label in mrv_event_types %}
+                    <option value="{{ code }}">{{ t('mrv_type_' + code, lang) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>{{ t('mrv_date_utc', lang) }} *</label>
+                <input type="date" name="timestamp_date" required>
+            </div>
+            <div class="form-group">
+                <label>{{ t('mrv_time_utc', lang) }} *</label>
+                <div class="tz-input-wrap">
+                    <input type="time" name="timestamp_time" value="00:00" required>
+                    <select name="timestamp_time_tz" class="tz-select">
+                        {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                        <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <span class="tz-utc-hint"></span>
+            </div>
+            <div class="form-group">
+                <label>{{ t('mrv_distance_prev', lang) }}</label>
+                <input type="number" name="distance_nm" step="0.1" min="0">
+            </div>
+
+            <div class="form-section-title">{{ t('mrv_do_counters', lang) }}</div>
+
+            <div class="form-group">
+                <label>{{ t('mrv_port_me', lang) }}</label>
+                <input type="number" name="port_me_do_counter" step="0.1" min="0">
+            </div>
+            <div class="form-group">
+                <label>{{ t('mrv_stbd_me', lang) }}</label>
+                <input type="number" name="stbd_me_do_counter" step="0.1" min="0">
+            </div>
+            <div class="form-group">
+                <label>{{ t('mrv_fwd_gen', lang) }}</label>
+                <input type="number" name="fwd_gen_do_counter" step="0.1" min="0">
+            </div>
+            <div class="form-group">
+                <label>{{ t('mrv_aft_gen', lang) }}</label>
+                <input type="number" name="aft_gen_do_counter" step="0.1" min="0">
+            </div>
+
+            <div class="form-section-title">{{ t('mrv_fuel_cargo', lang) }}</div>
+
+            <div class="form-group">
+                <label>{{ t('mrv_rob', lang) }}</label>
+                <input type="number" name="rob_mt" step="0.1" min="0">
+            </div>
+            <div class="form-group">
+                <label>{{ t('mrv_cargo', lang) }}</label>
+                <input type="number" name="cargo_mrv_mt" step="0.1" min="0">
+            </div>
+            <div class="form-group" id="bunkering_qty_group">
+                <label>{{ t('mrv_bunkering_qty', lang) }}</label>
+                <input type="number" name="bunkering_qty_mt" step="0.1" min="0">
+            </div>
+            <div class="form-group" id="bunkering_date_group">
+                <label>{{ t('mrv_bunkering_date', lang) }}</label>
+                <input type="date" name="bunkering_date">
+            </div>
+
+            <div class="form-section-title">{{ t('mrv_position', lang) }}</div>
+
+            <div class="form-group">
+                <label>{{ t('mrv_lat_deg', lang) }}</label>
+                <input type="number" name="latitude_deg" min="0" max="90">
+            </div>
+            <div class="form-group">
+                <label>{{ t('mrv_lat_min', lang) }}</label>
+                <input type="number" name="latitude_min" min="0" max="59">
+            </div>
+            <div class="form-group">
+                <label>N/S</label>
+                <select name="latitude_ns"><option value="N">N</option><option value="S">S</option></select>
+            </div>
+            <div class="form-group">
+                <label>{{ t('mrv_lon_deg', lang) }}</label>
+                <input type="number" name="longitude_deg" min="0" max="180">
+            </div>
+            <div class="form-group">
+                <label>{{ t('mrv_lon_min', lang) }}</label>
+                <input type="number" name="longitude_min" min="0" max="59">
+            </div>
+            <div class="form-group">
+                <label>E/W</label>
+                <select name="longitude_ew"><option value="E">E</option><option value="W">W</option></select>
+            </div>
+        </div>
+
+        <div style="margin-top:14px;display:flex;gap:8px;">
+            <button type="submit" class="btn btn-primary">{{ t('mrv_add_event', lang) }}</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<!-- Edit Modals (one per event) -->
+{% for evt in events %}
+{% set type_key = 'mrv_type_' + evt.event_type %}
+<div class="edit-modal" id="edit-modal-{{ evt.id }}">
+    <div class="edit-modal-content">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <h3 style="margin:0;">{{ t('mrv_edit_event', lang) }} #{{ evt.id }} — {{ t(type_key, lang) }}</h3>
+            <button onclick="closeEditModal({{ evt.id }})" style="border:none;background:none;font-size:1.2rem;cursor:pointer;">&times;</button>
+        </div>
+        <form method="POST" action="/mrv/events/{{ evt.id }}/edit">
+            {{ csrf_input(request) }}
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>{{ t('mrv_date_utc', lang) }}</label>
+                    <input type="date" name="timestamp_date" value="{{ evt.timestamp_utc.strftime('%Y-%m-%d') if evt.timestamp_utc else '' }}" required>
+                </div>
+                <div class="form-group">
+                    <label>{{ t('mrv_time_utc', lang) }}</label>
+                    <div class="tz-input-wrap">
+                        <input type="time" name="timestamp_time" value="{{ evt.timestamp_utc.strftime('%H:%M') if evt.timestamp_utc else '00:00' }}" required>
+                        <select name="timestamp_time_tz" class="tz-select">
+                            {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                            <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <span class="tz-utc-hint"></span>
+                </div>
+                <div class="form-group">
+                    <label>{{ t('mrv_dist_nm', lang) }}</label>
+                    <input type="number" name="distance_nm" step="0.1" value="{{ evt.distance_nm or '' }}">
+                </div>
+
+                <div class="form-section-title">{{ t('mrv_do_counters', lang) }}</div>
+                <div class="form-group">
+                    <label>{{ t('mrv_port_me', lang) }}</label>
+                    <input type="number" name="port_me_do_counter" step="0.1" value="{{ evt.port_me_do_counter if evt.port_me_do_counter is not none else '' }}">
+                </div>
+                <div class="form-group">
+                    <label>{{ t('mrv_stbd_me', lang) }}</label>
+                    <input type="number" name="stbd_me_do_counter" step="0.1" value="{{ evt.stbd_me_do_counter if evt.stbd_me_do_counter is not none else '' }}">
+                </div>
+                <div class="form-group">
+                    <label>{{ t('mrv_fwd_gen', lang) }}</label>
+                    <input type="number" name="fwd_gen_do_counter" step="0.1" value="{{ evt.fwd_gen_do_counter if evt.fwd_gen_do_counter is not none else '' }}">
+                </div>
+                <div class="form-group">
+                    <label>{{ t('mrv_aft_gen', lang) }}</label>
+                    <input type="number" name="aft_gen_do_counter" step="0.1" value="{{ evt.aft_gen_do_counter if evt.aft_gen_do_counter is not none else '' }}">
+                </div>
+
+                <div class="form-section-title">{{ t('mrv_fuel_cargo', lang) }}</div>
+                <div class="form-group">
+                    <label>{{ t('mrv_rob', lang) }}</label>
+                    <input type="number" name="rob_mt" step="0.1" value="{{ evt.rob_mt if evt.rob_mt is not none else '' }}">
+                </div>
+                <div class="form-group">
+                    <label>{{ t('mrv_cargo', lang) }}</label>
+                    <input type="number" name="cargo_mrv_mt" step="0.1" value="{{ evt.cargo_mrv_mt if evt.cargo_mrv_mt is not none else '' }}">
+                </div>
+                {% if evt.event_type == 'departure' %}
+                <div class="form-group">
+                    <label>{{ t('mrv_bunkering_qty', lang) }}</label>
+                    <input type="number" name="bunkering_qty_mt" step="0.1" value="{{ evt.bunkering_qty_mt if evt.bunkering_qty_mt is not none else '' }}">
+                </div>
+                <div class="form-group">
+                    <label>{{ t('mrv_bunkering_date', lang) }}</label>
+                    <input type="date" name="bunkering_date" value="{{ evt.bunkering_date.strftime('%Y-%m-%d') if evt.bunkering_date else '' }}">
+                </div>
+                {% endif %}
+
+                <div class="form-section-title">{{ t('mrv_position', lang) }}</div>
+                <div class="form-group">
+                    <label>{{ t('mrv_lat_deg', lang) }}</label>
+                    <input type="number" name="latitude_deg" value="{{ evt.latitude_deg if evt.latitude_deg is not none else '' }}">
+                </div>
+                <div class="form-group">
+                    <label>{{ t('mrv_lat_min', lang) }}</label>
+                    <input type="number" name="latitude_min" value="{{ evt.latitude_min if evt.latitude_min is not none else '' }}">
+                </div>
+                <div class="form-group">
+                    <label>N/S</label>
+                    <select name="latitude_ns"><option value="N" {% if evt.latitude_ns == 'N' %}selected{% endif %}>N</option><option value="S" {% if evt.latitude_ns == 'S' %}selected{% endif %}>S</option></select>
+                </div>
+                <div class="form-group">
+                    <label>{{ t('mrv_lon_deg', lang) }}</label>
+                    <input type="number" name="longitude_deg" value="{{ evt.longitude_deg if evt.longitude_deg is not none else '' }}">
+                </div>
+                <div class="form-group">
+                    <label>{{ t('mrv_lon_min', lang) }}</label>
+                    <input type="number" name="longitude_min" value="{{ evt.longitude_min if evt.longitude_min is not none else '' }}">
+                </div>
+                <div class="form-group">
+                    <label>E/W</label>
+                    <select name="longitude_ew"><option value="E" {% if evt.longitude_ew == 'E' %}selected{% endif %}>E</option><option value="W" {% if evt.longitude_ew == 'W' %}selected{% endif %}>W</option></select>
+                </div>
+            </div>
+            <div style="margin-top:14px;display:flex;gap:8px;">
+                <button type="submit" class="btn btn-primary">{{ t('save', lang) }}</button>
+                <button type="button" class="btn btn-secondary" onclick="closeEditModal({{ evt.id }})">{{ t('cancel', lang) }}</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endfor %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function toggleBunkering() {
+    var type = document.getElementById('event_type').value;
+    var show = (type === 'departure');
+    document.getElementById('bunkering_qty_group').style.display = show ? '' : 'none';
+    document.getElementById('bunkering_date_group').style.display = show ? '' : 'none';
+}
+function openEditModal(id) {
+    document.getElementById('edit-modal-' + id).classList.add('active');
+}
+function closeEditModal(id) {
+    document.getElementById('edit-modal-' + id).classList.remove('active');
+}
+// Close modal on background click
+document.querySelectorAll('.edit-modal').forEach(function(m) {
+    m.addEventListener('click', function(e) {
+        if (e.target === m) m.classList.remove('active');
+    });
+});
+// Init: hide bunkering fields if not departure
+toggleBunkering();
+</script>
+{% endblock %}

@@ -1,0 +1,138 @@
+<div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+    <div class="modal" style="max-width:500px;">
+        <div class="modal-header">
+            <h3>{{ 'Modifier opération' if edit_op else 'Nouvelle opération' }}
+            {% if preselect_cat and not edit_op %}
+            <span style="font-size:12px;font-weight:400;color:#888;"> — {{ preselect_cat|capitalize }}</span>
+            {% endif %}
+            </h3>
+            <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+        </div>
+        <form method="POST" id="op-form"
+              action="{{ '/escale/operations/' ~ edit_op.id ~ '/edit' if edit_op else '/escale/operations/create' }}">
+            {{ csrf_input(request) }}
+            {% if not edit_op %}<input type="hidden" name="leg_id" value="{{ leg_id }}">{% endif %}
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Type *</label>
+                        <select name="operation_type" id="op_type_select" class="form-select" required onchange="updateActions()"
+                                {% if preselect_cat and not edit_op %}disabled{% endif %}>
+                            {% for t in operation_types %}
+                            <option value="{{ t.value }}"
+                                {% if edit_op and edit_op.operation_type == t.value %}selected
+                                {% elif preselect_cat == t.value %}selected{% endif %}>{{ t.label }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if preselect_cat and not edit_op %}
+                        <input type="hidden" name="operation_type" value="{{ preselect_cat }}">
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Action *</label>
+                        <select name="action" id="op_action_select" class="form-select" required onchange="toggleCrewSection()">
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Date/heure prévue</label>
+                        <div class="tz-input-wrap">
+                            <input type="datetime-local" name="planned_start" class="form-input"
+                                   value="{{ edit_op.planned_start.strftime('%Y-%m-%dT%H:%M') if edit_op and edit_op.planned_start else '' }}"
+                                   {% if quay_start %}min="{{ quay_start }}"{% endif %}
+                                   {% if quay_end %}max="{{ quay_end }}"{% endif %}>
+                            <select name="planned_start_tz" class="tz-select">
+                                {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                                <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <span class="tz-utc-hint"></span>
+                    </div>
+                    {% if edit_op %}
+                    <div class="form-group">
+                        <label class="form-label">Date/heure réelle</label>
+                        <div class="tz-input-wrap">
+                            <input type="datetime-local" name="actual_start" class="form-input"
+                                   value="{{ edit_op.actual_start.strftime('%Y-%m-%dT%H:%M') if edit_op and edit_op.actual_start else '' }}">
+                            <select name="actual_start_tz" class="tz-select">
+                                {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                                <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <span class="tz-utc-hint"></span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Intervenant</label>
+                    <input type="text" name="intervenant" class="form-input"
+                           value="{{ edit_op.intervenant if edit_op and edit_op.intervenant else '' }}" placeholder="Nom / société">
+                </div>
+
+                <!-- Crew selection for embarquement/debarquement -->
+                <div id="crew-section" style="display:none;background:rgba(96,165,250,0.05);border-radius:8px;padding:12px;margin-top:8px;">
+                    <div style="font-size:12px;font-weight:600;color:#2563EB;margin-bottom:8px;" id="crew-title">👥 Équipage à embarquer</div>
+                    <div style="max-height:180px;overflow-y:auto;">
+                        {% for cm in crew_members %}
+                        <label style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;cursor:pointer;border-bottom:1px solid #f0f0f0;">
+                            <input type="checkbox" name="crew_ids" value="{{ cm.id }}"
+                                   {% if cm.id in selected_crew_ids %}checked{% endif %}>
+                            <span style="font-weight:600;">{{ cm.first_name }} {{ cm.last_name }}</span>
+                            <span style="font-size:10px;color:#888;padding:1px 6px;border-radius:3px;background:#f0f0f0;">{{ cm.role|replace('_',' ')|capitalize }}</span>
+                        </label>
+                        {% endfor %}
+                        {% if not crew_members %}
+                        <p style="color:#aaa;font-size:11px;">Aucun membre. <a href="/crew" target="_blank">Ajouter</a></p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top:8px;">
+                    <label class="form-label">Notes</label>
+                    <textarea name="description" class="form-input" rows="2">{{ edit_op.description if edit_op and edit_op.description else '' }}</textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+                <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> {{ 'Enregistrer' if edit_op else 'Créer' }}</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+var ACTIONS_BY_TYPE = {{ actions_by_type|tojson }};
+var CURRENT_ACTION = '{{ edit_op.action if edit_op else "" }}';
+var PRESELECT_CAT = '{{ preselect_cat or "" }}';
+
+function updateActions() {
+    var typeSelect = document.getElementById('op_type_select');
+    var type = PRESELECT_CAT || typeSelect.value;
+    var sel = document.getElementById('op_action_select');
+    sel.innerHTML = '';
+    (ACTIONS_BY_TYPE[type] || []).forEach(function(a) {
+        var opt = document.createElement('option');
+        opt.value = a.value; opt.textContent = a.label;
+        if (a.value === CURRENT_ACTION) opt.selected = true;
+        sel.appendChild(opt);
+    });
+    toggleCrewSection();
+}
+
+function toggleCrewSection() {
+    var action = document.getElementById('op_action_select').value;
+    var section = document.getElementById('crew-section');
+    var title = document.getElementById('crew-title');
+    if (section) {
+        var show = (action === 'embarquement' || action === 'debarquement');
+        section.style.display = show ? 'block' : 'none';
+        if (title) title.textContent = action === 'debarquement' ? '👥 Équipage à débarquer' : '👥 Équipage à embarquer';
+    }
+}
+updateActions();
+</script>

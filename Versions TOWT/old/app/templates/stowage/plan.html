@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% from "stowage/vessel_svg.html" import vessel_topdown, vessel_legend %}
+
+{% block topbar_actions %}
+<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+  <a href="/escale?vessel={{ leg.vessel.code }}&leg_id={{ leg.id }}" class="btn btn-sm btn-secondary">Escale</a>
+  <a href="/stowage/leg/{{ leg.id }}/print?lang={{ lang }}" target="_blank" class="btn btn-sm btn-secondary">Imprimer</a>
+  <form method="POST" action="/stowage/leg/{{ leg.id }}/auto-assign" style="display:inline">
+    {{ csrf_input(request) }}
+    <button type="submit" class="btn btn-sm btn-primary" onclick="return confirm('Affecter automatiquement tous les batches non assignés ?')">
+      Auto-assign
+    </button>
+  </form>
+  {% if lang == "fr" %}
+  <a href="/stowage/leg/{{ leg.id }}?lang=en" class="btn btn-sm btn-secondary">EN</a>
+  {% else %}
+  <a href="/stowage/leg/{{ leg.id }}?lang=fr" class="btn btn-sm btn-secondary">FR</a>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+  .stowage-stats { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .stat-box { background: white; border-radius: 8px; padding: 0.75rem 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); text-align: center; }
+  .stat-value { font-size: 1.5rem; font-weight: 700; color: var(--towt-blue); }
+  .stat-label { font-size: 0.75rem; color: var(--towt-gray); text-transform: uppercase; }
+
+  .vessel-views { margin: 1rem 0; }
+  .vessel-deck-plan { background: white; border-radius: 8px; padding: 1rem; margin-bottom: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .vessel-svg { width: 100%; height: auto; }
+  .vessel-label, .zone-code-text, .zone-weight, .zone-batch-count { font-family: 'Poppins', system-ui; }
+  .vessel-label { font-size: 11px; fill: var(--towt-gray); }
+  .deck-label { font-size: 11px; fill: var(--towt-blue); font-weight: 600; font-family: 'Poppins', system-ui; }
+  .hold-label { font-size: 10px; fill: var(--towt-blue); font-weight: 600; font-family: 'Poppins', system-ui; text-anchor: middle; }
+  .zone-code-text { font-size: 8px; fill: var(--towt-gray); font-weight: 500; }
+  .zone-count { font-size: 14px; fill: var(--towt-blue); font-weight: 700; font-family: 'Poppins', system-ui; }
+  .zone-weight { font-size: 10px; fill: var(--towt-gray); }
+  .zone-dg-icon { font-size: 12px; }
+  .zone-batch-count { font-size: 9px; fill: var(--towt-gray); }
+  .zone-block rect { cursor: pointer; transition: opacity 0.15s; }
+  .zone-block:hover rect { opacity: 0.85; }
+
+  .vessel-legend { display: flex; gap: 1rem; flex-wrap: wrap; padding: 0.5rem 0; font-size: 0.8rem; }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-swatch { width: 16px; height: 16px; border-radius: 3px; display: inline-block; }
+
+  .deck-plans { display: grid; grid-template-columns: 1fr; gap: 0.5rem; }
+  .deck-plan-title { margin: 0 0 0.25rem 0; font-size: 0.9rem; color: var(--towt-blue); }
+
+  .unassigned-section { background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+  .unassigned-section h3 { margin: 0 0 0.75rem 0; color: #856404; font-size: 1rem; }
+  .assign-form { display: inline-flex; gap: 0.5rem; align-items: center; }
+  .assign-form select { font-size: 12px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-family: 'Poppins', system-ui; }
+
+  .badge-dg { background: var(--danger); color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.7rem; font-weight: 600; }
+  .badge-stack { background: var(--towt-green); color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.7rem; }
+</style>
+
+<h2 style="margin-bottom:1rem;">{{ "Plan de chargement" if lang == "fr" else "Loading Plan" }} — {{ leg.leg_code }} ({{ leg.vessel.name }})</h2>
+
+<div class="stowage-stats">
+  <div class="stat-box">
+    <div class="stat-value">{{ total_palettes }}</div>
+    <div class="stat-label">{{ "Palettes chargees" if lang == "fr" else "Loaded pallets" }}</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-value">{{ "%.1f"|format(total_weight / 1000) }}t</div>
+    <div class="stat-label">{{ "Poids total" if lang == "fr" else "Total weight" }}</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-value">{{ fill_rate }}%</div>
+    <div class="stat-label">{{ "Taux de remplissage" if lang == "fr" else "Fill rate" }}</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-value">{{ unassigned|length }}</div>
+    <div class="stat-label">{{ "Non assignes" if lang == "fr" else "Unassigned" }}</div>
+  </div>
+</div>
+
+{# Vessel views — top-down per deck only #}
+<div class="vessel-views">
+  <div class="deck-plans">
+    {{ vessel_topdown(zones, dangerous_zones, "SUP",
+        "Cale superieure / Upper hold" if lang == "fr" else "Upper Hold", lang=lang) }}
+    {{ vessel_topdown(zones, dangerous_zones, "MIL",
+        "Cale intermediaire / Middle hold" if lang == "fr" else "Middle Hold", lang=lang) }}
+    {{ vessel_topdown(zones, dangerous_zones, "INF",
+        "Cale inferieure / Lower hold" if lang == "fr" else "Lower Hold", lang=lang) }}
+  </div>
+  {{ vessel_legend(lang) }}
+</div>
+
+{# Unassigned batches #}
+{% if unassigned %}
+<div class="unassigned-section">
+  <h3>{{ "Cargaisons non assignees" if lang == "fr" else "Unassigned Cargo" }} ({{ unassigned|length }})</h3>
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>{{ "Ref" if lang == "fr" else "Ref" }}</th>
+          <th>{{ "Client" if lang == "fr" else "Client" }}</th>
+          <th>{{ "Source" if lang == "fr" else "Source" }}</th>
+          <th>{{ "Marchandise" if lang == "fr" else "Cargo" }}</th>
+          <th>{{ "Palettes" if lang == "fr" else "Pallets" }}</th>
+          <th>{{ "Format" if lang == "fr" else "Format" }}</th>
+          <th>{{ "Poids unit." if lang == "fr" else "Unit wt." }}</th>
+          <th>IMO</th>
+          <th>{{ "Action" if lang == "fr" else "Action" }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for batch in unassigned %}
+        {% set order = batch.packing_list.order if batch.packing_list else None %}
+        {% set has_cargo_doc = batch.type_of_goods or (batch.pallet_quantity and batch.weight_kg and batch.length_cm) %}
+        <tr>
+          <td>{{ order.reference if order else "#" ~ batch.batch_number }}</td>
+          <td>{{ batch.customer_name or (order.client_name if order else "—") }}</td>
+          <td>{% if has_cargo_doc %}<span style="background:#d4edda;color:#155724;padding:2px 6px;border-radius:3px;font-size:0.7rem;font-weight:600;">Cargo doc</span>{% else %}<span style="background:#fff3cd;color:#856404;padding:2px 6px;border-radius:3px;font-size:0.7rem;font-weight:600;">Commande</span>{% endif %}</td>
+          <td>{{ batch.type_of_goods or (order.description if order else "—") or "—" }}</td>
+          <td>{{ batch.pallet_quantity or (order.quantity_palettes if order else 0) }}</td>
+          <td>{{ batch.pallet_type or (order.palette_format if order else "EPAL") }}</td>
+          <td>{{ batch.weight_kg or (order.weight_per_palette * 1000 if order and order.weight_per_palette else 0)|int }} kg</td>
+          <td>{% if batch.imo_product_class %}<span class="badge-dg">{{ batch.imo_product_class }}</span>{% else %}—{% endif %}</td>
+          <td>
+            <form method="POST" action="/stowage/leg/{{ leg.id }}/assign/{{ batch.id }}" class="assign-form">
+              {{ csrf_input(request) }}
+              <select name="zone_code">
+                <option value="">Auto</option>
+                {% for zc in zone_order %}
+                <option value="{{ zc }}">{{ zc }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-sm btn-primary">{{ "Affecter" if lang == "fr" else "Assign" }}</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{# Zone details with assigned batches #}
+<div style="margin-top:1.5rem;">
+  <h3 style="margin-bottom:0.75rem;">{{ "Detail par zone" if lang == "fr" else "Zone Details" }}</h3>
+  {% for zone_code in zone_order %}
+    {% set zone = zones[zone_code] %}
+    {% if zone.batches %}
+    <div class="section-block" style="margin-bottom:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+        <h4 class="section-title" style="margin:0;">{{ zone_code }} — {{ zone.label }}</h4>
+        <span style="font-size:0.75rem;color:var(--towt-gray);">
+          {{ zone.total_palettes }} pal. | {{ "%.1f"|format(zone.total_weight_kg / 1000) }}t / {{ "%.1f"|format(zone.max_weight_kg / 1000) }}t max
+          {% if zone.has_dangerous %} | <span class="badge-dg">DG</span>{% endif %}
+        </span>
+      </div>
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Batch</th>
+              <th>{{ "Client" if lang == "fr" else "Client" }}</th>
+              <th>{{ "Marchandise" if lang == "fr" else "Cargo" }}</th>
+              <th>{{ "Palettes" if lang == "fr" else "Pallets" }}</th>
+              <th>{{ "Format" if lang == "fr" else "Format" }}</th>
+              <th>Stack</th>
+              <th>{{ "Poids unit." if lang == "fr" else "Unit wt." }}</th>
+              <th>{{ "Poids total" if lang == "fr" else "Total wt." }}</th>
+              <th>BL</th>
+              <th>IMO</th>
+              <th>{{ "Action" if lang == "fr" else "Action" }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in zone.batches %}
+            <tr>
+              <td>#{{ b.batch_number }}</td>
+              <td>{{ b.client_name }}</td>
+              <td>{{ b.type_of_goods }}</td>
+              <td>{{ b.pallet_quantity }}</td>
+              <td>{{ b.pallet_format }}</td>
+              <td>{% if b.stackable %}<span class="badge-stack">Oui</span>{% else %}Non{% endif %}</td>
+              <td>{{ b.weight_unit_kg }} kg</td>
+              <td>{{ "%.0f"|format(b.weight_total_kg) }} kg</td>
+              <td>{{ b.bl_number }}</td>
+              <td>{% if b.is_dangerous %}<span class="badge-dg">{{ b.imo_class }}</span>{% else %}—{% endif %}</td>
+              <td>
+                <form method="POST" action="/stowage/leg/{{ leg.id }}/unassign/{{ b.plan_id }}" style="display:inline">
+                  {{ csrf_input(request) }}
+                  <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Retirer ce batch de la zone ?')">
+                    {{ "Retirer" if lang == "fr" else "Remove" }}
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  {% endfor %}
+</div>
+
+{% endblock %}

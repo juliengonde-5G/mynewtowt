@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Clients{% endblock %}
+{% block page_title %}Clients{% endblock %}
+
+{% block topbar_actions %}
+<a href="/commercial/pricing/grids" class="btn btn-secondary btn-sm"><i data-lucide="grid-3x3"></i> Grilles</a>
+<a href="/commercial/pricing/offers" class="btn btn-secondary btn-sm"><i data-lucide="file-text"></i> Offres</a>
+<a href="/commercial/pricing/clients/create" class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Nouveau client</a>
+{% endblock %}
+
+{% block content %}
+<div class="clients-page">
+    <div class="status-tabs" style="margin-bottom:16px;display:flex;gap:6px;flex-wrap:wrap;">
+        <a href="/commercial/pricing/clients" class="status-tab {% if not selected_type %}active{% endif %}">Tous ({{ clients|length }})</a>
+        <a href="/commercial/pricing/clients?client_type=freight_forwarder" class="status-tab {% if selected_type == 'freight_forwarder' %}active{% endif %}">🚛 Freight Forwarders</a>
+        <a href="/commercial/pricing/clients?client_type=shipper" class="status-tab {% if selected_type == 'shipper' %}active{% endif %}">📦 Chargeurs</a>
+    </div>
+
+    {% if clients %}
+    <div class="table-container">
+        <table class="data-table">
+            <thead><tr>
+                <th>Client</th><th>Type</th><th>Contact</th><th>Email</th><th>Pays</th><th>Statut</th><th style="text-align:right;">Actions</th>
+            </tr></thead>
+            <tbody>
+                {% for c in clients %}
+                <tr>
+                    <td><strong style="color:var(--towt-blue);font-family:'Poppins',sans-serif;">{{ c.name }}</strong></td>
+                    <td>
+                        {% if c.client_type == 'freight_forwarder' %}
+                        <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:#f3e8ff;color:#7c3aed;">🚛 FF</span>
+                        {% else %}
+                        <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:#dcfce7;color:#16a34a;">📦 Chargeur</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ c.contact_name or '—' }}</td>
+                    <td style="font-size:12px;">{{ c.contact_email or '—' }}</td>
+                    <td>{{ c.country or '—' }}</td>
+                    <td>
+                        {% if c.is_active %}
+                        <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:#dcfce7;color:#16a34a;">Actif</span>
+                        {% else %}
+                        <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:#fee2e2;color:#dc2626;">Inactif</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align:right;">
+                        <div style="display:flex;gap:6px;justify-content:flex-end;">
+                            <a href="/commercial/pricing/clients/{{ c.id }}/edit" class="btn btn-secondary btn-sm" style="font-size:11px;"><i data-lucide="edit" style="width:12px;height:12px;"></i> Modifier</a>
+                            <a href="/commercial/pricing/grids?client_id={{ c.id }}" class="btn btn-secondary btn-sm" style="font-size:11px;"><i data-lucide="grid-3x3" style="width:12px;height:12px;"></i> Grilles</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:48px;color:#999;">
+        <i data-lucide="users" style="width:48px;height:48px;margin-bottom:16px;opacity:0.3;"></i>
+        <p>Aucun client enregistré{% if selected_type %} pour ce filtre{% endif %}.</p>
+        <a href="/commercial/pricing/clients/create" class="btn btn-primary btn-sm" style="margin-top:12px;">Créer un client</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,840 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Paramètres{% endblock %}
+{% block page_title %}{{ t('page_settings', lang) }}{% endblock %}
+
+{% block content %}
+<div class="settings-page">
+    <!-- Sections as tabs -->
+    <div class="settings-tabs">
+        {% if user.role in ('administrateur', 'admin', 'data_analyst') %}
+        <button class="stab active" onclick="showSection('users')">👤 Utilisateurs</button>
+        <button class="stab" onclick="showSection('vessels')">🚢 Navires</button>
+        <button class="stab" onclick="showSection('ports')">⚓ Ports</button>
+        <button class="stab" onclick="showSection('economics')">💰 Économique</button>
+        <button class="stab" onclick="showSection('kpi')">📊 KPI / Émissions</button>
+        <button class="stab" onclick="showSection('co2')">🌿 Décarbonation</button>
+        <button class="stab" onclick="showSection('mrv')">⛽ MRV Fuel</button>
+        <button class="stab" onclick="showSection('locks')">🔒 Verrouillage</button>
+        <button class="stab" onclick="showSection('maintenance')">&#9881; Maintenance</button>
+        <button class="stab" onclick="showSection('database')">🗄️ Base de données</button>
+        <button class="stab" onclick="showSection('activity')">📋 Activité</button>
+        <button class="stab" onclick="showSection('language')">🌐 Langue</button>
+        <button class="stab" onclick="showSection('insurance')">🛡️ Assurances</button>
+        <button class="stab" onclick="showSection('pipedrive')">🔗 Pipedrive</button>
+        {% endif %}
+    </div>
+
+    <!-- USERS -->
+    <div class="settings-section" id="sec-users" {% if user.role not in ('administrateur', 'admin', 'data_analyst') %}style="display:none;"{% endif %}>
+        <div class="sec-header">
+            <h3>Utilisateurs</h3>
+            <button class="btn btn-primary btn-sm" onclick="openModal('/admin/users/create')"><i data-lucide="plus"></i> Nouvel utilisateur</button>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr><th>ID</th><th>Login</th><th>Nom</th><th>Rôle</th><th style="text-align:right;">Actions</th></tr></thead>
+                <tbody>
+                    {% for u in users %}
+                    <tr>
+                        <td>{{ u.id }}</td><td>{{ u.username }}</td><td>{{ u.full_name }}</td>
+                        <td><span class="badge badge-{{ u.role }}">{{ u.role }}</span></td>
+                        <td style="text-align:right;">
+                            <button class="btn btn-sm btn-secondary" onclick="openModal('/admin/users/{{ u.id }}/edit')"><i data-lucide="pencil"></i></button>
+                            {% if u.id != user.id %}
+                            <button class="btn btn-sm btn-danger" hx-delete="/admin/users/{{ u.id }}" hx-confirm="Supprimer ?"><i data-lucide="trash-2"></i></button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- VESSELS -->
+    <div class="settings-section" id="sec-vessels" style="display:none;">
+        <div class="sec-header">
+            <h3>Navires & configuration</h3>
+            <button class="btn btn-primary btn-sm" onclick="openModal('/admin/vessels/create')"><i data-lucide="plus"></i> Nouveau navire</button>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr><th>Code</th><th>Nom</th><th>Capacité (pal.)</th><th>Vitesse (nds)</th><th>Élongation</th><th style="text-align:right;">Actions</th></tr></thead>
+                <tbody>
+                    {% for v in vessels %}
+                    <tr>
+                        <td><strong>{{ v.code }}</strong></td><td>{{ v.name }}</td>
+                        <td>{{ v.capacity_palettes or '—' }}</td>
+                        <td>{{ v.default_speed }}</td><td>{{ v.default_elongation }}</td>
+                        <td style="text-align:right;">
+                            <button class="btn btn-sm btn-secondary" onclick="openModal('/admin/vessels/{{ v.id }}/edit')"><i data-lucide="pencil"></i></button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- PORTS -->
+    <div class="settings-section" id="sec-ports" style="display:none;">
+        <div class="sec-header">
+            <h3>Configuration des ports</h3>
+            <a href="/finance/ports" class="btn btn-primary btn-sm"><i data-lucide="settings"></i> Gérer les ports</a>
+        </div>
+        {% if port_configs %}
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr><th>LOCODE</th><th>Port</th><th>Pays</th><th>Accessible</th><th style="text-align:right;">Coût port (€)</th><th style="text-align:right;">Quai/jour (€)</th><th style="text-align:right;">Coût/pal. (€)</th></tr></thead>
+                <tbody>
+                    {% for c in port_configs %}
+                    <tr {% if not c.accessible %}style="opacity:0.5;"{% endif %}>
+                        <td><strong>{{ c.port_locode }}</strong></td>
+                        <td>{{ c.port.name if c.port else '—' }}</td>
+                        <td>{{ c.port.country_code|flag }} {{ c.port.country_code if c.port else '—' }}</td>
+                        <td>{% if c.accessible %}✓{% else %}✗{% endif %}</td>
+                        <td style="text-align:right;">{{ c.port_cost_total|eur }}</td>
+                        <td style="text-align:right;">{{ c.daily_quay_cost|eur }}</td>
+                        <td style="text-align:right;">{{ c.cost_per_palette|eur }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p style="color:#aaa;">Aucun port configuré. <a href="/finance/ports">Configurer les ports →</a></p>
+        {% endif %}
+    </div>
+
+    <!-- ECONOMICS -->
+    <div class="settings-section" id="sec-economics" style="display:none;">
+        <h3>Données économiques</h3>
+        <form method="POST" action="/admin/opex/update" style="max-width:400px;">
+            {{ csrf_input(request) }}
+            <div class="form-group">
+                <label class="form-label">OPEX journalier en mer (€/jour)</label>
+                <input type="text" name="opex_daily_rate" class="form-input" style="text-align:right;"
+                       value="{% for p in opex_params %}{% if p.parameter_name == 'opex_daily_rate' %}{{ p.parameter_value }}{% endif %}{% endfor %}">
+                <span style="font-size:10px;color:#aaa;">Coût journalier total en mer (fuel, équipage, maintenance, assurance)</span>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="check"></i> Enregistrer</button>
+        </form>
+    </div>
+
+    <!-- KPI / EMISSIONS -->
+    <div class="settings-section" id="sec-kpi" style="display:none;">
+        <h3>Paramètres KPI & Émissions</h3>
+        <p style="font-size:12px;color:#666;margin-bottom:16px;">Facteurs d'émission utilisés pour le calcul des KPI environnementaux (CO₂, NOx, SOx par tonne par mille nautique).</p>
+        <form method="POST" action="/admin/emissions/update" style="max-width:600px;">
+            {{ csrf_input(request) }}
+            {% set em_params_dict = {} %}
+            {% for ep in emission_params %}{% if em_params_dict.update({ep.parameter_name: ep.parameter_value}) %}{% endif %}{% endfor %}
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group">
+                    <label class="form-label">CO₂ conventionnel (kg/t/NM)</label>
+                    <input type="text" name="em_conventional_co2_per_ton_nm" class="form-input" style="text-align:right;"
+                           value="{{ em_params_dict.get('conventional_co2_per_ton_nm', 0.0152) }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">CO₂ voile (kg/t/NM)</label>
+                    <input type="text" name="em_sail_co2_per_ton_nm" class="form-input" style="text-align:right;"
+                           value="{{ em_params_dict.get('sail_co2_per_ton_nm', 0.00198) }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">NOx conventionnel (kg/t/NM)</label>
+                    <input type="text" name="em_conventional_nox_per_ton_nm" class="form-input" style="text-align:right;"
+                           value="{{ em_params_dict.get('conventional_nox_per_ton_nm', 0.000406) }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">NOx voile (kg/t/NM)</label>
+                    <input type="text" name="em_sail_nox_per_ton_nm" class="form-input" style="text-align:right;"
+                           value="{{ em_params_dict.get('sail_nox_per_ton_nm', 0.0000528) }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">SOx conventionnel (kg/t/NM)</label>
+                    <input type="text" name="em_conventional_sox_per_ton_nm" class="form-input" style="text-align:right;"
+                           value="{{ em_params_dict.get('conventional_sox_per_ton_nm', 0.0000812) }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">SOx voile (kg/t/NM)</label>
+                    <input type="text" name="em_sail_sox_per_ton_nm" class="form-input" style="text-align:right;"
+                           value="{{ em_params_dict.get('sail_sox_per_ton_nm', 0.00001056) }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Réduction CO₂ (%)</label>
+                    <input type="text" name="em_co2_reduction_pct" class="form-input" style="text-align:right;"
+                           value="{{ em_params_dict.get('co2_reduction_pct', 87) }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">CO₂/vol Paris-NYC (t)</label>
+                    <input type="text" name="em_co2_per_flight_paris_nyc" class="form-input" style="text-align:right;"
+                           value="{{ em_params_dict.get('co2_per_flight_paris_nyc', 525) }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">CO₂/container Asie-EU (t)</label>
+                    <input type="text" name="em_co2_per_container_asia_eu" class="form-input" style="text-align:right;"
+                           value="{{ em_params_dict.get('co2_per_container_asia_eu', 2.5) }}">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm" style="margin-top:12px;"><i data-lucide="check"></i> Enregistrer</button>
+        </form>
+    </div>
+
+    <!-- CO2 DECARBONATION -->
+    <div class="settings-section" id="sec-co2" style="display:none;">
+        <h3>🌿 Variables de décarbonation</h3>
+        <p style="font-size:12px;color:#666;margin-bottom:16px;">
+            Formule : <code style="background:#f0f7f8;padding:2px 6px;border-radius:4px;">(EF Conv. − EF TOWT) × Taux remplissage × Capacité × Distance (NM) × 1,852</code>
+        </p>
+
+        <form method="POST" action="/admin/co2/update" style="max-width:600px;">
+            {{ csrf_input(request) }}
+            {% for var_name, defaults in co2_defaults.items() %}
+            {% set current_val = None %}
+            {% for cv in co2_variables %}{% if cv.variable_name == var_name %}{% set current_val = cv %}{% endif %}{% endfor %}
+            <div class="form-group" style="margin-bottom:14px;">
+                <label class="form-label" style="font-weight:600;">
+                    {{ defaults.description }}
+                    <span style="font-size:10px;color:#888;font-weight:400;">({{ defaults.unit }})</span>
+                    {% if var_name == 'towt_co2_ef' %}
+                    <span style="font-size:10px;color:var(--towt-green);font-weight:400;">— historisé</span>
+                    {% endif %}
+                </label>
+                <input type="text" name="co2_{{ var_name }}" class="form-input" style="max-width:200px;text-align:right;"
+                       value="{{ current_val.variable_value if current_val else defaults.value }}">
+            </div>
+            {% endfor %}
+            <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="check"></i> Enregistrer</button>
+        </form>
+
+        {% if co2_history and co2_history|length > 1 %}
+        <div style="margin-top:24px;">
+            <h4 style="font-size:14px;margin-bottom:8px;">Historique TOWT CO2 EF</h4>
+            <table class="data-table" style="max-width:500px;">
+                <thead><tr><th>Valeur</th><th>Unité</th><th>Date d'effet</th><th>Actif</th></tr></thead>
+                <tbody>
+                    {% for h in co2_history %}
+                    <tr {% if not h.is_current %}style="opacity:0.5;"{% endif %}>
+                        <td style="font-weight:600;">{{ h.variable_value }}</td>
+                        <td>{{ h.unit }}</td>
+                        <td>{{ h.effective_date.strftime('%d/%m/%Y') if h.effective_date else '—' }}</td>
+                        <td>{% if h.is_current %}✓ Actuel{% else %}Ancien{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- MRV FUEL PARAMETERS -->
+    <div class="settings-section" id="sec-mrv" style="display:none;">
+        <h3>⛽ Paramètres MRV Fuel</h3>
+        <p style="font-size:12px;color:#666;margin-bottom:16px;">Paramètres pour le module MRV (Monitoring, Reporting, Verification) conformité EU MRV / DNV Veracity.</p>
+        <form method="POST" action="/admin/mrv/update" style="max-width:600px;">
+            {{ csrf_input(request) }}
+            {% set mrv_dict = {} %}
+            {% for mp in mrv_params %}{% if mrv_dict.update({mp.parameter_name: mp.parameter_value}) %}{% endif %}{% endfor %}
+
+            {% for param_name, defaults in mrv_defaults.items() %}
+            <div class="form-group" style="margin-bottom:14px;">
+                <label class="form-label" style="font-weight:600;">
+                    {{ defaults.description }}
+                    <span style="font-size:10px;color:#888;font-weight:400;">({{ defaults.unit }})</span>
+                </label>
+                <input type="text" name="mrv_{{ param_name }}" class="form-input" style="max-width:200px;text-align:right;"
+                       value="{{ mrv_dict.get(param_name, defaults.value) }}">
+            </div>
+            {% endfor %}
+            <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="check"></i> Enregistrer</button>
+        </form>
+    </div>
+
+    <!-- LOCKS -->
+    <div class="settings-section" id="sec-locks" style="display:none;">
+        <h3>Verrouillage des escales</h3>
+        <p style="font-size:13px;color:#666;margin-bottom:16px;">Verrouiller les escales terminées empêche toute modification. Escales verrouillées : <strong>{{ locked_count }}</strong></p>
+        <form method="POST" action="/admin/legs/lock" style="display:inline;">
+            {{ csrf_input(request) }}
+            <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="lock"></i> Verrouiller les escales terminées (ATD renseigné)</button>
+        </form>
+    </div>
+
+    <!-- DATABASE -->
+    <!-- ═══ MAINTENANCE MODE ═══ -->
+    <div class="settings-section" id="sec-maintenance" style="display:none;">
+        <h3>&#9881; Mode Maintenance</h3>
+        <p style="font-size:13px;color:#666;margin-bottom:20px;">
+            Activez le mode maintenance pour bloquer l'acces aux utilisateurs pendant les mises a jour.
+            Seuls les administrateurs pourront continuer a naviguer.
+        </p>
+        {% set maint_active = maintenance_active|default(false) %}
+        {% if maint_active %}
+        <div class="alert alert-warning" style="margin-bottom:16px;">
+            <strong>&#9888; Mode maintenance actif</strong> — Les utilisateurs non-admin voient une page de maintenance.
+        </div>
+        <form method="POST" action="/admin/maintenance/disable">
+            {{ csrf_input(request) }}
+            <button type="submit" class="btn btn-primary" onclick="return confirm('Desactiver le mode maintenance ?')">
+                Desactiver le mode maintenance
+            </button>
+        </form>
+        {% else %}
+        <div class="alert alert-success" style="margin-bottom:16px;">
+            Application accessible normalement.
+        </div>
+        <form method="POST" action="/admin/maintenance/enable" style="display:flex;flex-direction:column;gap:12px;max-width:500px;">
+            {{ csrf_input(request) }}
+            <div>
+                <label class="form-label">Message affiche aux utilisateurs</label>
+                <textarea name="message" class="form-input" rows="3" placeholder="Mise a jour en cours. L'application sera de retour dans quelques instants.">Mise a jour en cours. L'application sera de retour dans quelques instants.</textarea>
+            </div>
+            <button type="submit" class="btn btn-danger" onclick="return confirm('Activer le mode maintenance ? Les utilisateurs seront bloques.')">
+                Activer le mode maintenance
+            </button>
+        </form>
+        {% endif %}
+    </div>
+
+    <div class="settings-section" id="sec-database" style="display:none;">
+        <h3>🗄️ Gestion de la base de données</h3>
+        <p style="font-size:13px;color:#666;margin-bottom:20px;">Outils d'import, d'export, de maintenance et de nettoyage des données de l'application.</p>
+
+        {% if request.query_params.get('import_success') %}
+        <div style="background:#dcfce7;border:1px solid #86efac;color:#166534;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px;">
+            {{ request.query_params.get('import_success') }}
+        </div>
+        {% endif %}
+        {% if request.query_params.get('import_error') %}
+        <div style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px;">
+            {{ request.query_params.get('import_error') }}
+        </div>
+        {% endif %}
+
+        <!-- IMPORT SECTION -->
+        <div class="db-block">
+            <h4 class="db-block-title"><i data-lucide="upload" style="width:16px;height:16px;"></i> Imports</h4>
+            <div class="db-card">
+                <div class="db-card-info">
+                    <strong>🧭 Importer le planning de navigation (CSV)</strong>
+                    <span>Fichier CSV séparateur <code>;</code> avec colonnes : Leg Code, Navire, Départ LOCODE, Port Départ, Arrivée LOCODE, Port Arrivée, ETD, ETA, ATD (réel), ATA (réel), Distance Ortho (NM), Distance Réelle (NM), Vitesse (nds), Durée Est. (h), Statut. Les legs existants seront mis à jour, les nouveaux seront créés. Les ports manquants seront auto-créés.</span>
+                </div>
+                <form method="POST" action="/admin/import/planning" enctype="multipart/form-data" style="display:flex;align-items:center;gap:8px;">
+                    {{ csrf_input(request) }}
+                    <input type="file" name="file" accept=".csv" required class="form-input" style="font-size:12px;padding:6px;max-width:280px;">
+                    <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="upload"></i> Importer</button>
+                </form>
+            </div>
+            <div class="db-card">
+                <div class="db-card-info">
+                    <strong>👥 Importer des utilisateurs (Excel)</strong>
+                    <span>Fichier Excel (.xlsx) avec colonnes : username, full_name, email, role, password, language, is_active. <a href="/admin/users/import/template" hx-boost="false">Télécharger le template</a>. Les utilisateurs existants (même username) seront ignorés.</span>
+                </div>
+                <form method="POST" action="/admin/users/import" enctype="multipart/form-data" style="display:flex;align-items:center;gap:8px;">
+                    {{ csrf_input(request) }}
+                    <input type="file" name="file" accept=".xlsx,.xls" required class="form-input" style="font-size:12px;padding:6px;max-width:280px;">
+                    <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="upload"></i> Importer</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- EXPORT SECTION -->
+        <div class="db-block">
+            <h4 class="db-block-title"><i data-lucide="download" style="width:16px;height:16px;"></i> Exports</h4>
+
+            <!-- Export complet -->
+            <div class="db-card">
+                <div class="db-card-info">
+                    <strong>📦 Exporter toutes les données</strong>
+                    <span>Archive ZIP contenant toutes les tables en format CSV (séparateur ;). Inclut : legs, commandes, passagers, cargo, finances, claims, crew, SOF, notifications, etc.</span>
+                </div>
+                <a href="/admin/export/global" class="btn btn-primary btn-sm" hx-boost="false"><i data-lucide="download"></i> Export complet</a>
+            </div>
+
+            <!-- Export sélectif -->
+            <div class="db-card">
+                <div class="db-card-info">
+                    <strong>📋 Exporter une sélection</strong>
+                    <span>Choisissez les modules à exporter.</span>
+                </div>
+                <form method="GET" action="/admin/export/selective" class="db-select-form" hx-boost="false">
+                    <div class="db-checkboxes">
+                        <label><input type="checkbox" name="tables" value="legs" checked> 🧭 Legs / Voyages</label>
+                        <label><input type="checkbox" name="tables" value="orders"> 📦 Commandes</label>
+                        <label><input type="checkbox" name="tables" value="clients"> 🏢 Clients</label>
+                        <label><input type="checkbox" name="tables" value="cargo"> 📄 Packing Lists & Batches</label>
+                        <label><input type="checkbox" name="tables" value="finance"> 💰 Finances</label>
+                        <label><input type="checkbox" name="tables" value="rates"> 💹 Grilles tarifaires</label>
+                        <label><input type="checkbox" name="tables" value="claims"> ⚠️ Claims & Sinistres</label>
+                        <label><input type="checkbox" name="tables" value="crew"> 👷 Équipage, Affectations & Billets</label>
+                        <label><input type="checkbox" name="tables" value="escale"> ⚓ Escale (opérations, shifts dockers)</label>
+                        <label><input type="checkbox" name="tables" value="onboard"> 🚢 On Board (SOF attachments, ETA shifts, documents cargo)</label>
+                        <label><input type="checkbox" name="tables" value="sof"> 📜 SOF Events</label>
+                        <label><input type="checkbox" name="tables" value="kpi"> 📊 KPI</label>
+                        <label><input type="checkbox" name="tables" value="messages"> 💬 Messages portail</label>
+                        <label><input type="checkbox" name="tables" value="notifications"> 🔔 Notifications</label>
+                        <label><input type="checkbox" name="tables" value="activity"> 📋 Journal d'activité</label>
+                        <label><input type="checkbox" name="tables" value="access_logs"> 🔍 Logs d'accès portail</label>
+                        <label><input type="checkbox" name="tables" value="config"> ⚙️ Configuration (ports, navires, paramètres, CO2, MRV)</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="download"></i> Exporter la sélection</button>
+                </form>
+            </div>
+
+            <!-- Export fichiers -->
+            <div class="db-card">
+                <div class="db-card-info">
+                    <strong>📁 Exporter les fichiers uploadés</strong>
+                    <span>Archive ZIP des fichiers déposés par les utilisateurs : pièces jointes claims, documents commerciaux.</span>
+                </div>
+                <a href="/admin/export/files" class="btn btn-primary btn-sm" hx-boost="false"><i data-lucide="folder-archive"></i> Exporter les fichiers</a>
+            </div>
+        </div>
+
+        <!-- DANGER ZONE -->
+        <div class="db-block db-danger-zone">
+            <h4 class="db-block-title" style="color:#dc2626;"><i data-lucide="alert-triangle" style="width:16px;height:16px;"></i> Zone de nettoyage</h4>
+
+            <!-- Vider sélection -->
+            <div class="db-card db-card-danger">
+                <div class="db-card-info">
+                    <strong>🧹 Vider une sélection de données</strong>
+                    <span>Supprime les données des modules sélectionnés. Les données de configuration et les utilisateurs ne sont pas concernés.</span>
+                </div>
+                <form method="POST" action="/admin/database/purge-selective" id="form-purge-selective">
+                    {{ csrf_input(request) }}
+                    <div class="db-checkboxes">
+                        <label><input type="checkbox" name="tables" value="notifications"> 🔔 Notifications</label>
+                        <label><input type="checkbox" name="tables" value="messages"> 💬 Messages portail</label>
+                        <label><input type="checkbox" name="tables" value="access_logs"> 🔍 Logs d'accès portail</label>
+                        <label><input type="checkbox" name="tables" value="activity"> 📋 Journal d'activité</label>
+                        <label><input type="checkbox" name="tables" value="sof"> 📜 SOF Events</label>
+                        <label><input type="checkbox" name="tables" value="onboard"> 🚢 On Board (notifications, attachments, ETA shifts, documents cargo)</label>
+                        <label><input type="checkbox" name="tables" value="escale"> ⚓ Escale (opérations, shifts dockers)</label>
+                        <label><input type="checkbox" name="tables" value="claims"> ⚠️ Claims & documents</label>
+                        <label><input type="checkbox" name="tables" value="cargo"> 📄 Packing Lists & Batches</label>
+                        <label><input type="checkbox" name="tables" value="orders"> 📦 Commandes</label>
+                        <label><input type="checkbox" name="tables" value="clients"> 🏢 Clients</label>
+                        <label><input type="checkbox" name="tables" value="finance"> 💰 Données financières</label>
+                        <label><input type="checkbox" name="tables" value="rates"> 💹 Grilles tarifaires</label>
+                        <label><input type="checkbox" name="tables" value="crew_assignments"> 👷 Affectations & billets équipage</label>
+                        <label><input type="checkbox" name="tables" value="kpi"> 📊 KPI</label>
+                        <label><input type="checkbox" name="tables" value="legs"> 🧭 Legs (supprime aussi escale, SOF, finances, KPI liés)</label>
+                    </div>
+                    <div class="db-confirm-row">
+                        <label style="font-size:12px;color:#dc2626;font-weight:600;">Tapez SUPPRIMER pour confirmer :</label>
+                        <input type="text" name="confirm_text" class="form-input" style="max-width:200px;font-size:13px;" placeholder="SUPPRIMER" autocomplete="off">
+                    </div>
+                    <button type="submit" class="btn btn-danger btn-sm" onclick="return validatePurge(this.form, 'SUPPRIMER');"><i data-lucide="trash-2"></i> Vider la sélection</button>
+                </form>
+            </div>
+
+            <!-- Réinitialisation complète -->
+            <div class="db-card db-card-critical">
+                <div class="db-card-info">
+                    <strong>💀 Réinitialiser l'application</strong>
+                    <span>⚠️ Supprime <b>la totalité</b> des contenus de la base de données. Seuls les comptes utilisateurs et la configuration système sont conservés. Cette action est <b>irréversible</b>.</span>
+                </div>
+                <form method="POST" action="/admin/database/reset" id="form-reset">
+                    {{ csrf_input(request) }}
+                    <div class="db-confirm-row">
+                        <label style="font-size:12px;color:#dc2626;font-weight:600;">Tapez REINITIALISER pour confirmer :</label>
+                        <input type="text" name="confirm_text" class="form-input" style="max-width:250px;font-size:13px;" placeholder="REINITIALISER" autocomplete="off">
+                    </div>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#dc2626;margin:8px 0;">
+                        <input type="checkbox" name="confirm_checkbox" required> Je comprends que cette action est irréversible
+                    </label>
+                    <button type="submit" class="btn btn-danger btn-sm" onclick="return validateReset(this.form);"><i data-lucide="bomb"></i> Réinitialiser toute l'application</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- MAINTENANCE -->
+        <div class="db-block">
+            <h4 class="db-block-title"><i data-lucide="wrench" style="width:16px;height:16px;"></i> Maintenance</h4>
+
+            <div class="db-card">
+                <div class="db-card-info">
+                    <strong>📊 Statistiques base de données</strong>
+                    <span>Nombre d'enregistrements par table.</span>
+                </div>
+                <a href="/admin/database/stats" class="btn btn-secondary btn-sm" hx-get="/admin/database/stats" hx-target="#db-stats-panel" hx-swap="innerHTML"><i data-lucide="bar-chart-3"></i> Afficher les stats</a>
+            </div>
+            <div id="db-stats-panel" style="margin-top:8px;"></div>
+
+            <div class="db-card">
+                <div class="db-card-info">
+                    <strong>🧹 Nettoyer les notifications archivées</strong>
+                    <span>Supprime les notifications marquées comme archivées (plus de 30 jours).</span>
+                </div>
+                <form method="POST" action="/admin/database/cleanup-notifications">
+                    {{ csrf_input(request) }}
+                    <button type="submit" class="btn btn-secondary btn-sm"><i data-lucide="eraser"></i> Nettoyer</button>
+                </form>
+            </div>
+
+            <div class="db-card">
+                <div class="db-card-info">
+                    <strong>🔄 Nettoyer les logs d'audit anciens</strong>
+                    <span>Supprime les entrées d'audit (packing list, passager) de plus de 12 mois.</span>
+                </div>
+                <form method="POST" action="/admin/database/cleanup-audit">
+                    {{ csrf_input(request) }}
+                    <button type="submit" class="btn btn-secondary btn-sm"><i data-lucide="eraser"></i> Nettoyer</button>
+                </form>
+            </div>
+
+            <div class="db-card">
+                <div class="db-card-info">
+                    <strong>📋 Nettoyer le journal d'activité</strong>
+                    <span>Supprime les entrées du journal d'activité de plus de 6 mois.</span>
+                </div>
+                <form method="POST" action="/admin/database/cleanup-activity-logs">
+                    {{ csrf_input(request) }}
+                    <button type="submit" class="btn btn-secondary btn-sm"><i data-lucide="eraser"></i> Nettoyer</button>
+                </form>
+            </div>
+
+            <div class="db-card">
+                <div class="db-card-info">
+                    <strong>🚢 Nettoyer les notifications On Board</strong>
+                    <span>Supprime les notifications On Board lues de plus de 30 jours.</span>
+                </div>
+                <form method="POST" action="/admin/database/cleanup-onboard-notifications">
+                    {{ csrf_input(request) }}
+                    <button type="submit" class="btn btn-secondary btn-sm"><i data-lucide="eraser"></i> Nettoyer</button>
+                </form>
+            </div>
+
+            <div class="db-card">
+                <div class="db-card-info">
+                    <strong>🔍 Nettoyer les logs d'accès portail</strong>
+                    <span>Supprime les logs d'accès au portail client de plus de 6 mois.</span>
+                </div>
+                <form method="POST" action="/admin/database/cleanup-access-logs">
+                    {{ csrf_input(request) }}
+                    <button type="submit" class="btn btn-secondary btn-sm"><i data-lucide="eraser"></i> Nettoyer</button>
+                </form>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ACTIVITY LOG -->
+    <div class="settings-section" id="sec-activity" style="display:none;">
+        <div class="sec-header">
+            <h3>📋 Journal d'activité</h3>
+        </div>
+
+        <!-- Filters -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+            <select id="al-action" class="form-select" style="padding:6px 12px;font-size:12px;width:auto;">
+                <option value="">Toutes les actions</option>
+                <option value="login">🔑 Connexion</option>
+                <option value="logout">🚪 Déconnexion</option>
+                <option value="login_fail">🚫 Échec connexion</option>
+                <option value="create">➕ Création</option>
+                <option value="update">✏️ Modification</option>
+                <option value="delete">🗑️ Suppression</option>
+            </select>
+            <select id="al-module" class="form-select" style="padding:6px 12px;font-size:12px;width:auto;">
+                <option value="">Tous les modules</option>
+                <option value="auth">🔐 Auth</option>
+                <option value="commercial">📦 Commercial</option>
+                <option value="cargo">📋 Cargo</option>
+                <option value="planning">🗺️ Planning</option>
+                <option value="escale">⚓ Escale</option>
+                <option value="crew">👷 Crew</option>
+                <option value="finance">💰 Finance</option>
+                <option value="claims">⚠️ Claims</option>
+                <option value="admin">⚙️ Admin</option>
+                <option value="onboard">🚢 On Board</option>
+            </select>
+            <select id="al-user" class="form-select" style="padding:6px 12px;font-size:12px;width:auto;">
+                <option value="">Tous les utilisateurs</option>
+                {% for u in users %}
+                <option value="{{ u.id }}">{{ u.full_name }}</option>
+                {% endfor %}
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="loadActivityLogs()"><i data-lucide="search"></i> Filtrer</button>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('al-action').value='';document.getElementById('al-module').value='';document.getElementById('al-user').value='';loadActivityLogs();">Reset</button>
+        </div>
+
+        <!-- Activity table (loaded via HTMX) -->
+        <div id="activity-table-container">
+            <div style="text-align:center;padding:40px;color:#888;">
+                <i data-lucide="loader" style="width:24px;height:24px;animation:spin 1s linear infinite;"></i>
+                <p style="margin-top:8px;">Chargement...</p>
+            </div>
+        </div>
+
+        <style>
+            @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+            .al-action{padding:2px 8px;border-radius:100px;font-size:10px;font-weight:600;text-transform:uppercase;}
+            .al-login{background:#dbeafe;color:#1d4ed8;}.al-logout{background:#f3e8ff;color:#7c3aed;}
+            .al-login_fail{background:#fee2e2;color:#dc2626;}.al-create{background:#d1fae5;color:#059669;}
+            .al-update{background:#fef3c7;color:#d97706;}.al-delete{background:#fee2e2;color:#dc2626;}
+            .al-module{padding:2px 8px;border-radius:100px;font-size:10px;font-weight:500;background:#f1f5f9;color:#475569;}
+            .al-ip{font-size:10px;color:#999;}
+            .al-time{font-size:11px;color:#666;white-space:nowrap;}
+        </style>
+
+        <script>
+        function loadActivityLogs(page) {
+            page = page || 1;
+            var action = document.getElementById('al-action').value;
+            var mod = document.getElementById('al-module').value;
+            var uid = document.getElementById('al-user').value;
+            var params = 'page=' + page;
+            if (action) params += '&action=' + action;
+            if (mod) params += '&module=' + mod;
+            if (uid) params += '&user_id=' + uid;
+            fetch('/admin/activity-logs?' + params)
+                .then(function(r){return r.text();})
+                .then(function(html){
+                    document.getElementById('activity-table-container').innerHTML = html;
+                    lucide.createIcons();
+                });
+        }
+        // Auto-load when tab is shown
+        document.querySelector('[onclick="showSection(\'activity\')"]').addEventListener('click', function(){
+            setTimeout(function(){ loadActivityLogs(); }, 100);
+        });
+        </script>
+    </div>
+
+    <div class="settings-section" id="sec-language" style="display:none;">
+        <h3>🌐 Langue de l'interface</h3>
+        <p style="font-size:13px;color:#666;margin-bottom:16px;">Choisissez votre langue préférée. Le changement s'appliquera à toute la navigation.</p>
+        <form method="POST" action="/admin/settings/language" style="max-width:400px;">
+            {{ csrf_input(request) }}
+            <div style="display:flex;flex-direction:column;gap:12px;">
+                {% for code, label in SUPPORTED_LANGUAGES.items() %}
+                <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid #eee;border-radius:8px;cursor:pointer;{% if user.language == code or (not user.language and code == 'fr') %}background:#f0f7f8;border-color:var(--towt-blue);{% endif %}">
+                    <input type="radio" name="language" value="{{ code }}" {% if user.language == code or (not user.language and code == 'fr') %}checked{% endif %}>
+                    <span style="font-size:14px;font-weight:500;">{{ label }}</span>
+                </label>
+                {% endfor %}
+                <button type="submit" class="btn btn-primary btn-sm" style="margin-top:8px;">💾 Enregistrer</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- INSURANCE -->
+    <div class="settings-section" id="sec-insurance" style="display:none;">
+        <h3>🛡️ Contrats d'assurance</h3>
+        <p style="font-size:13px;color:#666;margin-bottom:16px;">Paramétrage des garanties d'assurance. Ces informations sont utilisées pour les déclarations de sinistres.</p>
+
+        {% if insurance_contracts %}
+        <table class="data-table" style="margin-bottom:16px;">
+            <thead><tr><th>Garantie</th><th>Assureur</th><th>Email</th><th>Tél.</th><th>Courtier</th><th>Franchise (€)</th><th>Plafond (€)</th><th>N° Police</th><th>Actif</th><th></th></tr></thead>
+            <tbody>
+            {% for ic in insurance_contracts %}
+            <tr>
+                <form method="POST" action="/admin/settings/insurance/{{ ic.id }}/edit">
+                {{ csrf_input(request) }}
+                <td><strong>{{ ic.guarantee_type }}</strong></td>
+                <td><input type="text" name="insurer_name" value="{{ ic.insurer_name }}" style="width:120px;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:12px;"></td>
+                <td><input type="text" name="insurer_email" value="{{ ic.insurer_email or '' }}" style="width:120px;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:12px;"></td>
+                <td><input type="text" name="insurer_phone" value="{{ ic.insurer_phone or '' }}" style="width:90px;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:12px;"></td>
+                <td><input type="text" name="broker_reference" value="{{ ic.broker_reference or '' }}" style="width:100px;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:12px;"></td>
+                <td><input type="number" name="franchise_amount" value="{{ ic.franchise_amount }}" step="0.01" style="width:80px;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:12px;text-align:right;"></td>
+                <td><input type="number" name="guarantee_ceiling" value="{{ ic.guarantee_ceiling }}" step="0.01" style="width:80px;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:12px;text-align:right;"></td>
+                <td><input type="text" name="policy_number" value="{{ ic.policy_number or '' }}" style="width:80px;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:12px;"></td>
+                <td><input type="checkbox" name="is_active" {% if ic.is_active %}checked{% endif %}></td>
+                <td><button type="submit" class="btn btn-sm btn-secondary" style="padding:3px 8px;font-size:10px;">💾</button></td>
+                </form>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color:#aaa;text-align:center;padding:20px;">Aucun contrat configuré.</p>
+        {% endif %}
+
+        <details style="margin-top:12px;">
+            <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--towt-blue);">＋ Ajouter un contrat</summary>
+            <form method="POST" action="/admin/settings/insurance/add" style="margin-top:10px;">
+                {{ csrf_input(request) }}
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                    <div><label style="font-size:10px;font-weight:600;color:#888;">Type de garantie</label><select name="guarantee_type" required style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;"><option value="pi">P&I</option><option value="hull_div">Hull — DIV</option><option value="war_risk">War Risk</option></select></div>
+                    <div><label style="font-size:10px;font-weight:600;color:#888;">Nom assureur</label><input type="text" name="insurer_name" required style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;"></div>
+                    <div><label style="font-size:10px;font-weight:600;color:#888;">Email</label><input type="email" name="insurer_email" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;"></div>
+                    <div><label style="font-size:10px;font-weight:600;color:#888;">Téléphone</label><input type="text" name="insurer_phone" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;"></div>
+                    <div><label style="font-size:10px;font-weight:600;color:#888;">Adresse</label><input type="text" name="insurer_address" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;"></div>
+                    <div><label style="font-size:10px;font-weight:600;color:#888;">Réf. courtier</label><input type="text" name="broker_reference" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;"></div>
+                    <div><label style="font-size:10px;font-weight:600;color:#888;">Franchise (€)</label><input type="number" name="franchise_amount" value="0" step="0.01" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;"></div>
+                    <div><label style="font-size:10px;font-weight:600;color:#888;">Plafond garantie (€)</label><input type="number" name="guarantee_ceiling" value="0" step="0.01" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;"></div>
+                    <div><label style="font-size:10px;font-weight:600;color:#888;">N° Police</label><input type="text" name="policy_number" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;"></div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm" style="margin-top:10px;">Ajouter</button>
+            </form>
+        </details>
+    </div>
+
+    <!-- PIPEDRIVE CRM -->
+    <div class="settings-section" id="sec-pipedrive" style="display:none;">
+        <h3>🔗 Intégration Pipedrive CRM</h3>
+        <p style="font-size:12px;color:#666;margin-bottom:16px;">
+            Connectez myTOWT à votre CRM Pipedrive pour importer les organisations lors de la création de clients, et pousser automatiquement les offres tarifaires et ordres de transport comme Deals.
+        </p>
+
+        <form method="POST" action="/admin/settings/pipedrive/update" style="max-width:500px;">
+            {{ csrf_input(request) }}
+            <div class="form-group" style="margin-bottom:16px;">
+                <label class="form-label">Token API Pipedrive</label>
+                <div style="display:flex;gap:8px;">
+                    <input type="password" name="pipedrive_api_token" id="pd-token-input" class="form-input" style="flex:1;font-family:monospace;"
+                           value="{{ pipedrive_token or '' }}" placeholder="Collez votre token API ici...">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="var i=document.getElementById('pd-token-input');i.type=i.type==='password'?'text':'password';" title="Afficher/masquer">
+                        <i data-lucide="eye" style="width:14px;height:14px;"></i>
+                    </button>
+                </div>
+                <span style="font-size:10px;color:#aaa;">Pipedrive > Paramètres > Préférences personnelles > API</span>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="save"></i> Enregistrer</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="testPipedrive()"><i data-lucide="wifi"></i> Tester la connexion</button>
+            </div>
+        </form>
+
+        <div id="pd-test-result" style="margin-top:12px;"></div>
+
+        {% if pipedrive_token %}
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f0f0f0;">
+            <h4 style="font-size:13px;color:var(--towt-blue);margin-bottom:8px;">Fonctionnalités activées</h4>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
+                <div style="padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
+                    <strong>Import Pipedrive → myTOWT</strong><br>
+                    <span style="color:#666;">Recherche d'Organizations lors de la création d'un client commercial</span>
+                </div>
+                <div style="padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
+                    <strong>Push myTOWT → Pipedrive</strong><br>
+                    <span style="color:#666;">Offres tarifaires et ordres de transport créés comme Deals</span>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <script>
+        function testPipedrive() {
+            var box = document.getElementById('pd-test-result');
+            box.innerHTML = '<div style="padding:10px;background:#f8fafc;border-radius:6px;font-size:12px;color:#888;">Test en cours...</div>';
+            fetch('/admin/settings/pipedrive/test')
+                .then(function(r){ return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        box.innerHTML = '<div style="padding:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:12px;color:#16a34a;">✓ Connexion réussie — Compte : <strong>' + (data.company || '') + '</strong> · ' + (data.user || '') + '</div>';
+                    } else {
+                        box.innerHTML = '<div style="padding:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:12px;color:#dc2626;">✗ Échec : ' + (data.error || 'Erreur inconnue') + '</div>';
+                    }
+                })
+                .catch(function() {
+                    box.innerHTML = '<div style="padding:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:12px;color:#dc2626;">✗ Erreur réseau</div>';
+                });
+        }
+        </script>
+    </div>
+</div>
+
+<div id="modal-container"></div>
+
+<style>
+    .pricing-input{padding:4px 6px;border:1px solid #ddd;border-radius:4px;font-size:12px;font-family:'Poppins',system-ui,sans-serif;}
+    .pricing-input:focus{border-color:var(--towt-blue);outline:none;}
+    .pricing-input-add{width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:'Poppins',system-ui,sans-serif;}
+    .pricing-input-add:focus{border-color:var(--towt-blue);outline:none;}
+    .pricing-select{width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:'Poppins',system-ui,sans-serif;}
+    .pricing-select:focus{border-color:var(--towt-blue);outline:none;}
+    #pricing-table td,#pricing-table th{font-family:'Poppins',system-ui,sans-serif;font-size:12px;}
+    #pricing-table .btn-sm{padding:4px 8px;}
+    #pricing-table .btn-sm i{width:14px;height:14px;}
+    .settings-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:20px;background:white;padding:6px;border-radius:var(--radius-lg);box-shadow:var(--shadow);}
+    .stab{padding:8px 16px;border:none;background:transparent;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;color:var(--towt-gray);font-family:'Poppins',system-ui,sans-serif;}
+    .stab:hover{background:var(--towt-light);}.stab.active{background:var(--towt-blue);color:white;}
+    .settings-section{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px;margin-bottom:16px;}
+    .sec-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+    .sec-header h3{margin:0;}
+    .badge-admin{background:rgba(220,38,38,0.1);color:#DC2626;padding:2px 8px;border-radius:100px;font-size:11px;}
+    .badge-administrateur{background:rgba(220,38,38,0.1);color:#DC2626;padding:2px 8px;border-radius:100px;font-size:11px;}
+    .badge-operation{background:rgba(135,189,43,0.1);color:#5a8010;padding:2px 8px;border-radius:100px;font-size:11px;}
+    .badge-armement{background:rgba(245,158,11,0.1);color:#D97706;padding:2px 8px;border-radius:100px;font-size:11px;}
+    .badge-technique{background:rgba(99,102,241,0.1);color:#6366F1;padding:2px 8px;border-radius:100px;font-size:11px;}
+    .badge-data_analyst{background:rgba(96,165,250,0.1);color:#2563EB;padding:2px 8px;border-radius:100px;font-size:11px;}
+    .badge-marins{background:rgba(6,182,212,0.1);color:#0891B2;padding:2px 8px;border-radius:100px;font-size:11px;}
+    .badge-viewer{background:rgba(96,165,250,0.1);color:#2563EB;padding:2px 8px;border-radius:100px;font-size:11px;}
+    .badge-editor{background:rgba(135,189,43,0.1);color:#5a8010;padding:2px 8px;border-radius:100px;font-size:11px;}
+
+    /* Database section */
+    .db-block{margin-bottom:24px;padding:20px;background:#f8fafb;border-radius:10px;border:1px solid #e5e7eb}
+    .db-block-title{font-size:14px;margin-bottom:14px;display:flex;align-items:center;gap:8px;color:var(--towt-blue)}
+    .db-danger-zone{background:#fef9f9;border-color:rgba(220,38,38,.2)}
+    .db-card{padding:14px 16px;background:#fff;border-radius:8px;border:1px solid #eee;margin-bottom:10px}
+    .db-card-danger{border-color:rgba(220,38,38,.2);background:rgba(254,242,242,.5)}
+    .db-card-critical{border:2px solid #dc2626;background:rgba(254,226,226,.3)}
+    .db-card-info{margin-bottom:10px}
+    .db-card-info strong{display:block;font-size:13px;margin-bottom:4px;color:#333}
+    .db-card-info span{font-size:12px;color:#666;line-height:1.5}
+    .db-select-form{margin-top:10px}
+    .db-checkboxes{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px;margin-bottom:12px}
+    .db-checkboxes label{display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 10px;border:1px solid #eee;border-radius:6px;cursor:pointer;transition:all .15s}
+    .db-checkboxes label:hover{background:#f0f7f8;border-color:var(--towt-blue)}
+    .db-checkboxes label:has(input:checked){background:rgba(9,85,97,.06);border-color:var(--towt-blue)}
+    .db-confirm-row{display:flex;align-items:center;gap:12px;margin:10px 0}
+    .db-stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:12px 0}
+    .db-stat-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#fff;border-radius:6px;border:1px solid #eee;font-size:12px}
+    .db-stat-item strong{color:var(--towt-blue);font-size:14px}
+</style>
+
+<script>
+    window.showSection = function(name) {
+        document.querySelectorAll('.settings-section').forEach(function(s){s.style.display='none';});
+        document.querySelectorAll('.stab').forEach(function(t){t.classList.remove('active');});
+        var sec = document.getElementById('sec-' + name);
+        if (sec) sec.style.display = 'block';
+        if (event && event.target) event.target.classList.add('active');
+        window.location.hash = name;
+    };
+    // Open tab from URL hash
+    (function(){
+        var h = window.location.hash.replace('#','');
+        if (h) {
+            var tabs = document.querySelectorAll('.stab');
+            tabs.forEach(function(t){
+                if (t.textContent.toLowerCase().indexOf(h) > -1 || t.getAttribute('onclick').indexOf("'" + h + "'") > -1) {
+                    t.click();
+                }
+            });
+        }
+    })();
+    window.openModal = function(url) {
+        fetch(url).then(function(r){return r.text();}).then(function(html){
+            document.getElementById('modal-container').innerHTML = html;
+            lucide.createIcons();
+            var form = document.querySelector('#modal-container form');
+            if (form) {
+                form.addEventListener('submit', function(e){
+                    e.preventDefault();
+                    fetch(form.action, {method:'POST', body:new FormData(form)})
+                        .then(function(r){if(r.redirected)window.location.href=r.url;else window.location.href='/admin/settings';})
+                        .catch(function(){window.location.reload();});
+                });
+            }
+        });
+    };
+    window.closeModal = function(){document.getElementById('modal-container').innerHTML='';};
+    window.validatePurge = function(form, keyword) {
+        var txt = form.querySelector('[name="confirm_text"]').value.trim();
+        if (txt !== keyword) { alert('Veuillez taper exactement "' + keyword + '" pour confirmer.'); return false; }
+        var checked = form.querySelectorAll('input[name="tables"]:checked');
+        if (checked.length === 0) { alert('Veuillez sélectionner au moins un module.'); return false; }
+        return confirm('Êtes-vous sûr de vouloir supprimer les données sélectionnées ? Cette action est irréversible.');
+    };
+    window.validateReset = function(form) {
+        var txt = form.querySelector('[name="confirm_text"]').value.trim();
+        if (txt !== 'REINITIALISER') { alert('Veuillez taper exactement "REINITIALISER" pour confirmer.'); return false; }
+        if (!form.querySelector('[name="confirm_checkbox"]').checked) { alert('Veuillez cocher la case de confirmation.'); return false; }
+        return confirm('⚠️ DERNIÈRE CHANCE !\n\nVous allez supprimer TOUTES les données de l\'application.\nCette action est IRRÉVERSIBLE.\n\nContinuer ?');
+    };</script>
+{% endblock %}

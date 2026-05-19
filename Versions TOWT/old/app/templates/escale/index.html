@@ -1,0 +1,668 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Escale{% endblock %}
+{% block page_title %}Opérations d'escale{% endblock %}
+
+{% block topbar_actions %}
+{% if selected_leg %}
+{% if not leg_locked %}
+<button class="btn btn-primary btn-sm" onclick="openOpModal()"><i data-lucide="plus"></i> Opération</button>
+<button class="btn btn-secondary btn-sm" onclick="openDockerModal()"><i data-lucide="plus"></i> Shift Docker</button>
+{% endif %}
+<a href="/escale/legs/{{ selected_leg.id }}/pdf" class="btn btn-secondary btn-sm" target="_blank"><i data-lucide="file-text"></i> PDF</a>
+<a href="/cargo/voyage/{{ selected_leg.id }}/excel" class="btn btn-secondary btn-sm"><i data-lucide="file-spreadsheet"></i> Packing Lists</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="escale-page">
+    <div class="planning-filters">
+        <div class="vessel-tabs">
+            {% for v in vessels %}
+            <a href="/escale?vessel={{ v.code }}&year={{ current_year }}" class="vessel-tab {% if selected_vessel == v.code %}active{% endif %}">
+                <i data-lucide="ship"></i> {{ v.name }}
+            </a>
+            {% endfor %}
+        </div>
+        <div class="year-selector">
+            {% for y in years %}
+            <a href="/escale?vessel={{ selected_vessel }}&year={{ y }}" class="year-btn {% if current_year == y %}active{% endif %}">{{ y }}</a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="leg-selector">
+        {% for leg in legs %}
+        {% set terminated = leg.atd is not none %}
+        {% set locked = leg.status == 'completed' %}
+        <a href="/escale?vessel={{ selected_vessel }}&year={{ current_year }}&leg_id={{ leg.id }}"
+           class="leg-chip {% if leg_id == leg.id %}active{% endif %} {% if terminated %}terminated{% endif %} {% if locked %}locked{% endif %}">
+            <div style="display:flex;align-items:center;gap:4px;">
+                <strong>{{ leg.leg_code }}</strong>
+                {% if locked %}<i data-lucide="lock" style="width:10px;height:10px;color:#aaa;"></i>{% endif %}
+            </div>
+            <span>{{ leg.departure_port.country_code|flag }} {{ leg.departure_port.locode }} → {{ leg.arrival_port.country_code|flag }} {{ leg.arrival_port.locode }}</span>
+        </a>
+        {% endfor %}
+        {% if not legs %}<span style="color:#888;font-size:13px;">Aucune escale</span>{% endif %}
+    </div>
+
+    {% if selected_leg %}
+    <!-- ═══ LEG SUMMARY ═══ -->
+    <div class="leg-summary {% if leg_locked %}locked-banner{% endif %}">
+        <div class="leg-summary-left">
+            <h3 style="font-weight:700;color:var(--towt-blue);margin:0;">{{ selected_leg.leg_code }}</h3>
+            <span style="color:#888;">{{ selected_leg.vessel.name }} — {{ selected_leg.departure_port.country_code|flag }} {{ selected_leg.departure_port.name }} → {{ selected_leg.arrival_port.country_code|flag }} {{ selected_leg.arrival_port.name }}</span>
+        </div>
+        <div class="vessel-status-badge {{ vessel_status }}">
+            {% if vessel_status == 'a_quai' and selected_leg.ata %}
+            <i data-lucide="anchor" style="width:14px;height:14px;"></i> À quai — {{ selected_leg.arrival_port.country_code|flag }} {{ selected_leg.arrival_port.name }}
+            {% elif vessel_status == 'a_quai' %}
+            <i data-lucide="anchor" style="width:14px;height:14px;"></i> À quai — {{ selected_leg.departure_port.country_code|flag }} {{ selected_leg.departure_port.name }}
+            {% else %}
+            <i data-lucide="waves" style="width:14px;height:14px;"></i> En mer → {{ selected_leg.arrival_port.country_code|flag }} {{ selected_leg.arrival_port.name }}
+            {% endif %}
+        </div>
+        {% if leg_locked %}
+        <span class="lock-badge"><i data-lucide="lock" style="width:12px;height:12px;"></i> Verrouillée</span>
+        {% endif %}
+        <div class="leg-summary-dates">
+            <div><span class="lbl">ETD</span>{{ selected_leg.etd.strftime('%d/%m %H:%M') if selected_leg.etd else '—' }}</div>
+            <div><span class="lbl">ETA</span>{{ selected_leg.eta.strftime('%d/%m %H:%M') if selected_leg.eta else '—' }}</div>
+            <div><span class="lbl">ATA</span><span class="{% if selected_leg.ata %}text-green{% endif %}">{{ selected_leg.ata.strftime('%d/%m %H:%M') if selected_leg.ata else '—' }}</span></div>
+            <div><span class="lbl">ATD</span><span class="{% if selected_leg.atd %}text-green{% endif %}">{{ selected_leg.atd.strftime('%d/%m %H:%M') if selected_leg.atd else '—' }}</span></div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:6px;">
+            {% if not leg_locked and leg_terminated %}
+            <form method="POST" action="/escale/legs/{{ selected_leg.id }}/lock" style="display:inline;">
+                {{ csrf_input(request) }}
+                <button type="submit" class="btn btn-sm btn-secondary" title="Verrouiller"><i data-lucide="lock"></i></button>
+            </form>
+            {% elif leg_locked %}
+            <form method="POST" action="/escale/legs/{{ selected_leg.id }}/unlock" style="display:inline;">
+                {{ csrf_input(request) }}
+                <button type="submit" class="btn btn-sm btn-secondary" title="Déverrouiller"><i data-lucide="unlock"></i></button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ═══ PORT STATUS BUTTON ═══ -->
+    {% if not leg_locked %}
+    <div class="port-status-bar">
+        {% for ps in port_statuses %}
+        {% set is_current = (ps.value == port_status) %}
+        {% set is_done = (port_statuses|map(attribute='value')|list).index(ps.value) < (port_statuses|map(attribute='value')|list).index(port_status) %}
+        <div class="ps-step {% if is_current %}current{% elif is_done %}done{% endif %}">
+            <span class="ps-dot">{% if is_done %}✓{% else %}{{ loop.index }}{% endif %}</span>
+            <span class="ps-label">{{ ps.label }}</span>
+        </div>
+        {% if not loop.last %}<div class="ps-connector {% if is_done %}done{% endif %}"></div>{% endif %}
+        {% endfor %}
+
+        {% set next_status = none %}
+        {% if port_status == 'a_quai' %}{% set next_status = 'pilote_depart' %}{% set next_label = 'Confirmer : Pilote départ' %}{% set next_icon = '⛵' %}
+        {% endif %}
+
+        {% if next_status %}
+        <form method="POST" action="/escale/legs/{{ selected_leg.id }}/port-status" style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+            {{ csrf_input(request) }}
+            <input type="hidden" name="new_status" value="{{ next_status }}">
+            <div class="tz-input-wrap">
+                <input type="datetime-local" name="status_time" class="form-input" style="font-size:11px;padding:4px 8px;width:180px;"
+                       title="Horodatage (optionnel)">
+                <select name="status_time_tz" class="tz-select" style="font-size:10px;padding:3px 5px;min-width:70px;">
+                    {% for code, label in tz_choices|default([('UTC','UTC'),('Europe/Paris','Paris'),('port_local','Port local')]) %}
+                    <option value="{{ code }}" {% if code == 'UTC' %}selected{% endif %}>{{ label }}{% if code == 'port_local' and port_tz_offset|default('') %} ({{ port_tz_offset }}){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">{{ next_icon }} {{ next_label }}</button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- ═══ FLOW 1: OPERATIONAL TIMELINE ═══ -->
+    <div class="section-block timeline-section">
+        <h3 class="section-title"><i data-lucide="navigation" style="width:16px;height:16px;"></i> Flux opérationnel</h3>
+        <div class="ops-flow">
+            {% set eta_time = selected_leg.eta %}
+            {% set ata_time = selected_leg.ata %}
+            {% set atd_time = selected_leg.atd %}
+            {% set etd_next = null %}
+
+            <div class="flow-step {% if eta_time %}done{% endif %}">
+                <div class="flow-icon">🚢</div>
+                <div class="flow-label">ETA</div>
+                <div class="flow-time">{{ eta_time.strftime('%d/%m %H:%M') if eta_time else 'TBC' }}</div>
+                <div class="flow-port">{{ selected_leg.arrival_port.country_code|flag }} {{ selected_leg.arrival_port.locode }}</div>
+            </div>
+            <div class="flow-connector {% if ata_time %}done{% endif %}"></div>
+
+            <div class="flow-step {% if ata_time %}done{% elif port_status == 'pilote_arrivee' %}current{% endif %}">
+                <div class="flow-icon">🧭</div>
+                <div class="flow-label">POB Arrivée</div>
+                <div class="flow-time">{% if ata_time %}{{ ata_time.strftime('%d/%m %H:%M') }}{% else %}—{% endif %}</div>
+                <div class="flow-sub">Pilote à bord</div>
+            </div>
+            <div class="flow-connector {% if ata_time %}done{% endif %}"></div>
+
+            <div class="flow-step {% if ata_time and not atd_time %}current{% elif atd_time %}done{% endif %}">
+                <div class="flow-icon">⚓</div>
+                <div class="flow-label">À quai</div>
+                <div class="flow-time">{% if ata_time %}{{ ata_time.strftime('%d/%m %H:%M') }}{% else %}—{% endif %}</div>
+                <div class="flow-sub">Opérations</div>
+            </div>
+            <div class="flow-connector {% if atd_time %}done{% endif %}"></div>
+
+            <div class="flow-step {% if atd_time %}done{% elif port_status == 'a_quai' %}pending{% endif %}">
+                <div class="flow-icon">⛵</div>
+                <div class="flow-label">POB Départ</div>
+                <div class="flow-time">{% if atd_time %}{{ atd_time.strftime('%d/%m %H:%M') }}{% else %}—{% endif %}</div>
+                <div class="flow-sub">Pilote à bord</div>
+            </div>
+            <div class="flow-connector {% if atd_time %}done{% endif %}"></div>
+
+            {% set next_etd = next_leg.etd if next_leg and next_leg.etd else None %}
+            {% set next_atd = next_leg.atd if next_leg and next_leg.atd else None %}
+            <div class="flow-step {% if next_atd %}done{% endif %}">
+                <div class="flow-icon">🏁</div>
+                <div class="flow-label">ETD</div>
+                <div class="flow-time">{% if next_atd %}{{ next_atd.strftime('%d/%m %H:%M') }}{% elif next_etd %}{{ next_etd.strftime('%d/%m %H:%M') }}{% else %}TBC{% endif %}</div>
+                <div class="flow-sub">Appareillage{% if next_leg %} → {{ next_leg.arrival_port.country_code|flag }} {{ next_leg.arrival_port.locode }}{% endif %}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ PERFORMANCE METRICS (when ATA available) ═══ -->
+    {% if perf %}
+    <div class="section-block perf-section">
+        <h3 class="section-title"><i data-lucide="gauge" style="width:16px;height:16px;"></i> Performance navigation</h3>
+        <div class="perf-grid">
+            <div class="perf-card">
+                <div class="perf-label">Durée estimée</div>
+                <div class="perf-value">{{ perf.estimated_days }} j <span class="perf-sub">({{ perf.estimated_hours }} h)</span></div>
+            </div>
+            <div class="perf-card">
+                <div class="perf-label">Durée réelle</div>
+                <div class="perf-value">{{ perf.actual_days }} j <span class="perf-sub">({{ perf.actual_hours }} h)</span></div>
+            </div>
+            <div class="perf-card {% if perf.delta_hours > 0 %}perf-negative{% elif perf.delta_hours < 0 %}perf-positive{% endif %}">
+                <div class="perf-label">Écart</div>
+                <div class="perf-value">
+                    {% if perf.delta_hours > 0 %}+{% endif %}{{ perf.delta_hours }} h
+                    <span class="perf-sub">({% if perf.delta_pct > 0 %}+{% endif %}{{ perf.delta_pct }}%)</span>
+                </div>
+            </div>
+            {% if perf.opex_forecast is defined %}
+            <div class="perf-card">
+                <div class="perf-label">OPEX prév.</div>
+                <div class="perf-value">{{ '{:,.0f}'.format(perf.opex_forecast).replace(',', ' ') }} €</div>
+            </div>
+            <div class="perf-card">
+                <div class="perf-label">OPEX réel</div>
+                <div class="perf-value">{{ '{:,.0f}'.format(perf.opex_actual).replace(',', ' ') }} €</div>
+            </div>
+            <div class="perf-card {% if perf.opex_delta > 0 %}perf-negative{% elif perf.opex_delta < 0 %}perf-positive{% endif %}">
+                <div class="perf-label">Écart OPEX</div>
+                <div class="perf-value">{% if perf.opex_delta > 0 %}+{% endif %}{{ '{:,.0f}'.format(perf.opex_delta).replace(',', ' ') }} €</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ═══ COMMERCIAL VISIBILITY: Orders on this leg ═══ -->
+    {% if leg_orders %}
+    <div class="section-block">
+        <h3 class="section-title"><i data-lucide="package" style="width:16px;height:16px;"></i> Commandes affectées ({{ leg_orders_summary.count }})</h3>
+        <div class="perf-grid" style="margin-bottom:12px;">
+            <div class="perf-card">
+                <div class="perf-label">Palettes</div>
+                <div class="perf-value">{{ leg_orders_summary.palettes }}</div>
+            </div>
+            <div class="perf-card">
+                <div class="perf-label">Tonnage</div>
+                <div class="perf-value">{{ leg_orders_summary.weight }} t</div>
+            </div>
+            <div class="perf-card">
+                <div class="perf-label">CA commandes</div>
+                <div class="perf-value">{{ '{:,.0f}'.format(leg_orders_summary.revenue).replace(',', ' ') }} €</div>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="data-table compact">
+                <thead>
+                    <tr>
+                        <th>Référence</th>
+                        <th>Client</th>
+                        <th>Palettes</th>
+                        <th>Poids (t)</th>
+                        <th>Montant</th>
+                        <th>Statut</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for o in leg_orders %}
+                    <tr>
+                        <td><strong>{{ o.reference }}</strong></td>
+                        <td>{{ o.client_name or '—' }}</td>
+                        <td>{{ o.quantity_palettes or 0 }} {{ o.palette_format or 'EPAL' }}</td>
+                        <td>{{ '%.1f'|format(o.total_weight or 0) }}</td>
+                        <td>{{ '{:,.0f}'.format(o.total_price or 0).replace(',', ' ') }} €</td>
+                        <td>
+                            <span class="status-badge status-{{ o.status }}">{{ o.status }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ═══ FLOW 2: PARALLEL ACTIVITIES ═══ -->
+    {% if operations or docker_shifts %}
+    {% set crew_actions = ['embarquement', 'debarquement', 'medicale', 'passage_paf'] %}
+    {% set supply_actions = ['avitaillement', 'soutage', 'intervention_technique', 'inspection_technique', 'inspection_armement'] %}
+    {% set ext_actions = ['relation_presse', 'relation_client', 'relation_prospect'] %}
+    {% set pax_ops = operations|selectattr('action', 'in', crew_actions)|list %}
+    {% set supply_ops = operations|selectattr('action', 'in', supply_actions)|list %}
+    {% set ext_ops = operations|selectattr('action', 'in', ext_actions)|list %}
+    <div class="section-block">
+        <h3 class="section-title"><i data-lucide="layers" style="width:16px;height:16px;"></i> Activités parallèles <span style="font-size:12px;color:#888;font-weight:400;">(pendant escale)</span></h3>
+        <div class="parallel-grid">
+            <!-- Cargo / Docker -->
+            <div class="parallel-lane lane-cargo">
+                <div class="lane-header"><span class="lane-icon">📦</span> Cargo <span class="lane-count">{{ docker_shifts|length }}</span></div>
+                {% for ds in docker_shifts %}
+                <div class="lane-item {% if ds.actual_start %}done{% endif %}">
+                    <span class="lane-badge docker">DOC</span>
+                    <div class="lane-body">
+                        <strong>Cale {{ ds.hold|capitalize }}</strong>
+                        <span class="lane-meta">{{ ds.planned_palettes or '—' }} pal.
+                        {% if ds.actual_start %}· ✅ {{ ds.actual_start.strftime('%d/%m %H:%M') }}
+                        {% elif ds.planned_start %}· 🕐 {{ ds.planned_start.strftime('%d/%m %H:%M') }}{% endif %}</span>
+                    </div>
+                </div>
+                {% endfor %}
+                {% if not docker_shifts %}<div class="lane-empty">—</div>{% endif %}
+            </div>
+
+            <!-- Crew / PAX -->
+            <div class="parallel-lane lane-crew">
+                <div class="lane-header"><span class="lane-icon">👥</span> Équipage / PAX <span class="lane-count">{{ pax_ops|length }}</span></div>
+                {% for op in pax_ops %}
+                <div class="lane-item {% if op.actual_start %}done{% endif %}">
+                    <span class="lane-badge armement">ARM</span>
+                    <div class="lane-body">
+                        <strong>{{ op.action|replace('_',' ')|capitalize }}</strong>
+                        <span class="lane-meta">
+                        {% if op.actual_start %}✅ {{ op.actual_start.strftime('%d/%m %H:%M') }}{% if op.actual_end %} → {{ op.actual_end.strftime('%H:%M') }}{% endif %}
+                        {% elif op.planned_start %}🕐 {{ op.planned_start.strftime('%d/%m %H:%M') }}{% if op.planned_end %} → {{ op.planned_end.strftime('%H:%M') }}{% endif %}{% endif %}
+                        {% if op.actual_duration_hours %} · {{ op.actual_duration_hours|round(1) }}h{% elif op.planned_duration_hours %} · ~{{ op.planned_duration_hours|round(1) }}h{% endif %}
+                        {% if op.intervenant %} · 👤 {{ op.intervenant }}{% endif %}</span>
+                    </div>
+                </div>
+                {% endfor %}
+                {% if not pax_ops %}<div class="lane-empty">—</div>{% endif %}
+            </div>
+
+            <!-- Supplies / Maintenance -->
+            <div class="parallel-lane lane-supply">
+                <div class="lane-header"><span class="lane-icon">🔧</span> Logistique / Technique <span class="lane-count">{{ supply_ops|length }}</span></div>
+                {% for op in supply_ops %}
+                <div class="lane-item {% if op.actual_start %}done{% endif %}">
+                    <span class="lane-badge {{ op.operation_type }}">{{ op.operation_type[:3]|upper }}</span>
+                    <div class="lane-body">
+                        <strong>{{ op.action|replace('_',' ')|capitalize }}</strong>
+                        <span class="lane-meta">
+                        {% if op.actual_start %}✅ {{ op.actual_start.strftime('%d/%m %H:%M') }}{% if op.actual_end %} → {{ op.actual_end.strftime('%H:%M') }}{% endif %}
+                        {% elif op.planned_start %}🕐 {{ op.planned_start.strftime('%d/%m %H:%M') }}{% if op.planned_end %} → {{ op.planned_end.strftime('%H:%M') }}{% endif %}{% endif %}
+                        {% if op.actual_duration_hours %} · {{ op.actual_duration_hours|round(1) }}h{% elif op.planned_duration_hours %} · ~{{ op.planned_duration_hours|round(1) }}h{% endif %}
+                        {% if op.intervenant %} · 👤 {{ op.intervenant }}{% endif %}</span>
+                    </div>
+                </div>
+                {% endfor %}
+                {% if not supply_ops %}<div class="lane-empty">—</div>{% endif %}
+            </div>
+
+            <!-- External Relations -->
+            <div class="parallel-lane lane-ext">
+                <div class="lane-header"><span class="lane-icon">📢</span> Relations Ext. <span class="lane-count">{{ ext_ops|length }}</span></div>
+                {% for op in ext_ops %}
+                <div class="lane-item {% if op.actual_start %}done{% endif %}">
+                    <span class="lane-badge relations_externes">REL</span>
+                    <div class="lane-body">
+                        <strong>{{ op.action|replace('_',' ')|capitalize }}</strong>
+                        <span class="lane-meta">
+                        {% if op.actual_start %}✅ {{ op.actual_start.strftime('%d/%m %H:%M') }}{% if op.actual_end %} → {{ op.actual_end.strftime('%H:%M') }}{% endif %}
+                        {% elif op.planned_start %}🕐 {{ op.planned_start.strftime('%d/%m %H:%M') }}{% if op.planned_end %} → {{ op.planned_end.strftime('%H:%M') }}{% endif %}{% endif %}
+                        {% if op.actual_duration_hours %} · {{ op.actual_duration_hours|round(1) }}h{% elif op.planned_duration_hours %} · ~{{ op.planned_duration_hours|round(1) }}h{% endif %}
+                        {% if op.intervenant %} · 👤 {{ op.intervenant }}{% endif %}</span>
+                    </div>
+                </div>
+                {% endfor %}
+                {% if not ext_ops %}<div class="lane-empty">—</div>{% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ═══ 3 CATEGORIES ═══ -->
+    <div class="categories-grid">
+        {% for cat_info in operation_types %}
+        {% set cat = cat_info.value %}
+        {% set cat_ops = operations|selectattr('operation_type', 'equalto', cat)|list %}
+        <div class="cat-block cat-{{ cat }}">
+            <div class="cat-header">
+                <h4>{{ cat_info.icon }} {{ cat_info.label }} <span class="cat-count">{{ cat_ops|length }}</span></h4>
+                {% if not leg_locked %}
+                <button class="btn btn-sm btn-secondary" onclick="openOpModalCat('{{ cat }}')" title="Ajouter"><i data-lucide="plus" style="width:12px;height:12px;"></i></button>
+                {% endif %}
+            </div>
+            {% if cat_ops %}
+            <div class="cat-ops">
+                {% for op in cat_ops %}
+                <div class="op-row {% if op.actual_start %}done{% endif %}">
+                    <div class="op-row-status">
+                        {% if op.actual_start %}<i data-lucide="check-circle" style="width:14px;height:14px;color:var(--towt-green);"></i>
+                        {% else %}<i data-lucide="circle" style="width:14px;height:14px;color:#ddd;"></i>{% endif %}
+                    </div>
+                    <div class="op-row-body">
+                        <strong>{{ op.action|replace('_',' ')|capitalize }}</strong>
+                        <div class="op-row-meta">
+                            {% if op.actual_start %}✅ {{ op.actual_start.strftime('%d/%m %H:%M') }}
+                            {% elif op.planned_start %}🕐 {{ op.planned_start.strftime('%d/%m %H:%M') }}{% endif %}
+                            {% if op.intervenant %} · 👤 {{ op.intervenant }}{% endif %}
+                        </div>
+                        {% if op.description %}<div class="op-row-desc">{{ op.description }}</div>{% endif %}
+                    </div>
+                    {% if not leg_locked %}
+                    <div class="op-row-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="openEditOpModal({{ op.id }})"><i data-lucide="pencil"></i></button>
+                        <button class="btn btn-sm btn-danger" hx-delete="/escale/operations/{{ op.id }}" hx-confirm="Supprimer ?"><i data-lucide="trash-2"></i></button>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="cat-empty">Aucune opération</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- ═══ PLAN DE CHARGEMENT ═══ -->
+    <div class="section-block" style="margin-top:20px;">
+        <h3 class="section-title"><i data-lucide="package" style="width:16px;height:16px;"></i> Plan de chargement</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <a href="/stowage/leg/{{ selected_leg.id }}" class="btn btn-sm btn-primary">
+                <i data-lucide="layout-grid" style="width:14px;height:14px;"></i> Gerer le plan de chargement
+            </a>
+            <a href="/stowage/leg/{{ selected_leg.id }}/print?lang=fr" target="_blank" class="btn btn-sm btn-secondary">
+                <i data-lucide="printer" style="width:14px;height:14px;"></i> Imprimer (FR)
+            </a>
+            <a href="/stowage/leg/{{ selected_leg.id }}/print?lang=en" target="_blank" class="btn btn-sm btn-secondary">
+                <i data-lucide="printer" style="width:14px;height:14px;"></i> Print (EN)
+            </a>
+        </div>
+    </div>
+
+    <!-- ═══ SHIFTS DOCKERS ═══ -->
+    <div class="section-block" style="margin-top:20px;">
+        <h3 class="section-title"><i data-lucide="hard-hat" style="width:16px;height:16px;"></i> Shifts Dockers ({{ docker_shifts|length }})</h3>
+        {% if docker_shifts %}
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr><th>Cale</th><th>Prévu</th><th>Réel</th><th>Pal. prév.</th><th>Pal. réel.</th><th>Prod.</th><th>Écart</th>
+                {% if not leg_locked %}<th style="text-align:right;">Actions</th>{% endif %}</tr></thead>
+                <tbody>
+                    {% for ds in docker_shifts %}
+                    <tr>
+                        <td><span class="hold-badge {{ ds.hold }}">{{ ds.hold|capitalize }}</span></td>
+                        <td style="font-size:12px;">{{ ds.planned_start.strftime('%d/%m %H:%M') if ds.planned_start else '—' }} → {{ ds.planned_end.strftime('%d/%m %H:%M') if ds.planned_end else '—' }}</td>
+                        <td style="font-size:12px;">{{ ds.actual_start.strftime('%d/%m %H:%M') if ds.actual_start else '—' }} → {{ ds.actual_end.strftime('%d/%m %H:%M') if ds.actual_end else '—' }}</td>
+                        <td>{{ ds.planned_palettes or '—' }}</td>
+                        <td>{{ ds.actual_palettes or '—' }}</td>
+                        <td>{% if ds.actual_rate is not none %}<strong>{{ ds.actual_rate }}</strong> pal/h{% else %}—{% endif %}</td>
+                        <td>{% if ds.rate_delta_pct is not none %}<span class="rate-badge {% if ds.rate_delta_pct >= 0 %}positive{% else %}negative{% endif %}">{{ '%+.0f'|format(ds.rate_delta_pct) }}%</span>{% else %}—{% endif %}</td>
+                        {% if not leg_locked %}
+                        <td style="text-align:right;">
+                            <div style="display:flex;gap:4px;justify-content:flex-end;">
+                                <button class="btn btn-sm btn-secondary" onclick="openEditDockerModal({{ ds.id }})"><i data-lucide="pencil"></i></button>
+                                <button class="btn btn-sm btn-danger" hx-delete="/escale/dockers/{{ ds.id }}" hx-confirm="Supprimer ?"><i data-lucide="trash-2"></i></button>
+                            </div>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p style="color:#aaa;font-size:13px;">Aucun shift docker.</p>
+        {% endif %}
+    </div>
+
+    <!-- ═══ BILLETTERIE ÉQUIPAGE (lecture seule — géré depuis /crew) ═══ -->
+    <div class="section-block" style="margin-top:20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <h3 class="section-title" style="margin-bottom:0;"><i data-lucide="ticket" style="width:16px;height:16px;"></i> Billetterie équipage ({{ crew_tickets|length }})</h3>
+            <a href="/crew" class="btn btn-secondary btn-sm"><i data-lucide="external-link" style="width:12px;height:12px;"></i> Gérer dans Équipage</a>
+        </div>
+
+        {% if ticket_alerts %}
+        <div class="ticket-alerts">
+            {% for alert in ticket_alerts %}
+            <div class="ticket-alert-item">
+                <i data-lucide="alert-triangle" style="width:14px;height:14px;color:#D97706;flex-shrink:0;"></i>
+                <span><strong>{{ alert.member_name }}</strong> — {{ alert.reason }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if crew_tickets %}
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr><th>Membre</th><th>Type</th><th>Transport</th><th>Date billet</th><th>Réf.</th><th>PJ</th></tr></thead>
+                <tbody>
+                    {% for t in crew_tickets %}
+                    {% set is_incompatible = ticket_alerts|selectattr('ticket', 'equalto', t)|list|length > 0 %}
+                    <tr class="{% if is_incompatible %}ticket-row-alert{% endif %}">
+                        <td>
+                            <strong>{{ t.member.full_name if t.member else '—' }}</strong>
+                            {% if t.member and t.member.is_foreign %}<span class="foreign-badge">Étranger</span>{% endif %}
+                        </td>
+                        <td><span class="ticket-type-badge {{ t.ticket_type }}">{{ 'Embarq.' if t.ticket_type == 'embarquement' else 'Débarq.' }}</span></td>
+                        <td>{{ t.transport_mode|capitalize }}</td>
+                        <td>{{ t.ticket_date.strftime('%d/%m/%Y') if t.ticket_date else '—' }}</td>
+                        <td style="font-size:11px;color:#666;">{{ t.ticket_reference or '—' }}</td>
+                        <td>
+                            {% if t.filename %}
+                            <a href="/escale/tickets/{{ t.id }}/download" class="btn btn-sm btn-secondary" title="{{ t.filename }}"><i data-lucide="download" style="width:12px;height:12px;"></i></a>
+                            {% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p style="color:#aaa;font-size:13px;">Aucun billet enregistré.</p>
+        {% endif %}
+    </div>
+
+    {% elif legs|length > 0 %}
+    <div class="empty-state">
+        <i data-lucide="mouse-pointer-click" style="width:48px;height:48px;color:var(--towt-sky);"></i>
+        <h3>Sélectionnez une escale</h3>
+    </div>
+    {% endif %}
+</div>
+
+<div id="modal-container"></div>
+
+<style>
+    .planning-filters{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+    .year-selector{display:flex;gap:4px;background:white;padding:4px;border-radius:var(--radius);box-shadow:var(--shadow)}
+    .year-btn{padding:6px 14px;border-radius:var(--radius);font-size:13px;font-weight:500;color:var(--towt-gray)}
+    .year-btn:hover{background:var(--towt-light)}.year-btn.active{background:var(--towt-green);color:white}
+    .leg-selector{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+    .leg-chip{display:flex;flex-direction:column;gap:2px;padding:8px 14px;background:white;border-radius:var(--radius);box-shadow:var(--shadow);font-size:12px;border:2px solid transparent}
+    .leg-chip:hover{border-color:var(--towt-sky)}.leg-chip.active{border-color:var(--towt-blue);background:rgba(9,85,97,0.05)}
+    .leg-chip.terminated{opacity:0.5}.leg-chip.locked{opacity:0.5;background:#f8f8f8}
+    .leg-chip strong{font-weight:700;color:var(--towt-blue)}.leg-chip span{color:#888}
+    .leg-summary{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;flex-wrap:wrap;gap:16px}
+    .leg-summary.locked-banner{border-left:4px solid #F59E0B;background:rgba(245,158,11,0.03)}
+    .leg-summary-left{display:flex;align-items:center;gap:12px}
+    .leg-summary-dates{display:flex;gap:20px;font-size:13px}
+    .leg-summary-dates .lbl{font-weight:600;color:var(--towt-blue);font-size:11px;text-transform:uppercase;margin-right:4px}
+    .text-green{color:var(--towt-green);font-weight:600}
+    .lock-badge{background:rgba(245,158,11,0.12);color:#D97706;padding:4px 12px;border-radius:100px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px}
+    .vessel-status-badge{padding:8px 16px;border-radius:var(--radius);font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px}
+    .vessel-status-badge.en_mer{background:rgba(96,165,250,0.12);color:#2563EB}
+    .vessel-status-badge.a_quai{background:rgba(135,189,43,0.15);color:#5a8010}
+
+    /* Port status bar */
+    .port-status-bar{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .ps-step{display:flex;align-items:center;gap:6px;font-size:12px;color:#aaa}
+    .ps-step.current{color:var(--towt-blue);font-weight:600}
+    .ps-step.done{color:var(--towt-green)}
+    .ps-dot{width:26px;height:26px;border-radius:50%;border:2px solid #ddd;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:white}
+    .ps-step.current .ps-dot{border-color:var(--towt-blue);background:var(--towt-blue);color:white}
+    .ps-step.done .ps-dot{border-color:var(--towt-green);background:var(--towt-green);color:white}
+    .ps-connector{width:30px;height:2px;background:#ddd;flex-shrink:0}
+    .ps-connector.done{background:var(--towt-green)}
+
+    /* Section */
+    .section-block{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px;margin-bottom:16px}
+    .section-title{font-size:15px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+
+    /* Operational Flow Timeline */
+    .timeline-section{overflow-x:auto}
+    .ops-flow{display:flex;align-items:center;padding:16px 8px;gap:0;min-width:max-content}
+    .flow-step{display:flex;flex-direction:column;align-items:center;min-width:110px;padding:8px 12px;border-radius:var(--radius);text-align:center;position:relative}
+    .flow-step.done{background:rgba(34,197,94,0.06)}
+    .flow-step.current{background:rgba(9,85,97,0.08);border:2px solid var(--towt-blue)}
+    .flow-step.pending{background:rgba(245,158,11,0.06);border:2px dashed #F59E0B}
+    .flow-icon{font-size:24px;margin-bottom:4px}
+    .flow-label{font-size:12px;font-weight:700;color:var(--towt-blue)}
+    .flow-time{font-size:11px;font-weight:600;color:#333;margin-top:2px}
+    .flow-sub{font-size:9px;color:#888;margin-top:1px}
+    .flow-port{font-size:10px;color:#888;margin-top:2px}
+    .flow-connector{width:40px;height:3px;background:#ddd;flex-shrink:0;border-radius:2px}
+    .flow-connector.done{background:var(--towt-green)}
+
+    /* Parallel Activities */
+    .parallel-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px}
+    @media(max-width:1200px){.parallel-grid{grid-template-columns:1fr 1fr}}
+    @media(max-width:600px){.parallel-grid{grid-template-columns:1fr}}
+    .parallel-lane{border-radius:var(--radius);border:1px solid #f0f0f0;overflow:hidden}
+    .lane-header{padding:10px 14px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;border-bottom:1px solid #f0f0f0;background:#fafafa}
+    .lane-icon{font-size:16px}
+    .lane-count{background:#e8e8e8;color:#888;padding:1px 8px;border-radius:100px;font-size:10px;font-weight:600;margin-left:auto}
+    .lane-cargo .lane-header{border-left:3px solid #8B5CF6}
+    .lane-crew .lane-header{border-left:3px solid #60A5FA}
+    .lane-supply .lane-header{border-left:3px solid #F59E0B}
+    .lane-ext .lane-header{border-left:3px solid #16a34a}
+    .lane-item{display:flex;align-items:flex-start;gap:8px;padding:8px 14px;border-bottom:1px solid #f8f8f8;font-size:12px}
+    .lane-item:last-child{border-bottom:none}
+    .lane-item.done{opacity:0.5}
+    .lane-badge{padding:1px 6px;border-radius:100px;font-size:8px;font-weight:700;color:white;flex-shrink:0;margin-top:2px}
+    .lane-badge.docker{background:#8B5CF6}
+    .lane-badge.armement{background:#60A5FA}
+    .lane-badge.technique{background:#F59E0B}
+    .lane-badge.relations_externes{background:#16a34a}
+    .lane-body{min-width:0;flex:1}
+    .lane-body strong{font-size:12px;display:block}
+    .lane-meta{font-size:10px;color:#888;display:block;margin-top:2px}
+    .lane-empty{padding:12px 14px;color:#ccc;font-size:12px;text-align:center}
+
+    /* Categories */
+    .categories-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px}
+    @media(max-width:1000px){.categories-grid{grid-template-columns:1fr}}
+    .cat-block{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);overflow:hidden;border-top:4px solid #ddd}
+    .cat-block.cat-relations_externes{border-top-color:#16a34a}
+    .cat-block.cat-technique{border-top-color:#F59E0B}
+    .cat-block.cat-armement{border-top-color:#60A5FA}
+    .cat-header{padding:14px 16px 10px;display:flex;align-items:center;justify-content:space-between}
+    .cat-header h4{font-size:14px;margin:0;display:flex;align-items:center;gap:6px}
+    .cat-count{background:#f0f0f0;color:#888;padding:1px 8px;border-radius:100px;font-size:11px;font-weight:600}
+    .cat-ops{padding:0 16px 16px}.cat-empty{padding:0 16px 16px;color:#ccc;font-size:12px}
+    .op-row{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #f5f5f5}
+    .op-row:last-child{border-bottom:none}.op-row.done{opacity:0.55}
+    .op-row-body{flex:1;min-width:0}.op-row-body strong{font-size:13px}
+    .op-row-meta{font-size:11px;color:#888;margin-top:2px}.op-row-desc{font-size:11px;color:#aaa;margin-top:2px}
+    .op-row-actions{display:flex;gap:4px;flex-shrink:0}
+    .hold-badge{padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600}
+    .hold-badge.avant{background:rgba(9,85,97,0.1);color:var(--towt-blue)}
+    .hold-badge.arriere{background:rgba(135,189,43,0.12);color:#5a8010}
+    .rate-badge{padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600}
+    .rate-badge.positive{background:#ECFDF5;color:#059669}.rate-badge.negative{background:#FEF2F2;color:#DC2626}
+    /* Performance metrics */
+    .perf-section{background:linear-gradient(135deg,#f0f9ff 0%,#f8fafc 100%);border:1px solid #e0e7ef;}
+    .perf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px;}
+    .perf-card{background:white;border-radius:8px;padding:14px 16px;border:1px solid #e8e8e8;}
+    .perf-card.perf-positive{border-left:4px solid #16a34a;background:rgba(22,163,106,0.03);}
+    .perf-card.perf-negative{border-left:4px solid #DC2626;background:rgba(220,38,38,0.03);}
+    .perf-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;}
+    .perf-value{font-size:18px;font-weight:700;color:#333;}
+    .perf-sub{font-size:12px;font-weight:400;color:#888;}
+    /* Tickets */
+    .ticket-alerts{background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:10px 14px;margin-bottom:12px;}
+    .ticket-alert-item{display:flex;align-items:center;gap:8px;font-size:12px;color:#92400E;padding:3px 0;}
+    .ticket-type-badge{font-size:10px;padding:2px 8px;border-radius:100px;font-weight:600;}
+    .ticket-type-badge.embarquement{background:rgba(34,197,94,0.1);color:#16a34a;}
+    .ticket-type-badge.debarquement{background:rgba(239,68,68,0.1);color:#DC2626;}
+    .ticket-row-alert{background:rgba(245,158,11,0.05);border-left:3px solid #F59E0B;}
+    .foreign-badge{font-size:9px;padding:1px 6px;border-radius:100px;font-weight:600;background:rgba(239,68,68,0.1);color:#DC2626;margin-left:4px;}
+    .ticket-add-form{margin-top:12px;padding-top:12px;border-top:1px solid #f0f0f0;}
+    .ticket-add-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;align-items:start;}
+    @media(max-width:900px){.ticket-add-grid{grid-template-columns:1fr 1fr;}}
+    .ticket-add-grid .fg{display:flex;flex-direction:column;gap:3px;}
+    .ticket-add-grid .fi{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:Poppins,system-ui,sans-serif;}
+</style>
+
+<script>
+    var LEG_ID = {{ leg_id or 'null' }};
+    var VESSEL = '{{ selected_vessel or '' }}';
+    var YEAR = {{ current_year }};
+    var BASE_URL = '/escale?vessel=' + VESSEL + '&year=' + YEAR + '&leg_id=' + LEG_ID;
+
+    window.openOpModal = function() { loadModal('/escale/operations/create?leg_id=' + LEG_ID); };
+    window.openOpModalCat = function(cat) { loadModal('/escale/operations/create?leg_id=' + LEG_ID + '&cat=' + cat); };
+    window.openEditOpModal = function(id) { loadModal('/escale/operations/' + id + '/edit'); };
+    window.openDockerModal = function() { loadModal('/escale/dockers/create?leg_id=' + LEG_ID); };
+    window.openEditDockerModal = function(id) { loadModal('/escale/dockers/' + id + '/edit'); };
+    window.closeModal = function() { document.getElementById('modal-container').innerHTML = ''; };
+
+    function loadModal(url) {
+        fetch(url).then(function(r){return r.text();}).then(function(html){
+            document.getElementById('modal-container').innerHTML = html;
+            lucide.createIcons();
+            document.getElementById('modal-container').querySelectorAll('script').forEach(function(s){
+                var ns = document.createElement('script'); ns.textContent = s.textContent;
+                document.body.appendChild(ns); document.body.removeChild(ns);
+            });
+            initFormSubmit();
+        });
+    }
+
+    window.initFormSubmit = function() {
+        var form = document.getElementById('op-form') || document.getElementById('docker-form');
+        if (!form) return;
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var url = form.getAttribute('action');
+            fetch(url, { method: 'POST', body: new FormData(form) })
+                .then(function(r){ if(r.redirected) window.location.href=r.url; else window.location.href=BASE_URL; })
+                .catch(function(){ window.location.reload(); });
+        });
+    };
+
+    // Billetterie is now managed from /crew page
+</script>
+{% endblock %}

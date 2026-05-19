@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Finances{% endblock %}
+{% block page_title %}Suivi financier{% endblock %}
+
+{% block topbar_actions %}
+<a href="/finance/ports" class="btn btn-secondary btn-sm"><i data-lucide="settings"></i> Config. ports</a>
+<a href="/finance/export/csv" class="btn btn-secondary btn-sm" hx-boost="false"><i data-lucide="download"></i> Export CSV</a>
+{% endblock %}
+
+{% block content %}
+<div class="finance-page">
+    <div class="planning-filters">
+        <div class="vessel-tabs">
+            <a href="/finance?year={{ current_year }}" class="vessel-tab {% if not selected_vessel %}active{% endif %}">
+                <i data-lucide="globe"></i> Tous
+            </a>
+            {% for v in vessels %}
+            <a href="/finance?vessel={{ v.code }}&year={{ current_year }}"
+               class="vessel-tab {% if selected_vessel == v.code|string %}active{% endif %}">
+                <i data-lucide="ship"></i> {{ v.name }}
+            </a>
+            {% endfor %}
+        </div>
+        <div class="year-selector">
+            {% for y in years %}
+            <a href="/finance?{% if selected_vessel %}vessel={{ selected_vessel }}&{% endif %}year={{ y }}"
+               class="year-btn {% if current_year == y %}active{% endif %}">{{ y }}</a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div style="font-size:11px;color:#888;margin-bottom:16px;">OPEX mer : {{ opex_daily|eur }} €/jour</div>
+
+    <div class="fin-cards">
+        <div class="fin-card">
+            <div class="fin-card-label">Chiffre d'affaires</div>
+            <div class="fin-card-row">
+                <div class="fin-col"><span class="fin-sub">Prévisionnel</span><span class="fin-val">{{ totals.rev_f|eur }} €</span></div>
+                <div class="fin-col"><span class="fin-sub">Réalisé</span><span class="fin-val">{{ totals.rev_a|eur }} €</span></div>
+            </div>
+            <div style="display:flex;gap:16px;margin-top:6px;font-size:10px;color:#888;">
+                <span>🚢 Cargo : {{ totals.cargo_rev_total|eur }} €</span>
+                <span>🧳 Passagers : {{ totals.pax_rev_total|eur }} €</span>
+            </div>
+        </div>
+        <div class="fin-card">
+            <div class="fin-card-label">Coûts totaux</div>
+            <div class="fin-card-row">
+                <div class="fin-col"><span class="fin-sub">Prévisionnel</span><span class="fin-val cost">{{ totals.total_cost_f|eur }} €</span></div>
+                <div class="fin-col"><span class="fin-sub">Réalisé</span><span class="fin-val cost">{{ totals.total_cost_a|eur }} €</span></div>
+            </div>
+        </div>
+        <div class="fin-card">
+            <div class="fin-card-label">Résultat</div>
+            <div class="fin-card-row">
+                <div class="fin-col"><span class="fin-sub">Prévisionnel</span><span class="fin-val {% if totals.result_f >= 0 %}positive{% else %}negative{% endif %}">{{ totals.result_f|eur }} €</span></div>
+                <div class="fin-col"><span class="fin-sub">Réalisé</span><span class="fin-val {% if totals.result_a >= 0 %}positive{% else %}negative{% endif %}">{{ totals.result_a|eur }} €</span></div>
+            </div>
+        </div>
+        <div class="fin-card">
+            <div class="fin-card-label">Marge</div>
+            <div class="fin-card-row">
+                <div class="fin-col"><span class="fin-sub">Prévisionnel</span><span class="fin-val {% if totals.margin_f >= 0 %}positive{% else %}negative{% endif %}">{{ totals.margin_f }}%</span></div>
+                <div class="fin-col"><span class="fin-sub">Réalisé</span><span class="fin-val {% if totals.margin_a >= 0 %}positive{% else %}negative{% endif %}">{{ totals.margin_a }}%</span></div>
+            </div>
+        </div>
+    </div>
+
+    {% if leg_finances %}
+    <div class="table-container">
+        <table class="data-table fin-table">
+            <thead>
+                <tr>
+                    <th rowspan="2">Leg</th>
+                    <th rowspan="2">Route</th>
+                    <th colspan="2" class="th-group revenue">CA</th>
+                    <th colspan="2" class="th-group cost">Portuaire</th>
+                    <th colspan="2" class="th-group cost">Escale</th>
+                    <th colspan="2" class="th-group cost">OPEX mer</th>
+                    <th colspan="2" class="th-group cost">Opérations</th>
+                    <th colspan="2" class="th-group result">Résultat</th>
+                    <th colspan="2" class="th-group result">Marge</th>
+                    <th rowspan="2">Act.</th>
+                </tr>
+                <tr>
+                    <th class="sub">Prév.</th><th class="sub">Réel</th>
+                    <th class="sub">Prév.</th><th class="sub">Réel</th>
+                    <th class="sub">Prév.</th><th class="sub">Réel</th>
+                    <th class="sub">Prév.</th><th class="sub">Réel</th>
+                    <th class="sub">Prév.</th><th class="sub">Réel</th>
+                    <th class="sub">Prév.</th><th class="sub">Réel</th>
+                    <th class="sub">Prév.</th><th class="sub">Réel</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lf in leg_finances %}
+                <tr>
+                    <td>
+                        <strong style="font-family:monospace;color:var(--towt-blue);font-size:11px;">{{ lf.leg.leg_code }}</strong>
+                        <div style="font-size:10px;color:#aaa;">{{ lf.leg.vessel.name }}</div>
+                    </td>
+                    <td style="font-size:11px;">{{ lf.leg.departure_port.locode }} → {{ lf.leg.arrival_port.locode }}</td>
+                    <td class="num revenue" title="Cargo: {{ lf.order_revenue|eur }} · Pax: {{ lf.pax_revenue|eur }}">{{ lf.rev_f|eur }}</td>
+                    <td class="num revenue">{{ lf.rev_a|eur }}</td>
+                    <td class="num cost">{{ lf.port_f|eur }}</td>
+                    <td class="num cost">{{ lf.port_a|eur }}</td>
+                    <td class="num cost">{{ lf.quay_f|eur }}</td>
+                    <td class="num cost">{{ lf.quay_a|eur }}</td>
+                    <td class="num cost" title="{{ lf.sea_days }} j.">{{ lf.sea_f|eur }}</td>
+                    <td class="num cost">{{ lf.sea_a|eur }}</td>
+                    <td class="num cost">{{ lf.ops_f|eur }}</td>
+                    <td class="num cost">{{ lf.ops_a|eur }}</td>
+                    <td class="num {% if lf.result_f >= 0 %}positive{% else %}negative{% endif %}"><strong>{{ lf.result_f|eur }}</strong></td>
+                    <td class="num {% if lf.result_a >= 0 %}positive{% else %}negative{% endif %}"><strong>{{ lf.result_a|eur }}</strong></td>
+                    <td class="num {% if lf.margin_f >= 0 %}positive{% else %}negative{% endif %}">{{ lf.margin_f }}%</td>
+                    <td class="num {% if lf.margin_a >= 0 %}positive{% else %}negative{% endif %}">{{ lf.margin_a }}%</td>
+                    <td><button class="btn btn-sm btn-secondary" onclick="openFinModal({{ lf.leg.id }})"><i data-lucide="pencil"></i></button></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr style="font-weight:700;background:var(--towt-light);">
+                    <td colspan="2">TOTAL</td>
+                    <td class="num revenue">{{ totals.rev_f|eur }}</td>
+                    <td class="num revenue">{{ totals.rev_a|eur }}</td>
+                    <td class="num cost">{{ totals.port_f|eur }}</td>
+                    <td class="num cost">{{ totals.port_a|eur }}</td>
+                    <td class="num cost">{{ totals.quay_f|eur }}</td>
+                    <td class="num cost">{{ totals.quay_a|eur }}</td>
+                    <td class="num cost">{{ totals.sea_f|eur }}</td>
+                    <td class="num cost">{{ totals.sea_a|eur }}</td>
+                    <td class="num cost">{{ totals.ops_f|eur }}</td>
+                    <td class="num cost">{{ totals.ops_a|eur }}</td>
+                    <td class="num {% if totals.result_f >= 0 %}positive{% else %}negative{% endif %}">{{ totals.result_f|eur }}</td>
+                    <td class="num {% if totals.result_a >= 0 %}positive{% else %}negative{% endif %}">{{ totals.result_a|eur }}</td>
+                    <td class="num {% if totals.margin_f >= 0 %}positive{% else %}negative{% endif %}">{{ totals.margin_f }}%</td>
+                    <td class="num {% if totals.margin_a >= 0 %}positive{% else %}negative{% endif %}">{{ totals.margin_a }}%</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><i data-lucide="wallet" style="width:48px;height:48px;color:var(--towt-sky);"></i><h3>Aucune escale</h3></div>
+    {% endif %}
+</div>
+<div id="modal-container"></div>
+<style>
+    .planning-filters{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+    .year-selector{display:flex;gap:4px;background:white;padding:4px;border-radius:var(--radius);box-shadow:var(--shadow)}
+    .year-btn{padding:6px 14px;border-radius:var(--radius);font-size:13px;font-weight:500;color:var(--towt-gray)}
+    .year-btn:hover{background:var(--towt-light)}.year-btn.active{background:var(--towt-green);color:white}
+    .fin-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px}
+    .fin-card{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:16px 20px}
+    .fin-card-label{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#888;margin-bottom:10px}
+    .fin-card-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .fin-col{display:flex;flex-direction:column}.fin-sub{font-size:10px;color:#aaa;text-transform:uppercase}
+    .fin-val{font-size:20px;font-weight:700;color:var(--towt-gray)}
+    .fin-val.cost{color:#DC2626}.fin-val.positive{color:#059669}.fin-val.negative{color:#DC2626}
+    .fin-table th.th-group{text-align:center;font-size:10px;border-bottom:none;padding-bottom:2px}
+    .fin-table th.th-group.revenue{background:rgba(135,189,43,0.08)}
+    .fin-table th.th-group.cost{background:rgba(220,38,38,0.05)}
+    .fin-table th.th-group.result{background:rgba(9,85,97,0.06)}
+    .fin-table th.sub{font-size:9px;font-weight:500;color:#888;padding-top:2px}
+    .fin-table td.num{text-align:right;font-size:11px;font-family:'Poppins',monospace;white-space:nowrap}
+    .fin-table td.num.revenue{color:#059669}.fin-table td.num.cost{color:#888}
+    .fin-table td.num.positive{color:#059669}.fin-table td.num.negative{color:#DC2626}
+</style>
+<script>
+    window.openFinModal = function(legId){
+        fetch('/finance/legs/'+legId+'/edit').then(function(r){return r.text();}).then(function(html){
+            document.getElementById('modal-container').innerHTML=html;lucide.createIcons();initFormSubmit();});};
+    window.closeModal = function(){document.getElementById('modal-container').innerHTML='';};
+    window.initFormSubmit = function(){
+        var form=document.getElementById('fin-form');if(!form)return;
+        form.addEventListener('submit',function(e){e.preventDefault();
+            fetch(form.action,{method:'POST',body:new FormData(form)})
+                .then(function(r){if(r.redirected)window.location.href=r.url;else window.location.reload();})
+                .catch(function(){window.location.reload();});});};
+</script>
+{% endblock %}

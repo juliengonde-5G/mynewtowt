@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Conformité équipage{% endblock %}
+{% block page_title %}Conformité équipage — Immigration{% endblock %}
+
+{% block topbar_actions %}
+<a href="/crew" class="btn btn-secondary btn-sm"><i data-lucide="arrow-left"></i> Retour</a>
+{% endblock %}
+
+{% block content %}
+<div class="compliance-page">
+    <!-- Stats -->
+    <div class="stats-grid" style="margin-bottom:20px;">
+        <div class="stat-card"><div class="stat-card-icon blue"><i data-lucide="globe"></i></div><div class="stat-card-body"><span class="stat-card-value">{{ stats.total_foreign }}</span><span class="stat-card-label">Personnel étranger</span></div></div>
+        <div class="stat-card"><div class="stat-card-icon green"><i data-lucide="check-circle"></i></div><div class="stat-card-body"><span class="stat-card-value">{{ stats.compliant }}</span><span class="stat-card-label">Conforme</span></div></div>
+        <div class="stat-card"><div class="stat-card-icon" style="background:rgba(245,158,11,0.1);color:#D97706;"><i data-lucide="alert-triangle"></i></div><div class="stat-card-body"><span class="stat-card-value">{{ stats.warnings }}</span><span class="stat-card-label">Alerte (< 30j)</span></div></div>
+        <div class="stat-card"><div class="stat-card-icon" style="background:rgba(220,38,38,0.1);color:#DC2626;"><i data-lucide="x-circle"></i></div><div class="stat-card-body"><span class="stat-card-value">{{ stats.expired }}</span><span class="stat-card-label">Expiré</span></div></div>
+    </div>
+
+    {% if alerts %}
+    <div class="section-header"><h3>Alertes</h3></div>
+    <div class="table-container" style="margin-bottom:20px;">
+        <table class="data-table">
+            <thead><tr><th>Marin</th><th>Type</th><th>Sévérité</th><th>Détail</th><th style="text-align:right;">Action</th></tr></thead>
+            <tbody>
+                {% for a in alerts %}
+                <tr>
+                    <td><strong>{{ a.member.full_name }}</strong><br><span style="font-size:10px;color:#888;">{{ a.member.role_label }}</span></td>
+                    <td>
+                        {% if a.type == 'passport' %}🛂 Passeport
+                        {% elif a.type == 'visa' %}📋 Visa
+                        {% else %}⚠️ Document manquant{% endif %}
+                    </td>
+                    <td>
+                        {% if a.severity == 'expired' %}<span style="padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;background:rgba(220,38,38,0.1);color:#DC2626;">EXPIRÉ</span>
+                        {% else %}<span style="padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;background:rgba(245,158,11,0.1);color:#D97706;">ATTENTION</span>{% endif %}
+                    </td>
+                    <td>{{ a.message }}</td>
+                    <td style="text-align:right;">
+                        <button class="btn btn-sm btn-secondary" onclick="loadModal('/crew/members/{{ a.member.id }}/edit')" title="Modifier"><i data-lucide="pencil"></i></button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card" style="text-align:center;padding:30px;">
+        <i data-lucide="check-circle" style="width:40px;height:40px;color:#16a34a;"></i>
+        <h3 style="margin-top:8px;color:#16a34a;">Tout est conforme</h3>
+        <p style="font-size:12px;color:#888;">Aucune alerte d'expiration de document.</p>
+    </div>
+    {% endif %}
+
+    <!-- Foreign Crew List -->
+    <div class="section-header"><h3>Personnel étranger</h3></div>
+    {% if foreign_crew %}
+    <div class="table-container">
+        <table class="data-table">
+            <thead><tr><th>Nom</th><th>Rôle</th><th>Nationalité</th><th>N° Passeport</th><th>Exp. Passeport</th><th>Visa</th><th>Exp. Visa</th><th>Statut</th></tr></thead>
+            <tbody>
+                {% for m in foreign_crew %}
+                <tr>
+                    <td><strong>{{ m.full_name }}</strong></td>
+                    <td><span class="crew-role-badge {{ m.role }}">{{ m.role_label }}</span></td>
+                    <td>{{ m.nationality or '—' }}</td>
+                    <td style="font-family:monospace;">{{ m.passport_number or '—' }}</td>
+                    <td>
+                        {% if m.passport_expiry %}
+                            {% if m.passport_days_remaining < 0 %}<span style="color:#DC2626;font-weight:600;">{{ m.passport_expiry.strftime('%d/%m/%Y') }}</span>
+                            {% elif m.passport_days_remaining < 30 %}<span style="color:#D97706;font-weight:600;">{{ m.passport_expiry.strftime('%d/%m/%Y') }}</span>
+                            {% else %}{{ m.passport_expiry.strftime('%d/%m/%Y') }}{% endif %}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>{{ (m.visa_type or '—')|upper }}</td>
+                    <td>
+                        {% if m.visa_expiry %}
+                            {% if m.visa_days_remaining < 0 %}<span style="color:#DC2626;font-weight:600;">{{ m.visa_expiry.strftime('%d/%m/%Y') }}</span>
+                            {% elif m.visa_days_remaining < 30 %}<span style="color:#D97706;font-weight:600;">{{ m.visa_expiry.strftime('%d/%m/%Y') }}</span>
+                            {% else %}{{ m.visa_expiry.strftime('%d/%m/%Y') }}{% endif %}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% if m.compliance_status == 'ok' %}<span style="padding:2px 8px;border-radius:100px;font-size:10px;font-weight:600;background:rgba(34,197,94,0.1);color:#16a34a;">OK</span>
+                        {% elif m.compliance_status == 'warning' %}<span style="padding:2px 8px;border-radius:100px;font-size:10px;font-weight:600;background:rgba(245,158,11,0.1);color:#D97706;">Attention</span>
+                        {% else %}<span style="padding:2px 8px;border-radius:100px;font-size:10px;font-weight:600;background:rgba(220,38,38,0.1);color:#DC2626;">Expiré</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p style="font-size:13px;color:#888;">Aucun personnel étranger enregistré.</p>
+    {% endif %}
+</div>
+
+<div id="modal-container"></div>
+
+<style>
+    .crew-role-badge{padding:2px 8px;border-radius:100px;font-size:10px;font-weight:600;}
+    .crew-role-badge.capitaine{background:rgba(220,38,38,0.1);color:#DC2626;}
+    .crew-role-badge.second{background:rgba(245,158,11,0.1);color:#D97706;}
+    .crew-role-badge.chef_mecanicien{background:rgba(139,92,246,0.1);color:#7C3AED;}
+    .crew-role-badge.cook{background:rgba(236,72,153,0.1);color:#DB2777;}
+    .crew-role-badge.lieutenant{background:rgba(96,165,250,0.1);color:#2563EB;}
+    .crew-role-badge.bosco{background:rgba(16,185,129,0.1);color:#059669;}
+    .crew-role-badge.marin{background:rgba(107,114,128,0.1);color:#6B7280;}
+    .crew-role-badge.eleve_officier{background:rgba(251,191,36,0.15);color:#B45309;}
+</style>
+
+<script>
+    function loadModal(url){
+        fetch(url).then(function(r){return r.text();}).then(function(html){
+            document.getElementById('modal-container').innerHTML = html;
+            lucide.createIcons();
+            document.getElementById('modal-container').querySelectorAll('script').forEach(function(s){
+                var ns=document.createElement('script');ns.textContent=s.textContent;document.body.appendChild(ns);document.body.removeChild(ns);
+            });
+            initFormSubmit();
+        });
+    }
+    window.closeModal = function(){ document.getElementById('modal-container').innerHTML = ''; };
+    window.initFormSubmit = function(){
+        var form = document.querySelector('#modal-container form');
+        if (!form) return;
+        form.addEventListener('submit', function(e){
+            e.preventDefault();
+            fetch(form.action, {method:'POST', body:new FormData(form)})
+                .then(function(r){if(r.redirected) window.location.href=r.url; else window.location.reload();})
+                .catch(function(){window.location.reload();});
+        });
+    };
+</script>
+{% endblock %}

@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Grille {{ grid.reference }}{% endblock %}
+{% block page_title %}Grille tarifaire {{ grid.reference }}{% endblock %}
+
+{% block topbar_actions %}
+<div style="display:flex;gap:8px;align-items:center;">
+    {% if grid.status == 'draft' %}
+    <form method="post" action="/commercial/pricing/grids/{{ grid.id }}/activate" style="margin:0;">
+        {{ csrf_input(request) }}
+        <button type="submit" class="btn btn-success btn-sm"><i data-lucide="check-circle"></i> Activer</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/commercial/pricing/grids/{{ grid.id }}/recalculate" style="margin:0;">
+        {{ csrf_input(request) }}
+        <button type="submit" class="btn btn-secondary btn-sm"><i data-lucide="refresh-cw"></i> Recalculer</button>
+    </form>
+    <a href="/commercial/pricing/grids/{{ grid.id }}/edit" class="btn btn-primary btn-sm"><i data-lucide="edit"></i> Modifier</a>
+    <a href="/commercial/pricing/grids/{{ grid.id }}/offer/create" class="btn btn-primary btn-sm"><i data-lucide="file-text"></i> Générer offre</a>
+    <a href="/commercial/pricing/grids" class="btn btn-secondary btn-sm"><i data-lucide="arrow-left"></i> Retour</a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="grid-detail-page">
+
+    <!-- ─── HEADER INFO ─────────────────────────── -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+        <div class="card">
+            <div class="card-body">
+                <h3 style="margin:0 0 12px;color:var(--towt-blue);font-family:'Poppins',sans-serif;">{{ grid.reference }}</h3>
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13px;">
+                    <span style="color:#888;font-weight:500;">Client</span>
+                    <span>{{ grid.client.name if grid.client else '—' }}
+                        <span class="badge {% if grid.client and grid.client.client_type == 'freight_forwarder' %}badge-blue{% else %}badge-green{% endif %}" style="font-size:10px;margin-left:6px;">
+                            {{ 'FF' if grid.client and grid.client.client_type == 'freight_forwarder' else 'Chargeur' }}
+                        </span>
+                    </span>
+                    <span style="color:#888;font-weight:500;">Navire</span>
+                    <span>{{ grid.vessel.name if grid.vessel else 'Tous navires' }}</span>
+                    <span style="color:#888;font-weight:500;">Validité</span>
+                    <span>{{ grid.valid_from }} → {{ grid.valid_to }}</span>
+                    <span style="color:#888;font-weight:500;">Statut</span>
+                    <span>
+                        {% if grid.status == 'draft' %}<span class="badge badge-orange">Brouillon</span>
+                        {% elif grid.status == 'active' %}<span class="badge badge-green">Active</span>
+                        {% elif grid.status == 'expired' %}<span class="badge badge-red">Expirée</span>
+                        {% elif grid.status == 'superseded' %}<span class="badge badge-gray">Remplacée</span>
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body">
+                <h4 style="margin:0 0 12px;color:var(--towt-blue);">Paramètres de calcul</h4>
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13px;">
+                    <span style="color:#888;font-weight:500;">Indice d'ajustement</span>
+                    <span style="font-weight:600;">{{ '%.2f'|format(grid.adjustment_index or 1.0) }}
+                        {% set pct = ((grid.adjustment_index or 1.0) - 1) * 100 %}
+                        {% if pct > 0 %}<span style="color:#e67e22;font-size:11px;">(+{{ '%.1f'|format(pct) }}%)</span>
+                        {% elif pct < 0 %}<span style="color:#27ae60;font-size:11px;">({{ '%.1f'|format(pct) }}%)</span>
+                        {% endif %}
+                    </span>
+                    <span style="color:#888;font-weight:500;">BL Fee</span>
+                    <span>{{ '%.2f'|format(grid.bl_fee or 0) }} €</span>
+                    <span style="color:#888;font-weight:500;">Booking Fee</span>
+                    <span>{{ '%.2f'|format(grid.booking_fee or 0) }} €</span>
+                    {% if grid.volume_commitment %}
+                    <span style="color:#888;font-weight:500;">Volume engagement</span>
+                    <span>{{ grid.volume_commitment }} palettes/commande</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── RATE LINES ──────────────────────────── -->
+    <div class="card" style="margin-bottom:24px;">
+        <div class="card-body">
+            <h4 style="margin:0 0 16px;color:var(--towt-blue);"><i data-lucide="map-pin" style="width:16px;height:16px;"></i> Routes & Tarifs</h4>
+            {% if grid.lines %}
+            <div class="table-container">
+                <table class="data-table">
+                    <thead><tr>
+                        <th>POL</th><th>POD</th><th>Distance (NM)</th><th>Jours nav.</th><th>OPEX/jour</th>
+                        <th>Base rate</th>
+                        <th style="background:#fff3e0;">< 10 pal.</th>
+                        <th style="background:#e8f5e9;">10-50 pal.</th>
+                        <th style="background:#e3f2fd;">51-100 pal.</th>
+                        <th style="background:#f3e5f5;">> 100 pal.</th>
+                        <th>Manuel</th>
+                    </tr></thead>
+                    <tbody>
+                        {% for line in grid.lines %}
+                        <tr>
+                            <td><strong>{{ line.pol.name if line.pol else line.pol_locode }}</strong><br><span style="font-size:10px;color:#888;">{{ line.pol_locode }}</span></td>
+                            <td><strong>{{ line.pod.name if line.pod else line.pod_locode }}</strong><br><span style="font-size:10px;color:#888;">{{ line.pod_locode }}</span></td>
+                            <td>{{ '%.0f'|format(line.distance_nm) if line.distance_nm else '—' }}</td>
+                            <td>{{ '%.1f'|format(line.nav_days) if line.nav_days else '—' }}</td>
+                            <td>{{ '%.0f'|format(line.opex_daily) if line.opex_daily else '—' }} €</td>
+                            <td style="font-weight:500;">{{ '%.2f'|format(line.base_rate) if line.base_rate else '—' }} €</td>
+                            <td style="background:#fff3e0;font-weight:600;">{{ '%.2f'|format(line.rate_lt10) if line.rate_lt10 else '—' }} €</td>
+                            <td style="background:#e8f5e9;font-weight:600;">{{ '%.2f'|format(line.rate_10to50) if line.rate_10to50 else '—' }} €</td>
+                            <td style="background:#e3f2fd;font-weight:600;">{{ '%.2f'|format(line.rate_51to100) if line.rate_51to100 else '—' }} €</td>
+                            <td style="background:#f3e5f5;font-weight:600;">{{ '%.2f'|format(line.rate_gt100) if line.rate_gt100 else '—' }} €</td>
+                            <td>{% if line.is_manual %}<span class="badge badge-orange" style="font-size:10px;">Manuel</span>{% else %}<span style="color:#ccc;">Auto</span>{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p style="color:#999;text-align:center;padding:24px;">Aucune route définie. <a href="/commercial/pricing/grids/{{ grid.id }}/edit">Ajouter des routes</a></p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ─── RATE OFFERS ─────────────────────────── -->
+    <div class="card" style="margin-bottom:24px;">
+        <div class="card-body">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h4 style="margin:0;color:var(--towt-blue);"><i data-lucide="file-text" style="width:16px;height:16px;"></i> Offres générées</h4>
+                <a href="/commercial/pricing/grids/{{ grid.id }}/offer/create" class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Nouvelle offre</a>
+            </div>
+            {% if offers %}
+            <div class="table-container">
+                <table class="data-table">
+                    <thead><tr>
+                        <th>Référence</th><th>Validité</th><th>Statut</th><th>Envoyée le</th><th>Document</th><th style="text-align:right;">Actions</th>
+                    </tr></thead>
+                    <tbody>
+                        {% for offer in offers %}
+                        <tr>
+                            <td><strong style="color:var(--towt-blue);">{{ offer.reference }}</strong></td>
+                            <td>{{ offer.validity_date }}</td>
+                            <td>
+                                {% if offer.status == 'draft' %}<span class="badge badge-orange">Brouillon</span>
+                                {% elif offer.status == 'sent' %}<span class="badge badge-blue">Envoyée</span>
+                                {% elif offer.status == 'accepted' %}<span class="badge badge-green">Acceptée</span>
+                                {% elif offer.status == 'rejected' %}<span class="badge badge-red">Refusée</span>
+                                {% elif offer.status == 'expired' %}<span class="badge badge-gray">Expirée</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ offer.sent_at.strftime('%d/%m/%Y %H:%M') if offer.sent_at else '—' }}</td>
+                            <td>
+                                {% if offer.document_filename %}
+                                <a href="/commercial/pricing/offers/{{ offer.id }}/download" class="btn btn-secondary btn-sm" style="font-size:11px;"><i data-lucide="download" style="width:12px;height:12px;"></i> {{ offer.document_filename }}</a>
+                                {% else %}<span style="color:#ccc;">—</span>{% endif %}
+                            </td>
+                            <td style="text-align:right;">
+                                <div style="display:flex;gap:4px;justify-content:flex-end;">
+                                    {% if offer.status == 'draft' %}
+                                    <form method="post" action="/commercial/pricing/offers/{{ offer.id }}/status" style="margin:0;">
+                                        {{ csrf_input(request) }}
+                                        <input type="hidden" name="status" value="sent">
+                                        <button type="submit" class="btn btn-sm" style="font-size:11px;background:#3498db;color:#fff;"><i data-lucide="send" style="width:12px;height:12px;"></i> Envoyée</button>
+                                    </form>
+                                    {% endif %}
+                                    {% if offer.status == 'sent' %}
+                                    <form method="post" action="/commercial/pricing/offers/{{ offer.id }}/status" style="margin:0;">
+                                        {{ csrf_input(request) }}
+                                        <input type="hidden" name="status" value="accepted">
+                                        <button type="submit" class="btn btn-sm" style="font-size:11px;background:#27ae60;color:#fff;">Acceptée</button>
+                                    </form>
+                                    <form method="post" action="/commercial/pricing/offers/{{ offer.id }}/status" style="margin:0;">
+                                        {{ csrf_input(request) }}
+                                        <input type="hidden" name="status" value="rejected">
+                                        <button type="submit" class="btn btn-sm" style="font-size:11px;background:#e74c3c;color:#fff;">Refusée</button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p style="color:#999;text-align:center;padding:16px;">Aucune offre générée pour cette grille.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ─── LINKED ORDERS ───────────────────────── -->
+    <div class="card">
+        <div class="card-body">
+            <h4 style="margin:0 0 16px;color:var(--towt-blue);"><i data-lucide="package" style="width:16px;height:16px;"></i> Commandes liées</h4>
+            {% if orders %}
+            <div class="table-container">
+                <table class="data-table">
+                    <thead><tr>
+                        <th>Référence</th><th>Client</th><th>Palettes</th><th>Prix unitaire</th><th>Total</th><th>Statut</th>
+                    </tr></thead>
+                    <tbody>
+                        {% for order in orders %}
+                        <tr>
+                            <td><strong style="color:var(--towt-blue);">{{ order.reference }}</strong></td>
+                            <td>{{ order.client_name }}</td>
+                            <td>{{ order.quantity_palettes }}</td>
+                            <td>{{ '%.2f'|format(order.unit_price or 0) }} €</td>
+                            <td style="font-weight:500;">{{ '%.2f'|format(order.total_price or 0) }} €</td>
+                            <td>
+                                {% if order.status == 'non_affecte' %}<span class="badge badge-orange">Non affecté</span>
+                                {% elif order.status == 'reserve' %}<span class="badge badge-blue">Réservé</span>
+                                {% elif order.status == 'confirme' %}<span class="badge badge-green">Confirmé</span>
+                                {% elif order.status == 'annule' %}<span class="badge badge-red">Annulé</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p style="color:#999;text-align:center;padding:16px;">Aucune commande liée à cette grille.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if grid.notes %}
+    <div class="card" style="margin-top:16px;">
+        <div class="card-body">
+            <h4 style="margin:0 0 8px;color:var(--towt-blue);">Notes</h4>
+            <p style="color:#666;font-size:13px;white-space:pre-wrap;">{{ grid.notes }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

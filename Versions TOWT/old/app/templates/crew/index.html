@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Équipage{% endblock %}
+{% block page_title %}Gestion d'équipage{% endblock %}
+
+{% block topbar_actions %}
+<a href="/crew/compliance" class="btn btn-secondary btn-sm" title="Conformité immigration"><i data-lucide="shield-check"></i> Conformité</a>
+<div class="dropdown-wrap" style="position:relative;display:inline-block;">
+    <button class="btn btn-secondary btn-sm" onclick="this.parentElement.classList.toggle('open')"><i data-lucide="file-text"></i> Crew List</button>
+    <div class="dropdown-menu">
+        {% for v in vessels %}
+        <a href="/crew/border-police/{{ v.id }}" target="_blank"><i data-lucide="ship" style="width:14px;height:14px;"></i> {{ v.name }}</a>
+        {% endfor %}
+    </div>
+</div>
+<button class="btn btn-primary btn-sm" onclick="loadModal('/crew/members/create')"><i data-lucide="plus"></i> Nouveau marin</button>
+{% endblock %}
+
+{% block content %}
+<div class="crew-page">
+    {% if compliance_alerts %}
+    <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span>⚠️</span>
+        <span><strong>{{ compliance_alerts|length }} alerte{{ 's' if compliance_alerts|length > 1 }}</strong> — Documents expirant sous 30 jours :
+            {% for m in compliance_alerts %}{{ m.full_name }}{% if not loop.last %}, {% endif %}{% endfor %}
+        </span>
+        <a href="/crew/compliance" style="margin-left:auto;font-weight:600;color:#D97706;">Voir détails →</a>
+    </div>
+    {% endif %}
+    <!-- Stats -->
+    <div class="stats-grid" style="margin-bottom:20px;">
+        <div class="stat-card"><div class="stat-card-icon blue"><i data-lucide="users"></i></div><div class="stat-card-body"><span class="stat-card-value">{{ stats.total }}</span><span class="stat-card-label">Équipage total</span></div></div>
+        <div class="stat-card"><div class="stat-card-icon green"><i data-lucide="ship"></i></div><div class="stat-card-body"><span class="stat-card-value">{{ stats.active }}</span><span class="stat-card-label">En activité</span></div></div>
+        <div class="stat-card"><div class="stat-card-icon sky"><i data-lucide="coffee"></i></div><div class="stat-card-body"><span class="stat-card-value">{{ stats.repos }}</span><span class="stat-card-label">En repos</span></div></div>
+    </div>
+
+    <!-- Bordée par navire -->
+    <div class="section-header"><h3>Bordées actuelles</h3></div>
+    <div class="bordee-grid">
+        {% for vname, b in bordees.items() %}
+        <div class="bordee-card">
+            <div class="bordee-header">
+                <i data-lucide="ship" style="width:16px;height:16px;"></i>
+                <strong>{{ vname }}</strong>
+                <span class="bordee-count">{{ b.crew|length }} embarqués</span>
+            </div>
+            {% if b.missing %}
+            <div class="bordee-missing">⚠️ Postes vacants : {{ b.missing|map('capitalize')|join(', ') }}</div>
+            {% endif %}
+            <div class="bordee-list">
+                {% for md in b.crew %}
+                <div class="bordee-member">
+                    <span class="crew-role-badge {{ md.member.role }}">{{ md.member.role_label }}</span>
+                    <span>{{ md.member.full_name }}</span>
+                    {% if md.member.is_foreign %}<span class="foreign-badge">Étranger</span>{% endif %}
+                </div>
+                {% endfor %}
+                {% if not b.crew %}<span style="font-size:11px;color:#aaa;">Aucun membre embarqué</span>{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Filter by role -->
+    <div class="filter-bar" style="margin:20px 0 16px;">
+        <a href="/crew" class="filter-btn {% if not current_role %}active{% endif %}">Tous</a>
+        {% for r in crew_roles %}
+        <a href="/crew?role={{ r.value }}" class="filter-btn {% if current_role == r.value %}active{% endif %}">{{ r.label }}</a>
+        {% endfor %}
+    </div>
+
+    <!-- Members table -->
+    {% if member_data %}
+    <div class="table-container">
+        <table class="data-table">
+            <thead><tr><th>Nom</th><th>Rôle</th><th>Statut</th><th>Affectation</th><th>Jours {{ current_year }}</th><th style="text-align:right;">Actions</th></tr></thead>
+            <tbody>
+                {% for md in member_data %}
+                <tr>
+                    <td><strong>{{ md.member.full_name }}</strong>{% if md.member.phone %}<br><span style="font-size:10px;color:#888;">{{ md.member.phone }}</span>{% endif %}</td>
+                    <td>
+                        <span class="crew-role-badge {{ md.member.role }}">{{ md.member.role_label }}</span>
+                        {% if md.member.is_foreign %}<span class="foreign-badge">Étranger</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if md.status == 'active' %}
+                        <span class="badge badge-completed">🟢 En activité</span>
+                        {% else %}
+                        <span class="badge badge-planned">⚪ En repos</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ md.location if md.location else '—' }}</td>
+                    <td><strong>{{ md.total_days_year }}</strong> j.</td>
+                    <td style="text-align:right;">
+                        <div style="display:flex;gap:4px;justify-content:flex-end;">
+                            <a href="/crew/members/{{ md.member.id }}/calendar" class="btn btn-sm btn-secondary" title="Calendrier"><i data-lucide="calendar"></i></a>
+                            {% if md.current_assignment_id %}
+                            <button class="btn btn-sm btn-warning" onclick="loadModal('/crew/assignments/{{ md.current_assignment_id }}/edit')" title="Modifier embarquement"><i data-lucide="calendar-clock"></i></button>
+                            {% endif %}
+                            <button class="btn btn-sm btn-primary" onclick="loadModal('/crew/members/{{ md.member.id }}/assign')" title="Embarquer"><i data-lucide="ship"></i></button>
+                            <button class="btn btn-sm btn-secondary" onclick="loadModal('/crew/members/{{ md.member.id }}/edit')" title="Modifier fiche"><i data-lucide="pencil"></i></button>
+                            <button class="btn btn-sm btn-danger" hx-delete="/crew/members/{{ md.member.id }}" hx-confirm="Supprimer ?" title="Supprimer"><i data-lucide="trash-2"></i></button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i data-lucide="users" style="width:48px;height:48px;color:var(--towt-sky);"></i>
+        <h3>Aucun membre d'équipage</h3>
+        <p>Ajoutez votre premier marin.</p>
+    </div>
+    {% endif %}
+
+    <!-- ═══ BILLETTERIE ÉQUIPAGE ═══ -->
+    <div class="section-block" style="margin-top:20px;">
+        <h3 class="section-title"><i data-lucide="ticket" style="width:16px;height:16px;"></i> Billetterie équipage ({{ crew_tickets|length }})</h3>
+
+        {% if crew_tickets %}
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr><th>Membre</th><th>Type</th><th>Transport</th><th>Escale</th><th>Date billet</th><th>Réf.</th><th>PJ</th><th style="text-align:right;">Actions</th></tr></thead>
+                <tbody>
+                    {% for t in crew_tickets %}
+                    <tr>
+                        <td>
+                            <strong>{{ t.member.full_name if t.member else '—' }}</strong>
+                            {% if t.member and t.member.is_foreign %}<span class="foreign-badge">Étranger</span>{% endif %}
+                        </td>
+                        <td><span class="ticket-type-badge {{ t.ticket_type }}">{{ 'Embarq.' if t.ticket_type == 'embarquement' else 'Débarq.' }}</span></td>
+                        <td>{{ t.transport_mode|capitalize }}</td>
+                        <td style="font-size:11px;">{% if t.leg %}{{ t.leg.leg_code }}{% else %}—{% endif %}</td>
+                        <td>{{ t.ticket_date.strftime('%d/%m/%Y') if t.ticket_date else '—' }}</td>
+                        <td style="font-size:11px;color:#666;">{{ t.ticket_reference or '—' }}</td>
+                        <td>
+                            {% if t.filename %}
+                            <a href="/crew/tickets/{{ t.id }}/download" class="btn btn-sm btn-secondary" title="{{ t.filename }}"><i data-lucide="download" style="width:12px;height:12px;"></i></a>
+                            {% else %}—{% endif %}
+                        </td>
+                        <td style="text-align:right;">
+                            <button class="btn btn-sm btn-danger" hx-delete="/crew/tickets/{{ t.id }}" hx-confirm="Supprimer ce billet ?"><i data-lucide="trash-2"></i></button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p style="color:#aaa;font-size:13px;">Aucun billet enregistré.</p>
+        {% endif %}
+
+        <form method="POST" action="/crew/tickets/create" enctype="multipart/form-data" class="ticket-add-form" id="ticket-form">
+            {{ csrf_input(request) }}
+            <div class="ticket-add-grid">
+                <div class="fg">
+                    <label class="field-label">Membre *</label>
+                    <select name="member_id" required class="fi">
+                        <option value="">— Sélectionner —</option>
+                        {% for md in member_data %}
+                        <option value="{{ md.member.id }}">{{ md.member.full_name }} ({{ md.member.role_label }}){% if md.member.is_foreign %} — Étranger{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="fg">
+                    <label class="field-label">Escale (leg) *</label>
+                    <select name="leg_id" required class="fi">
+                        <option value="">— Sélectionner —</option>
+                        {% for l in legs %}
+                        <option value="{{ l.id }}">{{ l.leg_code }} — {{ l.departure_port.name if l.departure_port else '?' }} → {{ l.arrival_port.name if l.arrival_port else '?' }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="fg">
+                    <label class="field-label">Type *</label>
+                    <select name="ticket_type" required class="fi">
+                        <option value="embarquement">Embarquement</option>
+                        <option value="debarquement">Débarquement</option>
+                    </select>
+                </div>
+                <div class="fg">
+                    <label class="field-label">Transport *</label>
+                    <select name="transport_mode" required class="fi">
+                        {% for tm in transport_modes %}
+                        <option value="{{ tm.value }}">{{ tm.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="fg">
+                    <label class="field-label">Date billet *</label>
+                    <input type="date" name="ticket_date" required class="fi">
+                </div>
+                <div class="fg">
+                    <label class="field-label">Réf. billet</label>
+                    <input type="text" name="ticket_reference" class="fi" placeholder="N° billet">
+                </div>
+                <div class="fg">
+                    <label class="field-label">Pièce jointe</label>
+                    <input type="file" name="file" class="fi" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+                </div>
+                <div class="fg">
+                    <label class="field-label">Notes</label>
+                    <input type="text" name="notes" class="fi" placeholder="Notes (optionnel)">
+                </div>
+                <div class="fg" style="align-self:end;">
+                    <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="plus" style="width:14px;height:14px;"></i> Ajouter</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="modal-container"></div>
+
+<style>
+    .bordee-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:16px;}
+    .bordee-card{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:14px;}
+    .bordee-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;color:var(--towt-blue);}
+    .bordee-count{font-size:11px;color:#888;margin-left:auto;}
+    .bordee-missing{font-size:11px;color:#D97706;background:rgba(245,158,11,0.08);padding:4px 8px;border-radius:4px;margin-bottom:8px;}
+    .bordee-list{display:flex;flex-direction:column;gap:4px;}
+    .bordee-member{display:flex;align-items:center;gap:8px;font-size:12px;}
+    .crew-role-badge{padding:2px 8px;border-radius:100px;font-size:10px;font-weight:600;}
+    .crew-role-badge.capitaine{background:rgba(220,38,38,0.1);color:#DC2626;}
+    .crew-role-badge.second{background:rgba(245,158,11,0.1);color:#D97706;}
+    .crew-role-badge.chef_mecanicien{background:rgba(139,92,246,0.1);color:#7C3AED;}
+    .crew-role-badge.cook{background:rgba(236,72,153,0.1);color:#DB2777;}
+    .crew-role-badge.lieutenant{background:rgba(96,165,250,0.1);color:#2563EB;}
+    .crew-role-badge.bosco{background:rgba(16,185,129,0.1);color:#059669;}
+    .crew-role-badge.marin{background:rgba(107,114,128,0.1);color:#6B7280;}
+    .crew-role-badge.eleve_officier{background:rgba(251,191,36,0.15);color:#B45309;}
+    .foreign-badge{font-size:9px;padding:1px 6px;border-radius:100px;font-weight:600;background:rgba(239,68,68,0.1);color:#DC2626;margin-left:4px;}
+    .filter-bar{display:flex;gap:4px;background:white;padding:4px;border-radius:var(--radius);box-shadow:var(--shadow);width:fit-content;flex-wrap:wrap;}
+    .filter-btn{padding:6px 14px;border-radius:var(--radius);font-size:13px;font-weight:500;color:var(--towt-gray);}
+    .filter-btn:hover{background:var(--towt-light);}.filter-btn.active{background:var(--towt-blue);color:white;}
+    /* Dropdown */
+    .dropdown-wrap .dropdown-menu{display:none;position:absolute;top:100%;right:0;background:white;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.15);min-width:180px;z-index:100;overflow:hidden;margin-top:4px;}
+    .dropdown-wrap.open .dropdown-menu{display:block;}
+    .dropdown-menu a{display:flex;align-items:center;gap:8px;padding:10px 16px;font-size:13px;color:#333;border-bottom:1px solid #f0f0f0;}
+    .dropdown-menu a:last-child{border-bottom:none;}
+    .dropdown-menu a:hover{background:var(--towt-light);}
+    /* Billetterie */
+    .section-block{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px;}
+    .section-title{font-size:15px;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+    .ticket-type-badge{font-size:10px;padding:2px 8px;border-radius:100px;font-weight:600;}
+    .ticket-type-badge.embarquement{background:rgba(34,197,94,0.1);color:#16a34a;}
+    .ticket-type-badge.debarquement{background:rgba(239,68,68,0.1);color:#DC2626;}
+    .ticket-add-form{margin-top:12px;padding-top:12px;border-top:1px solid #f0f0f0;}
+    .ticket-add-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;align-items:start;}
+    @media(max-width:900px){.ticket-add-grid{grid-template-columns:1fr 1fr;}}
+    .ticket-add-grid .fg{display:flex;flex-direction:column;gap:3px;}
+    .ticket-add-grid .fi{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:Poppins,system-ui,sans-serif;}
+</style>
+
+<script>
+    function loadModal(url){
+        fetch(url).then(function(r){return r.text();}).then(function(html){
+            document.getElementById('modal-container').innerHTML = html;
+            lucide.createIcons();
+            document.getElementById('modal-container').querySelectorAll('script').forEach(function(s){
+                var ns=document.createElement('script');ns.textContent=s.textContent;document.body.appendChild(ns);document.body.removeChild(ns);
+            });
+            initFormSubmit();
+        });
+    }
+    window.closeModal = function(){ document.getElementById('modal-container').innerHTML = ''; };
+    window.initFormSubmit = function(){
+        var form = document.querySelector('#modal-container form');
+        if (!form) return;
+        form.addEventListener('submit', function(e){
+            e.preventDefault();
+            fetch(form.action, {method:'POST', body:new FormData(form)})
+                .then(function(r){if(r.redirected) window.location.href=r.url; else window.location.href='/crew';})
+                .catch(function(){window.location.href='/crew';});
+        });
+    };
+    // Close dropdown on outside click
+    document.addEventListener('click', function(e){
+        document.querySelectorAll('.dropdown-wrap.open').forEach(function(d){
+            if(!d.contains(e.target)) d.classList.remove('open');
+        });
+    });
+    // Ticket form submit
+    var ticketForm = document.getElementById('ticket-form');
+    if (ticketForm) {
+        ticketForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            fetch(ticketForm.action, { method: 'POST', body: new FormData(ticketForm) })
+                .then(function(r){ if(r.redirected) window.location.href=r.url; else window.location.href='/crew'; })
+                .catch(function(){ window.location.reload(); });
+        });
+    }
+</script>
+{% endblock %}

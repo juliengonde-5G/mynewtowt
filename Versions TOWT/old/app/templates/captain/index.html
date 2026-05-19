@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}TOWT - Capitaine{% endblock %}
+{% block page_title %}Vue Capitaine{% endblock %}
+
+{% block content %}
+<div class="captain-page">
+    <!-- Vessel selector -->
+    <div class="vessel-tabs" style="margin-bottom:20px;">
+        {% for v in vessels %}
+        <a href="/captain?vessel={{ v.code }}" class="vessel-tab {% if selected_vessel == v.code %}active{% endif %}">
+            <i data-lucide="ship"></i> {{ v.name }}
+        </a>
+        {% endfor %}
+    </div>
+
+    {% if vessel_obj %}
+    <!-- Vessel header -->
+    <div class="captain-header">
+        <div class="captain-vessel-name">
+            <i data-lucide="ship" style="width:28px;height:28px;"></i>
+            <div>
+                <h2 style="margin:0;">{{ vessel_obj.name }}</h2>
+                <span style="font-size:12px;color:#888;">{{ vessel_obj.capacity_palettes }} palettes · {{ vessel_obj.default_speed }} kn</span>
+            </div>
+        </div>
+        {% if current_leg %}
+        <div class="captain-status a_quai">
+            <i data-lucide="anchor" style="width:16px;height:16px;"></i>
+            <div>
+                <strong>À quai — {{ current_leg.arrival_port.name }}</strong>
+                <div style="font-size:11px;color:#666;">{{ current_leg.leg_code }} · ATA {{ current_leg.ata.strftime('%d/%m %H:%M') if current_leg.ata else '—' }}</div>
+            </div>
+        </div>
+        {% elif next_legs %}
+        <div class="captain-status en_mer">
+            <i data-lucide="waves" style="width:16px;height:16px;"></i>
+            <div>
+                <strong>En mer → {{ next_legs[0].arrival_port.name }}</strong>
+                <div style="font-size:11px;color:#666;">{{ next_legs[0].leg_code }} · ETA {{ next_legs[0].eta.strftime('%d/%m %H:%M') if next_legs[0].eta else '—' }}</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Current escale operations -->
+    {% if current_leg %}
+    <div class="section-block" style="margin-bottom:20px;">
+        <h3 style="font-size:15px;margin-bottom:14px;">
+            <i data-lucide="anchor" style="width:16px;height:16px;"></i>
+            Escale en cours — {{ current_leg.arrival_port.name }}
+            <span style="font-size:12px;font-weight:400;color:#888;margin-left:8px;">{{ current_leg.leg_code }}</span>
+        </h3>
+
+        <div class="captain-info-grid">
+            <div class="captain-info"><span class="ci-label">ATA</span><span class="ci-value green">{{ current_leg.ata.strftime('%d/%m %H:%M') if current_leg.ata else '—' }}</span></div>
+            <div class="captain-info"><span class="ci-label">ETD prévu</span><span class="ci-value">{{ current_leg.etd.strftime('%d/%m %H:%M') if current_leg.etd else '—' }}</span></div>
+            <div class="captain-info"><span class="ci-label">Escale</span><span class="ci-value">{{ current_leg.port_stay_days or 3 }} jours</span></div>
+        </div>
+
+        {% if ops_current %}
+        <div style="margin-top:16px;">
+            <h4 style="font-size:13px;color:var(--towt-blue);margin-bottom:10px;">Opérations planifiées</h4>
+            {% for op in ops_current %}
+            <div class="captain-op {% if op.actual_start %}done{% endif %}">
+                <div class="captain-op-status">
+                    {% if op.actual_start %}
+                    <i data-lucide="check-circle" style="width:16px;height:16px;color:var(--towt-green);"></i>
+                    {% else %}
+                    <i data-lucide="circle" style="width:16px;height:16px;color:#ddd;"></i>
+                    {% endif %}
+                </div>
+                <div class="captain-op-body">
+                    <div class="captain-op-title">
+                        <span class="op-type-badge {{ op.operation_type }}">{{ op.operation_type[:4]|upper }}</span>
+                        <strong>{{ op.action|replace('_',' ')|capitalize }}</strong>
+                        {% if op.intervenant %}<span style="font-size:11px;color:#888;">· {{ op.intervenant }}</span>{% endif %}
+                    </div>
+                    <div class="captain-op-time">
+                        {% if op.actual_start %}
+                        ✅ {{ op.actual_start.strftime('%d/%m %H:%M') }}
+                        {% elif op.planned_start %}
+                        🕐 {{ op.planned_start.strftime('%d/%m %H:%M') }}
+                        {% endif %}
+                        {% if op.planned_end and op.planned_end != op.planned_start %}
+                        → {{ op.planned_end.strftime('%H:%M') }}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p style="color:#aaa;font-size:12px;margin-top:12px;">Aucune opération planifiée pour cette escale.</p>
+        {% endif %}
+
+        <div style="margin-top:12px;">
+            <a href="/escale?vessel={{ vessel_obj.code }}&year={{ current_year }}&leg_id={{ current_leg.id }}" class="btn btn-primary btn-sm">
+                <i data-lucide="clipboard-list"></i> Voir détail escale
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Next legs -->
+    {% if next_legs %}
+    <div class="section-block" style="margin-bottom:20px;">
+        <h3 style="font-size:15px;margin-bottom:14px;"><i data-lucide="compass" style="width:16px;height:16px;"></i> Prochaines traversées</h3>
+        <div class="captain-legs-list">
+            {% for leg in next_legs %}
+            <div class="captain-leg-card {% if loop.first and not current_leg %}next{% endif %}">
+                <div class="captain-leg-header">
+                    <span class="leg-code-badge">{{ leg.leg_code }}</span>
+                    {% if loop.first and not current_leg %}<span class="next-badge">PROCHAINE</span>{% endif %}
+                </div>
+                <div class="captain-leg-route">
+                    <div class="captain-port">
+                        <span class="port-code">{{ leg.departure_port.country_code|flag }} {{ leg.departure_port.locode }}</span>
+                        <span class="port-name">{{ leg.departure_port.name }}</span>
+                    </div>
+                    <div class="captain-arrow">
+                        <i data-lucide="arrow-right" style="width:20px;height:20px;color:var(--towt-sky);"></i>
+                        <span class="captain-dur">{{ ((leg.estimated_duration_hours or 0) / 24)|round(0)|int }} j.</span>
+                    </div>
+                    <div class="captain-port">
+                        <span class="port-code">{{ leg.arrival_port.country_code|flag }} {{ leg.arrival_port.locode }}</span>
+                        <span class="port-name">{{ leg.arrival_port.name }}</span>
+                    </div>
+                </div>
+                <div class="captain-leg-dates">
+                    <div><span class="ci-label">ETD</span> {{ leg.etd.strftime('%d/%m/%Y %H:%M') if leg.etd else '—' }}</div>
+                    <div><span class="ci-label">ETA</span> {{ leg.eta.strftime('%d/%m/%Y %H:%M') if leg.eta else '—' }}</div>
+                    <div><span class="ci-label">Distance</span> {{ leg.computed_distance|int if leg.computed_distance else '—' }} NM</div>
+                    <div><span class="ci-label">Escale</span> {{ leg.port_stay_days or 3 }} j.</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Past legs (recent) -->
+    {% if past_legs %}
+    <div class="section-block" style="opacity:0.7;">
+        <h3 style="font-size:15px;margin-bottom:14px;"><i data-lucide="history" style="width:16px;height:16px;"></i> Dernières traversées</h3>
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr><th>Leg</th><th>Route</th><th>ATA</th><th>ATD</th></tr></thead>
+                <tbody>
+                    {% for leg in past_legs %}
+                    <tr>
+                        <td><span style="font-family:monospace;color:var(--towt-blue);">{{ leg.leg_code }}</span></td>
+                        <td>{{ leg.departure_port.locode }} → {{ leg.arrival_port.locode }}</td>
+                        <td>{{ leg.ata.strftime('%d/%m/%Y') if leg.ata else '—' }}</td>
+                        <td>{{ leg.atd.strftime('%d/%m/%Y') if leg.atd else '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not legs %}
+    <div class="empty-state">
+        <i data-lucide="compass" style="width:48px;height:48px;color:var(--towt-sky);"></i>
+        <h3>Aucune traversée pour {{ current_year }}</h3>
+    </div>
+    {% endif %}
+
+    {% endif %}
+</div>
+
+<style>
+    .captain-header{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
+    .captain-vessel-name{display:flex;align-items:center;gap:12px;color:var(--towt-blue);}
+    .captain-status{display:flex;align-items:center;gap:10px;padding:10px 18px;border-radius:var(--radius);font-size:13px;}
+    .captain-status.a_quai{background:rgba(135,189,43,0.1);color:#5a8010;}
+    .captain-status.en_mer{background:rgba(96,165,250,0.1);color:#2563EB;}
+    .section-block{background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px;}
+    .captain-info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+    .captain-info{background:var(--towt-light);padding:10px 14px;border-radius:var(--radius);}
+    .ci-label{font-size:10px;text-transform:uppercase;font-weight:600;color:var(--towt-blue);display:block;}
+    .ci-value{font-size:14px;font-weight:600;margin-top:2px;display:block;}
+    .ci-value.green{color:var(--towt-green);}
+    .captain-op{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #f5f5f5;}
+    .captain-op.done{opacity:0.6;}
+    .captain-op-body{flex:1;}
+    .captain-op-title{display:flex;align-items:center;gap:6px;font-size:13px;}
+    .captain-op-time{font-size:11px;color:#888;margin-top:2px;}
+    .op-type-badge{padding:2px 8px;border-radius:100px;font-size:9px;font-weight:600;text-transform:uppercase;}
+    .op-type-badge.commerciale{background:rgba(135,189,43,0.12);color:#5a8010;}
+    .op-type-badge.technique{background:rgba(245,158,11,0.12);color:#D97706;}
+    .op-type-badge.armement{background:rgba(96,165,250,0.12);color:#2563EB;}
+    .op-type-badge.portuaire{background:rgba(9,85,97,0.1);color:var(--towt-blue);}
+    .captain-legs-list{display:flex;flex-direction:column;gap:12px;}
+    .captain-leg-card{border:1px solid #eee;border-radius:var(--radius);padding:16px;}
+    .captain-leg-card.next{border:2px solid var(--towt-blue);background:rgba(9,85,97,0.02);}
+    .captain-leg-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+    .leg-code-badge{font-family:monospace;font-weight:700;color:var(--towt-blue);font-size:14px;}
+    .next-badge{background:var(--towt-blue);color:white;padding:2px 8px;border-radius:100px;font-size:9px;font-weight:700;}
+    .captain-leg-route{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+    .captain-port{text-align:center;}
+    .port-code{display:block;font-family:monospace;font-weight:700;color:var(--towt-blue);font-size:14px;}
+    .port-name{display:block;font-size:11px;color:#666;}
+    .captain-arrow{display:flex;flex-direction:column;align-items:center;flex:1;}
+    .captain-dur{font-size:10px;color:#888;margin-top:2px;}
+    .captain-leg-dates{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;font-size:12px;}
+    .captain-leg-dates .ci-label{display:inline;margin-right:4px;}
+</style>
+{% endblock %}
