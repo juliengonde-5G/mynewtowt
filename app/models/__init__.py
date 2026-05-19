@@ -24,6 +24,7 @@ from app.models.insurance import InsuranceContract
 from app.models.leg import Leg
 from app.models.mrv import MRVEvent, MRVParameter
 from app.models.noon_report import NoonReport
+from app.models.notification import Notification
 from app.models.onboard_cashbox import (
     CashboxClosure, CashboxMovement, OnboardCashbox,
 )
@@ -61,6 +62,7 @@ __all__ = [
     "Leg", "LegFinance", "LegKPI",
     "MRVEvent", "MRVParameter",
     "NoonReport",
+    "Notification",
     "OnboardChecklist", "OnboardMessage", "OnboardMessageMention",
     "OpexParameter", "PortConfig",
     "Order", "OrderAssignment",

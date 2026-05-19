@@ -16,6 +16,7 @@ from app.models.claim import VesselPosition
 from app.models.leg import Leg
 from app.models.ticket import Ticket
 from app.models.vessel import Vessel
+from app.services.notifications import list_for as list_notifications
 from app.templating import templates
 
 router = APIRouter(tags=["staff-dashboard"])
@@ -51,6 +52,11 @@ async def dashboard(
         )).scalar_one_or_none()
         last_positions[v.id] = p
 
+    # Notifications dashboard
+    notifications = await list_notifications(
+        db, user_id=user.id, user_role=user.role, include_archived=False, limit=20,
+    )
+
     return templates.TemplateResponse(
         "staff/dashboard.html",
         {
@@ -62,5 +68,7 @@ async def dashboard(
             "vessels": vessels,
             "last_positions": last_positions,
             "maptiler_token": settings.map_token,
+            "notifications": notifications,
+            "notif_count": sum(1 for n in notifications if not n.is_read),
         },
     )

@@ -35,6 +35,7 @@ from app.routers import (
     escale_router,
     modules_router,
     mrv_router,
+    notifications_router,
     planning_router,
     public_router,
     staff_auth_router,
@@ -102,6 +103,7 @@ def create_app() -> FastAPI:
     app.include_router(tracking_router.router)
     # ─── Phase 4 Admin enriched (users/opex/insurance/maintenance/activity) ─
     app.include_router(admin_router.router)
+    app.include_router(notifications_router.router)
     # ─── Existing routers ───
     app.include_router(tickets_router.router)
     app.include_router(cashbox_router.router)

@@ -6,6 +6,56 @@
 {% endblock %}
 {% block content %}
 
+<div class="welcome-banner">
+  <div>
+    <h2>Bienvenue {{ user.full_name or user.username }}</h2>
+    <p>Pilotez la flotte, les opérations et les clients NEWTOWT — rôle <strong>{{ user.role }}</strong>.</p>
+  </div>
+  <span class="welcome-date" id="current-date"></span>
+</div>
+
+{% if notifications %}
+<section class="notif-center">
+  <div class="section-header">
+    <h3><i data-lucide="bell"></i> Notifications
+      {% if notif_count %}<span class="unread-badge">{{ notif_count }}</span>{% endif %}
+    </h3>
+    {% set has_read = notifications|selectattr("is_read")|list %}
+    {% if has_read %}
+    <form method="post" action="/notifications/archive-read" style="margin-left:auto;">
+      <button type="submit" class="btn btn-ghost btn-sm"><i data-lucide="archive"></i> Archiver lues</button>
+    </form>
+    {% endif %}
+  </div>
+  {% for n in notifications %}
+  <div class="dash-notif-card {% if n.is_read %}notif-read{% endif %}">
+    <span class="dash-notif-icon">{{ n.icon }}</span>
+    <div class="dash-notif-body">
+      <div class="dash-notif-title">
+        <span class="dash-notif-type dash-nt-{{ n.type }}">{{ n.type_label }}</span>
+        <span class="dash-notif-time">{{ n.created_at|datetime("%d/%m %H:%M") }}</span>
+      </div>
+      <div class="dash-notif-text">{{ n.title }}</div>
+      {% if n.detail %}<div class="dash-notif-detail">{{ n.detail }}</div>{% endif %}
+    </div>
+    <div class="dash-notif-actions">
+      {% if n.link %}<a href="{{ n.link }}" class="btn btn-ghost btn-sm"><i data-lucide="external-link"></i></a>{% endif %}
+      <form method="post" action="/notifications/{{ n.id }}/toggle-read" style="display:inline;">
+        <button type="submit" class="btn btn-ghost btn-sm" title="{{ 'Marquer non lu' if n.is_read else 'Marquer lu' }}">
+          <i data-lucide="{{ 'eye-off' if n.is_read else 'eye' }}"></i>
+        </button>
+      </form>
+      {% if n.is_read %}
+      <form method="post" action="/notifications/{{ n.id }}/archive" style="display:inline;">
+        <button type="submit" class="btn btn-ghost btn-sm" title="Archiver"><i data-lucide="archive"></i></button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
 <header class="mb-4">
   <span class="kicker">Pilotage</span>
   <h1 class="display">Tableau de bord</h1>
