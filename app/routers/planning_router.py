@@ -108,17 +108,58 @@ async def gantt_index(
 # ---------------------------------------------------------------------------
 
 
+async def _new_leg_suggestions(db: AsyncSession) -> dict[int, dict]:
+    """Pré-calcule pour chaque navire la suggestion ETD/POL du prochain leg.
+
+    Règle : ETD suggéré = (ATA si déjà arrivé, sinon ETA) du dernier leg
+    de ce navire + ``port_stay_planned_hours`` du dernier leg (default 48h
+    si non renseigné). POL suggéré = POD du dernier leg (continuité
+    géographique). Si le navire n'a aucun leg, pas de suggestion.
+
+    Le dict est sérialisé en data-attribute du form et appliqué côté JS
+    quand l'utilisateur sélectionne un navire (cf. leg-form-suggest.js).
+    """
+    from datetime import timedelta
+    from sqlalchemy import desc
+
+    suggestions: dict[int, dict] = {}
+    vessels_q = await db.execute(select(Vessel))
+    for v in vessels_q.scalars().all():
+        last = (await db.execute(
+            select(Leg).where(Leg.vessel_id == v.id)
+            .order_by(desc(Leg.etd)).limit(1)
+        )).scalar_one_or_none()
+        if last is None:
+            continue
+        base = last.ata or last.eta
+        if base is None:
+            continue
+        stay = last.port_stay_planned_hours or 48
+        suggested = base + timedelta(hours=stay)
+        suggestions[v.id] = {
+            "etd": suggested.strftime("%Y-%m-%dT%H:%M"),
+            "pol_id": last.arrival_port_id,
+            "port_stay_hours": stay,
+            "from_leg_code": last.leg_code,
+            "from_eta": (last.eta.strftime("%Y-%m-%dT%H:%M") if last.eta else None),
+            "from_ata": (last.ata.strftime("%Y-%m-%dT%H:%M") if last.ata else None),
+        }
+    return suggestions
+
+
 @router.get(
     "/legs/new",
     response_class=HTMLResponse,
 )
 async def new_leg_form(
     request: Request,
+    vessel_id: int | None = None,
     db: AsyncSession = Depends(get_db),
     user=Depends(require_permission("planning", "M")),
 ) -> HTMLResponse:
     vessels = list((await db.execute(select(Vessel).order_by(Vessel.code))).scalars().all())
     ports = list((await db.execute(select(Port).order_by(Port.locode))).scalars().all())
+    suggestions = await _new_leg_suggestions(db)
     return templates.TemplateResponse(
         "staff/planning/leg_form.html",
         {
@@ -128,6 +169,8 @@ async def new_leg_form(
             "vessels": vessels,
             "ports": ports,
             "error": None,
+            "suggestions": suggestions,
+            "preselected_vessel_id": vessel_id,
         },
     )
 

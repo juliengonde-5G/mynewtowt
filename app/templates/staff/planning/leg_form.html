@@ -21,8 +21,24 @@
   <div class="alert alert-error" role="alert">{{ error }}</div>
 {% endif %}
 
-<form method="post" action="{% if leg %}/planning/legs/{{ leg.id }}/edit{% else %}/planning/legs/new{% endif %}" class="card" id="leg-form">
+<form method="post"
+      action="{% if leg %}/planning/legs/{{ leg.id }}/edit{% else %}/planning/legs/new{% endif %}"
+      class="card" id="leg-form"
+      {% if suggestions is defined and suggestions %}
+      data-suggestions='{{ suggestions|tojson }}'
+      data-preselected-vessel="{{ preselected_vessel_id or '' }}"
+      {% endif %}>
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}" />
+  {% if suggestions is defined and suggestions and not leg %}
+    <div id="leg-suggestion-banner" class="alert mb-3"
+         style="display:none; background:var(--sable); border-left:3px solid var(--teal);">
+      <span id="leg-suggestion-text"></span>
+      <button type="button" id="leg-suggestion-dismiss"
+              class="btn btn-ghost btn-xs" style="margin-left:var(--space-2);">
+        Effacer la suggestion
+      </button>
+    </div>
+  {% endif %}
 
   <h2>Itinéraire</h2>
 
@@ -219,4 +235,5 @@
 </form>
 
 <script src="/static/js/leg-cascade.js" defer></script>
+<script src="/static/js/leg-form-suggest.js" defer></script>
 {% endblock %}
