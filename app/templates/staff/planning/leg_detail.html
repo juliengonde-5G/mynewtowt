@@ -18,6 +18,12 @@
   </div>
 </header>
 
+{% if delete_error %}
+<div class="alert alert-error mb-4" role="alert">
+  <strong>Suppression refusée.</strong> {{ delete_error }}
+</div>
+{% endif %}
+
 <div class="grid grid-2 gap-4">
   <article class="card">
     <h2>Navigation</h2>

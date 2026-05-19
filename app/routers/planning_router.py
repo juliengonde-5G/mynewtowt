@@ -343,15 +343,31 @@ async def update_leg_action(
 
 @router.post("/legs/{leg_id}/delete")
 async def delete_leg_action(
+    request: Request,
     leg_id: int,
     db: AsyncSession = Depends(get_db),
     user=Depends(require_permission("planning", "S")),
-) -> RedirectResponse:
+):
     leg = await _get_leg_or_404(db, leg_id)
     try:
         await delete_leg(db, leg)
     except PlanningError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        # Au lieu d'un 400 sec, on re-rend leg_detail avec un bandeau
+        # d'erreur listant les dépendances bloquantes (UX > Exception).
+        vessel = await db.get(Vessel, leg.vessel_id)
+        pol = await db.get(Port, leg.departure_port_id)
+        pod = await db.get(Port, leg.arrival_port_id)
+        return templates.TemplateResponse(
+            "staff/planning/leg_detail.html",
+            {
+                "request": request, "user": user, "leg": leg,
+                "vessel": vessel, "pol": pol, "pod": pod,
+                "weather_pol": None, "weather_pol_summary": "—",
+                "weather_pod": None, "weather_pod_summary": "—",
+                "delete_error": str(e),
+            },
+            status_code=400,
+        )
     await activity_record(
         db,
         action="leg_delete",

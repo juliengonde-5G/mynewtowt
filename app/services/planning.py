@@ -279,18 +279,89 @@ async def update_leg(
 
 
 async def delete_leg(db: AsyncSession, leg: Leg) -> None:
-    """Delete a leg. Refuses if it has bookings (data integrity)."""
-    from app.models.booking import Booking
+    """Delete a leg.
 
-    has_bookings = await db.scalar(
-        select(Booking.id).where(Booking.leg_id == leg.id).limit(1)
-    )
-    if has_bookings:
-        raise PlanningError(
-            f"Cannot delete leg {leg.leg_code}: has bookings (cancel them first)"
+    Refuse si des données dépendantes existent — la plupart des FK
+    enfants n'ont pas ``ondelete="CASCADE"`` (volontaire : intégrité
+    réglementaire MRV, SOF, finance…). On scanne explicitement et on
+    rend une erreur lisible listant ce qui bloque, plutôt que de
+    laisser remonter un IntegrityError opaque.
+    """
+    from sqlalchemy import func
+
+    from app.models.booking import Booking
+    from app.models.commercial import OrderAssignment, RateOffer
+    from app.models.crew import CrewAssignment
+    from app.models.escale import DockerShift, EscaleOperation
+    from app.models.finance import LegFinance, LegKPI
+    from app.models.mrv import MRVEvent
+    from app.models.noon_report import NoonReport
+    from app.models.watch_log import OnboardChecklist, VisitorLog, WatchLog
+
+    # (modèle, label humain) — uniquement les tables avec FK NOT NULL ou
+    # qui contiennent de la donnée audit/réglementaire qui ne doit pas
+    # disparaître silencieusement. Les FK nullable nettoyées par la DB
+    # (claims, tickets, certificats CO₂…) ne bloquent pas la suppression
+    # car on les set à NULL avant le delete (cf. _nullify_optional_fks).
+    BLOCKING = [
+        (Booking, "réservations"),
+        (NoonReport, "noon reports"),
+        (LegFinance, "fiche finance"),
+        (LegKPI, "KPI"),
+        (EscaleOperation, "opérations escale"),
+        (DockerShift, "shifts dockers"),
+        (WatchLog, "entrées de quart"),
+        (OnboardChecklist, "check-lists onboard"),
+        (VisitorLog, "registre visiteurs ISPS"),
+        (MRVEvent, "événements MRV"),
+        (CrewAssignment, "affectations équipage"),
+        (OrderAssignment, "assignations commande"),
+        (RateOffer, "offres tarifaires"),
+    ]
+
+    blocks: list[str] = []
+    for model, label in BLOCKING:
+        count = await db.scalar(
+            select(func.count()).select_from(model).where(model.leg_id == leg.id)
         )
+        if count:
+            blocks.append(f"{count} {label}")
+
+    if blocks:
+        raise PlanningError(
+            f"Impossible de supprimer le leg {leg.leg_code} — dépendances : "
+            + ", ".join(blocks)
+            + ". Nettoyez ces enregistrements avant suppression."
+        )
+
+    # FK nullables qu'on délie proprement avant suppression (la DB
+    # refuserait sinon avec un IntegrityError opaque).
+    await _nullify_optional_fks(db, leg.id)
+
     await db.delete(leg)
     await db.flush()
+
+
+async def _nullify_optional_fks(db: AsyncSession, leg_id: int) -> None:
+    """Set leg_id=NULL sur les FK nullables pointant vers ce leg.
+
+    Ces tables conservent la donnée historique mais perdent le lien
+    vers le leg supprimé. Couvre : claims, tickets, onboard_cashboxes,
+    crew_tickets, co2_certificates, rate_grid_lines.
+    """
+    from sqlalchemy import update
+
+    from app.models.claim import Claim
+    from app.models.co2_certificate import CO2Certificate
+    from app.models.commercial import RateGridLine
+    from app.models.crew_ticket import CrewTicket
+    from app.models.onboard_cashbox import OnboardCashbox
+    from app.models.ticket import Ticket
+
+    for model in (Claim, Ticket, OnboardCashbox, CrewTicket, CO2Certificate, RateGridLine):
+        await db.execute(
+            update(model).where(model.leg_id == leg_id).values(leg_id=None)
+        )
 
 
 # ---------------------------------------------------------------------------
