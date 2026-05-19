@@ -100,6 +100,11 @@ class Settings(BaseSettings):
     # ``rp_name`` est affiché par le navigateur dans le prompt OS.
     webauthn_rp_id: str | None = None       # None → settings.domain
     webauthn_rp_name: str = "NEWTOWT"
+
+    # Force MFA pour le rôle administrateur — middleware
+    # ForceMfaForAdminMiddleware redirige vers /admin/my-account/mfa
+    # tant que l'admin n'a pas activé MFA. À mettre False en dev local.
+    require_mfa_for_admin: bool = True
     # ``site_url`` = origin attendu pour les attestations. En .env :
     # SITE_URL=https://my.newtowt.eu (sans trailing slash).
 

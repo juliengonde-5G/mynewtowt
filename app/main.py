@@ -15,7 +15,10 @@ from app.config import settings
 from app.csrf import CSRFMiddleware
 from app.database import init_db
 from app.middlewares import (
-    ForcePasswordChangeMiddleware, MaintenanceMiddleware, SecurityHeadersMiddleware,
+    ForceMfaForAdminMiddleware,
+    ForcePasswordChangeMiddleware,
+    MaintenanceMiddleware,
+    SecurityHeadersMiddleware,
 )
 from app.routers import (
     admin_router,
@@ -80,6 +83,7 @@ def create_app() -> FastAPI:
     app.add_middleware(MaintenanceMiddleware)
     app.add_middleware(CSRFMiddleware)
     app.add_middleware(ForcePasswordChangeMiddleware)
+    app.add_middleware(ForceMfaForAdminMiddleware)
 
     # --------------------------------------------------------------- Routers
     app.include_router(public_router.router)

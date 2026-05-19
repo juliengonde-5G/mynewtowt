@@ -319,6 +319,72 @@ async def activity_logs_view(
     )
 
 
+# ────────────────────────────────────────────── Security audit
+@router.get("/security", response_class=HTMLResponse)
+async def security_dashboard(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("admin", "C")),
+) -> HTMLResponse:
+    """Tableau de bord sécurité — qui a MFA / passkey / rien.
+
+    Couvre staff (table users) et clients (table client_accounts). Pour
+    chacun, compte de passkeys via groupby sur webauthn_credentials.
+    """
+    from app.models.client_account import ClientAccount
+    from app.models.user import User
+    from app.models.webauthn_credential import WebAuthnCredential
+
+    staff_users = list((await db.execute(
+        select(User).where(User.is_active.is_(True)).order_by(User.role, User.username)
+    )).scalars().all())
+    clients = list((await db.execute(
+        select(ClientAccount).where(ClientAccount.is_verified.is_(True))
+        .order_by(ClientAccount.company_name)
+    )).scalars().all())
+
+    # Compte passkeys par (owner_type, owner_id) en 1 query
+    pk_rows = (await db.execute(
+        select(
+            WebAuthnCredential.owner_type, WebAuthnCredential.owner_id,
+            func.count(WebAuthnCredential.id),
+        ).group_by(WebAuthnCredential.owner_type, WebAuthnCredential.owner_id)
+    )).all()
+    pk_count: dict[tuple[str, int], int] = {
+        (ot, oi): int(c) for ot, oi, c in pk_rows
+    }
+
+    # Stats globales
+    def _bucket(items, get_role, get_mfa, owner_type):
+        total = len(items)
+        mfa_on = sum(1 for x in items if get_mfa(x))
+        pk_on = sum(1 for x in items if pk_count.get((owner_type, x.id), 0) > 0)
+        any_2fa = sum(1 for x in items
+                      if get_mfa(x) or pk_count.get((owner_type, x.id), 0) > 0)
+        none_on = total - any_2fa
+        return {
+            "total": total, "mfa_on": mfa_on, "pk_on": pk_on,
+            "any_2fa": any_2fa, "none_on": none_on,
+        }
+
+    stats_staff = _bucket(
+        staff_users, lambda u: u.role, lambda u: u.mfa_enabled, "staff",
+    )
+    stats_client = _bucket(
+        clients, lambda c: None, lambda c: c.mfa_enabled, "client",
+    )
+
+    return templates.TemplateResponse(
+        "staff/admin/security_dashboard.html",
+        {
+            "request": request, "user": user,
+            "staff_users": staff_users, "clients": clients,
+            "pk_count": pk_count,
+            "stats_staff": stats_staff, "stats_client": stats_client,
+        },
+    )
+
+
 # ────────────────────────────────────────────── My account
 @router.get("/my-account", response_class=HTMLResponse)
 async def my_account(
