@@ -22,7 +22,7 @@ from app.database import get_db
 from app.models.booking import Booking
 from app.models.client_invoice import ClientInvoice
 from app.models.co2_certificate import CO2Certificate
-from app.services import mfa
+from app.services import mfa, security_alerts
 from app.services.activity import record as activity_record
 from app.services.booking import find_by_reference, list_for_client
 from app.templating import templates
@@ -275,11 +275,16 @@ async def mfa_disable(
         .where(MfaRecoveryCode.owner_type == "client")
         .where(MfaRecoveryCode.owner_id == client.id)
     )
+    ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else None)
+    ua = request.headers.get("user-agent")
     await activity_record(
         db, action="client_mfa_disabled", user_name=client.email,
         module="booking", entity_type="client_account",
-        entity_id=client.id,
-        ip_address=request.headers.get("x-forwarded-for")
-                   or (request.client.host if request.client else None),
+        entity_id=client.id, ip_address=ip,
+    )
+    await security_alerts.notify_mfa_disabled(
+        to_email=client.email,
+        recipient_name=client.contact_name or client.company_name or client.email,
+        ip=ip, ua=ua,
     )
     return RedirectResponse(url="/me/account?mfa=disabled", status_code=303)

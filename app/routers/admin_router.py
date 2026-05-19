@@ -447,6 +447,13 @@ async def change_password(
         entity_id=user.id, entity_label=user.username,
         detail="password changed", ip_address=_client_ip(request),
     )
+    if user.email:
+        from app.services import security_alerts
+        await security_alerts.notify_password_changed(
+            to_email=user.email,
+            recipient_name=user.full_name or user.username,
+            ip=_client_ip(request), ua=request.headers.get("user-agent"),
+        )
     return RedirectResponse(url="/dashboard", status_code=303)
 
 
@@ -586,6 +593,13 @@ async def staff_mfa_disable(
         module="admin", entity_type="user", entity_id=user.id,
         ip_address=_client_ip(request),
     )
+    if user.email:
+        from app.services import security_alerts
+        await security_alerts.notify_mfa_disabled(
+            to_email=user.email,
+            recipient_name=user.full_name or user.username,
+            ip=_client_ip(request), ua=request.headers.get("user-agent"),
+        )
     return RedirectResponse(url="/admin/my-account?mfa=disabled", status_code=303)
 
 

@@ -37,7 +37,7 @@ from app.database import get_db
 from app.models.client_account import ClientAccount
 from app.models.user import User
 from app.models.webauthn_credential import WebAuthnCredential
-from app.services import webauthn_service as wa
+from app.services import security_alerts, webauthn_service as wa
 from app.services.activity import record as activity_record
 from app.templating import templates
 
@@ -140,6 +140,12 @@ async def client_webauthn_register_verify(
         entity_label=name or "(sans nom)",
         ip_address=_client_ip(request),
     )
+    await security_alerts.notify_passkey_added(
+        to_email=client.email,
+        recipient_name=client.contact_name or client.company_name or client.email,
+        passkey_label=name or None,
+        ip=_client_ip(request), ua=request.headers.get("user-agent"),
+    )
     resp = JSONResponse(
         {"ok": True, "credential_id": cred.id, "name": cred.name}
     )
@@ -166,6 +172,12 @@ async def client_webauthn_delete(
         entity_type="webauthn_credential", entity_id=cred_id,
         entity_label=label,
         ip_address=_client_ip(request),
+    )
+    await security_alerts.notify_passkey_deleted(
+        to_email=client.email,
+        recipient_name=client.contact_name or client.company_name or client.email,
+        passkey_label=label,
+        ip=_client_ip(request), ua=request.headers.get("user-agent"),
     )
     return RedirectResponse(url="/me/account/webauthn", status_code=303)
 
@@ -248,6 +260,13 @@ async def staff_webauthn_register_verify(
         entity_id=cred.id, entity_label=name or "(sans nom)",
         ip_address=_client_ip(request),
     )
+    if user.email:
+        await security_alerts.notify_passkey_added(
+            to_email=user.email,
+            recipient_name=user.full_name or user.username,
+            passkey_label=name or None,
+            ip=_client_ip(request), ua=request.headers.get("user-agent"),
+        )
     resp = JSONResponse(
         {"ok": True, "credential_id": cred.id, "name": cred.name}
     )
@@ -275,6 +294,13 @@ async def staff_webauthn_delete(
         entity_id=cred_id, entity_label=label,
         ip_address=_client_ip(request),
     )
+    if user.email:
+        await security_alerts.notify_passkey_deleted(
+            to_email=user.email,
+            recipient_name=user.full_name or user.username,
+            passkey_label=label,
+            ip=_client_ip(request), ua=request.headers.get("user-agent"),
+        )
     return RedirectResponse(url="/admin/my-account/webauthn", status_code=303)
 
 
