@@ -58,14 +58,15 @@ class Settings(BaseSettings):
 
     # External
     pipedrive_api_token: str | None = None
-    stripe_publishable_key: str | None = None
-    stripe_secret_key: str | None = None
-    stripe_webhook_secret: str | None = None
     anthropic_api_key: str | None = None
     windy_api_key: str | None = None
     mapbox_token: str | None = None
     maptiler_token: str | None = None
     tracking_api_token: str | None = None
+
+    # Note V3.1 — Stripe retiré : NEWTOWT facture par virement bancaire
+    # uniquement (cf. pdf/invoice.html). L'équipe commerciale confirme les
+    # bookings sous 4h, aucun paiement n'est traité par l'app.
 
     @property
     def map_token(self) -> str:
@@ -126,10 +127,6 @@ class Settings(BaseSettings):
             raise RuntimeError(
                 f"Production refusing to start: DATABASE_URL password is in the "
                 f"weak list ({password!r}). Generate a random one."
-            )
-        if self.stripe_secret_key and self.stripe_secret_key.startswith("sk_test_"):
-            raise RuntimeError(
-                "Production refusing to start: STRIPE_SECRET_KEY is a test key (sk_test_)."
             )
 
 
