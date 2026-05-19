@@ -35,6 +35,7 @@ from app.models.user import User
 from app.models.vessel import Vessel
 from app.models.watch_log import OnboardChecklist, VisitorLog, WatchLog
 from app.permissions import require_permission
+from app.services import weather as wx
 from app.services.activity import record as activity_record
 from app.services.vessel_position import get_latest_position
 from app.templating import templates
@@ -87,6 +88,7 @@ async def onboard_navigation(
     noon_reports = []
     watch_logs = []
     latest_position = None
+    weather_now = None
     if selected:
         noon_reports = list((await db.execute(
             select(NoonReport).where(NoonReport.leg_id == selected.id)
@@ -98,11 +100,20 @@ async def onboard_navigation(
         )).scalars().all())
         # Pré-remplissage GPS — dernière position satcom < 6h
         latest_position = await get_latest_position(db, selected.vessel_id)
+        # Pré-remplissage météo au point GPS courant (vent + houle)
+        if latest_position:
+            try:
+                weather_now = await wx.fetch_current(
+                    latest_position.latitude, latest_position.longitude,
+                )
+            except Exception:
+                weather_now = None
     return templates.TemplateResponse(
         "staff/onboard/navigation.html",
         {"request": request, "user": user, "legs": legs, "leg": selected,
          "noon_reports": noon_reports, "watch_logs": watch_logs,
-         "latest_position": latest_position},
+         "latest_position": latest_position,
+         "weather_now": weather_now},
     )
 
 

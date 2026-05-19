@@ -1,0 +1,129 @@
+{% extends "staff/_layout.html" %}
+{% block title %}Prochaine escale — {{ brand.nom_court }}{% endblock %}
+{% block content %}
+<a href="/onboard" class="btn btn-ghost mb-3">← Onboard</a>
+<header class="mb-4">
+  <span class="kicker">Commandant</span>
+  <h1 class="display">Prochaine escale</h1>
+</header>
+
+{% if leg is none %}
+  <article class="card">
+    <p class="text-muted">Aucun leg actif ou planifié pour votre navire.</p>
+  </article>
+{% else %}
+
+{# Bandeau prochaine escale en sticky-top — l'info critique en premier #}
+<article class="card mb-4" style="background:var(--sable); border-left:4px solid var(--teal);">
+  <div class="flex justify-between items-center" style="gap:var(--space-3);">
+    <div>
+      <div class="kicker">Destination</div>
+      <h2 style="margin:0;">
+        {% if pod %}{{ pod.country|flag }} {{ pod.name }} <span class="mono text-muted">({{ pod.locode }})</span>{% else %}—{% endif %}
+      </h2>
+      {% if vessel %}
+        <p class="text-muted text-sm" style="margin-top:var(--space-1);">
+          Navire : <strong>{{ vessel.name }}</strong> · Leg <span class="leg-code mono">{{ leg.leg_code }}</span>
+        </p>
+      {% endif %}
+    </div>
+    <div style="text-align:right;">
+      <div class="kicker">ETA</div>
+      <div class="mono" style="font-size:1.25rem;">{{ leg.eta|datetime if leg.eta else '—' }}</div>
+      {% if leg.eta and now %}
+        {% set delta = (leg.eta - now).total_seconds() %}
+        {% if delta > 0 %}
+          {% set hours = (delta // 3600)|int %}
+          {% set days = (hours // 24)|int %}
+          <div class="text-muted text-sm">
+            {% if days >= 1 %}dans ~{{ days }} j {{ hours % 24 }} h{% else %}dans ~{{ hours }} h{% endif %}
+          </div>
+        {% else %}
+          <div class="text-cuivre text-sm">ETA dépassée</div>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+</article>
+
+<div class="grid grid-2 gap-4">
+  {# Bloc port : LOCODE, contacts, subdivision #}
+  <article class="card">
+    <h3 class="mb-3">Informations port</h3>
+    {% if pod %}
+      <dl style="display:grid; grid-template-columns:auto 1fr; gap:var(--space-2);">
+        <dt class="text-muted">Nom</dt><dd>{{ pod.name }}</dd>
+        <dt class="text-muted">Pays</dt><dd>{{ pod.country|flag }} {{ pod.country }}</dd>
+        <dt class="text-muted">LOCODE</dt><dd class="mono">{{ pod.locode }}</dd>
+        {% if pod.subdivision %}<dt class="text-muted">Subdivision</dt><dd>{{ pod.subdivision }}</dd>{% endif %}
+        <dt class="text-muted">Latitude</dt><dd class="mono">{{ "%.4f"|format(pod.latitude) if pod.latitude else '—' }}</dd>
+        <dt class="text-muted">Longitude</dt><dd class="mono">{{ "%.4f"|format(pod.longitude) if pod.longitude else '—' }}</dd>
+        {% if pod.timezone %}<dt class="text-muted">Timezone</dt><dd class="mono">{{ pod.timezone }}</dd>{% endif %}
+      </dl>
+      <p class="text-muted text-sm mt-3">
+        TODO V3.2 — agent portuaire, contacts pilote, restrictions douanières
+        à charger depuis ``port_configs``.
+      </p>
+    {% else %}
+      <p class="text-muted">Port d'arrivée non renseigné sur ce leg.</p>
+    {% endif %}
+  </article>
+
+  {# Bloc météo : forecast au moment ETA #}
+  <article class="card">
+    <h3 class="mb-3">Météo @ ETA</h3>
+    {% if weather_point %}
+      <div style="font-size:2.5rem; line-height:1;">{{ weather_summary }}</div>
+      <table class="data-table mt-3" style="background:transparent;">
+        <tr><td class="text-muted">Vent</td>
+            <td class="mono">{{ "%.0f"|format(weather_point.wind_speed_kn) if weather_point.wind_speed_kn else '—' }} kn</td>
+            <td class="mono">{{ "%.0f"|format(weather_point.wind_direction_deg) if weather_point.wind_direction_deg else '—' }}°</td></tr>
+        <tr><td class="text-muted">Houle</td>
+            <td class="mono">{{ "%.1f"|format(weather_point.wave_height_m) if weather_point.wave_height_m else '—' }} m</td>
+            <td class="mono">{{ "%.0f"|format(weather_point.wave_direction_deg) if weather_point.wave_direction_deg else '—' }}°</td></tr>
+        {% if weather_point.wave_period_s %}
+        <tr><td class="text-muted">Période houle</td><td class="mono">{{ "%.1f"|format(weather_point.wave_period_s) }} s</td><td></td></tr>
+        {% endif %}
+      </table>
+      <p class="text-muted text-sm mt-2">Forecast Open-Meteo · point ({{ "%.2f"|format(pod.latitude) }}, {{ "%.2f"|format(pod.longitude) }}) à {{ weather_point.time }}</p>
+    {% else %}
+      <p class="text-muted">Forecast indisponible (port sans coordonnées ou Open-Meteo HS).</p>
+    {% endif %}
+  </article>
+</div>
+
+{# SOF récents #}
+<article class="card mt-4">
+  <h3 class="mb-3">Événements SOF récents ({{ sof_recent|length }})</h3>
+  {% if sof_recent %}
+    <table class="data-table">
+      <thead><tr><th>Type</th><th>Quand</th><th>Label</th><th>Signé</th></tr></thead>
+      <tbody>
+        {% for e in sof_recent %}
+          <tr>
+            <td><span class="badge mono">{{ e.event_type }}</span></td>
+            <td class="mono text-sm">{{ e.occurred_at|datetime }}</td>
+            <td>{{ e.label or '—' }}</td>
+            <td>
+              {% if e.is_locked %}
+                <span class="badge badge-success">🔒 signé</span>
+              {% else %}
+                <form method="post" action="/captain/sof-events/{{ e.id }}/sign" style="display:inline;">
+                  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}" />
+                  <button class="btn btn-xs btn-cuivre" type="submit"
+                          onclick="return confirm('Signer & figer définitivement ?');">Signer</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="text-muted">Aucun événement SOF sur ce leg.</p>
+  {% endif %}
+  <p class="mt-3"><a href="/captain?leg_id={{ leg.id }}" class="btn btn-ghost">Tous les événements →</a></p>
+</article>
+
+{% endif %}
+{% endblock %}

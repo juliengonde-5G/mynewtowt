@@ -20,6 +20,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models.leg import Leg
 from app.models.noon_report import NoonReport
+from app.models.port import Port
 from app.models.sof_event import (
     CargoDocument, ETA_SHIFT_REASONS, EtaShift,
     OnboardMessage, OnboardMessageMention, SOF_EVENT_TYPES, SofEvent,
@@ -28,6 +29,7 @@ from app.models.user import User
 from app.models.vessel import Vessel
 from app.models.watch_log import WatchLog
 from app.permissions import require_permission
+from app.services import weather as wx
 from app.services.activity import record as activity_record
 from app.services.signature import (
     compute_noon_hash, compute_sof_hash, compute_watch_hash, sign_record,
@@ -230,6 +232,79 @@ async def create_cargo_document(
         ip_address=_client_ip(request),
     )
     return RedirectResponse(url=f"/captain?leg_id={leg_id}", status_code=303)
+
+
+# ─────────────────────────────────────────────────────────────────────
+#                  Prochaine escale — vue commandant
+# ─────────────────────────────────────────────────────────────────────
+
+
+@router.get("/next-port", response_class=HTMLResponse)
+async def next_port(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("captain", "C")),
+) -> HTMLResponse:
+    """Synthèse "prochaine escale" — port d'arrivée du prochain leg actif.
+
+    Affiche : nom port, ETA, distance restante, contacts (PortConfig),
+    météo forecast au moment ETA, événements SOF récents. Filtré par
+    ``user.assigned_vessel_id`` si renseigné.
+    """
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
+    # Prochain leg actif (ATD posé, pas encore arrivé) ou prochain ETD.
+    stmt_active = (
+        select(Leg)
+        .where(Leg.atd.is_not(None))
+        .where(Leg.ata.is_(None))
+        .order_by(Leg.etd.asc())
+        .limit(1)
+    )
+    stmt_planned = (
+        select(Leg)
+        .where(Leg.etd > now)
+        .where(Leg.ata.is_(None))
+        .order_by(Leg.etd.asc())
+        .limit(1)
+    )
+    if getattr(user, "assigned_vessel_id", None):
+        stmt_active = stmt_active.where(Leg.vessel_id == user.assigned_vessel_id)
+        stmt_planned = stmt_planned.where(Leg.vessel_id == user.assigned_vessel_id)
+
+    leg = (await db.execute(stmt_active)).scalar_one_or_none()
+    if leg is None:
+        leg = (await db.execute(stmt_planned)).scalar_one_or_none()
+
+    pod = None
+    vessel = None
+    weather_point = None
+    sof_recent: list[SofEvent] = []
+    if leg is not None:
+        pod = await db.get(Port, leg.arrival_port_id)
+        vessel = await db.get(Vessel, leg.vessel_id)
+        if pod and pod.latitude is not None and pod.longitude is not None and leg.eta:
+            try:
+                weather_point = await wx.fetch_at(pod.latitude, pod.longitude, leg.eta)
+            except Exception:
+                weather_point = None
+        sof_recent = list((await db.execute(
+            select(SofEvent).where(SofEvent.leg_id == leg.id)
+            .order_by(SofEvent.occurred_at.desc()).limit(8)
+        )).scalars().all())
+
+    return templates.TemplateResponse(
+        "staff/captain/next_port.html",
+        {
+            "request": request, "user": user,
+            "leg": leg, "vessel": vessel, "pod": pod,
+            "weather_point": weather_point,
+            "weather_summary": wx.summarize(weather_point),
+            "sof_recent": sof_recent,
+            "now": now,
+        },
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
