@@ -1,5 +1,6 @@
 {% extends "client/_layout.html" %}
 {% block title %}Réservation — Cargo{% endblock %}
+{% block head %}{{ super() }}<script src="/static/js/booking-co2.js" defer></script>{% endblock %}
 {% block content %}
 
 <h1>Nouvelle réservation</h1>
@@ -72,6 +73,42 @@
   <div class="field">
     <label for="notes">Notes / contraintes (optionnel)</label>
     <textarea id="notes" name="notes" rows="3"></textarea>
+  </div>
+
+  {# Estimateur CO₂ live — recalculé via /static/js/booking-co2.js #}
+  <div id="co2-estimator" class="card mt-4"
+       style="background:linear-gradient(90deg, rgba(135,189,41,0.06), rgba(13,89,102,0.04)); border-left:4px solid var(--vert);"
+       data-distance-nm="{{ distance_nm }}"
+       data-towt-ef-g-tkm="1.5"
+       data-conv-ef-g-tkm="13.7"
+       data-default-weight-kg="500">
+    <h3 style="margin:0 0 var(--space-2) 0;">🌿 Impact CO₂ estimé de votre traversée</h3>
+    <p class="text-muted text-sm">Méthodologie NEWTOWT (1,5 g CO₂/t·km) — vs cargo conventionnel (13,7 g CO₂/t·km). Sera mis à jour en temps réel selon les palettes ci-dessus.</p>
+    <div class="grid grid-3 gap-3 mt-3">
+      <div class="kpi-card">
+        <div class="label">Distance · tonnage</div>
+        <div class="value" style="font-size:var(--text-md); color:var(--teal);">
+          <span class="co2-distance">—</span> · <span class="co2-tonnage">—</span>
+        </div>
+        <div class="delta text-muted">{{ pol.locode if pol else '?' }} → {{ pod.locode if pod else '?' }}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">CO₂ NEWTOWT</div>
+        <div class="value" style="color:var(--vert);"><span class="co2-towt">—</span></div>
+        <div class="delta text-muted">vs cargo conventionnel <span class="co2-conv">—</span></div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">CO₂ évité</div>
+        <div class="value" style="color:var(--cuivre);"><span class="co2-avoided">—</span></div>
+        <div class="delta" style="color:var(--vert); font-weight:var(--fw-semibold);">
+          <span class="co2-pct">—</span>
+        </div>
+      </div>
+    </div>
+    <p class="text-muted text-xs mt-3" style="margin-bottom:0;">
+      Estimation indicative — le bilan définitif vous sera remis avec le
+      <strong>certificat CO₂ nominatif</strong> à la livraison.
+    </p>
   </div>
 
   <button class="btn btn-primary btn-lg mt-3" type="submit">Continuer →</button>

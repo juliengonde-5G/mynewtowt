@@ -14,7 +14,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.database import get_db
+from app.models.claim import VesselPosition
 from app.models.leg import Leg
 from app.models.port import Port
 from app.models.vessel import Vessel
@@ -22,6 +24,56 @@ from app.services.capacity import get_available_capacity, NotBookable
 from app.templating import templates
 
 router = APIRouter(tags=["public"])
+
+
+@router.get("/fleet", response_class=HTMLResponse)
+async def fleet_tracker(
+    request: Request, db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Carte publique de la flotte — dernières positions de chaque navire."""
+    vessels = list((await db.execute(select(Vessel).order_by(Vessel.code))).scalars().all())
+    last_positions: dict[int, VesselPosition | None] = {}
+    for v in vessels:
+        p = (await db.execute(
+            select(VesselPosition).where(VesselPosition.vessel_id == v.id)
+            .order_by(VesselPosition.recorded_at.desc()).limit(1)
+        )).scalar_one_or_none()
+        last_positions[v.id] = p
+    return templates.TemplateResponse(
+        "public/fleet.html",
+        {
+            "request": request,
+            "vessels": vessels,
+            "last_positions": last_positions,
+            "maptiler_token": settings.map_token,
+        },
+    )
+
+
+@router.get("/lang/{lang}")
+async def set_language(lang: str, request: Request):
+    """Set the UI language cookie (FR/EN/...). Redirects back to the referer.
+
+    GET volontaire : changement de langue idempotent, pas une mutation
+    sensible. Évite la contrainte CSRF du double-submit cookie qui n'est
+    pas encore posée au premier hit anonyme.
+    """
+    from fastapi.responses import RedirectResponse
+    from app.config import settings as _s
+    from app.i18n import SUPPORTED, DEFAULT
+
+    target = request.headers.get("referer") or "/"
+    # Anti open-redirect : refuse les URLs absolues hors SITE_URL
+    if target.startswith(("http://", "https://")) and not target.startswith(_s.site_url):
+        target = "/"
+
+    if lang not in SUPPORTED:
+        lang = DEFAULT
+    resp = RedirectResponse(url=target, status_code=303)
+    resp.set_cookie(
+        "towt_lang", lang, max_age=365 * 86400, httponly=False, samesite="lax", path="/",
+    )
+    return resp
 
 
 @router.get("/", response_class=HTMLResponse)

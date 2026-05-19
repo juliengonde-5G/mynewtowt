@@ -3,6 +3,7 @@
 {% block head %}{{ super() }}
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" defer></script>
+<script src="/static/js/fleet-map.js" defer></script>
 {% endblock %}
 {% block content %}
 
@@ -128,38 +129,6 @@
   </article>
 </div>
 
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-  if (typeof maplibregl === "undefined") return;
-  var el = document.getElementById("dashboard-map");
-  var token = el.dataset.maptilerToken;
-  var vessels = JSON.parse(el.dataset.vessels || "[]");
-  var style = token
-    ? "https://api.maptiler.com/maps/streets-v2/style.json?key=" + encodeURIComponent(token)
-    : "https://demotiles.maplibre.org/style.json";
-  var map = new maplibregl.Map({container:"dashboard-map", style:style, center:[-30,40], zoom:2, attributionControl:{compact:true}});
-  map.addControl(new maplibregl.NavigationControl({visualizePitch:false}));
-  map.on("load", function () {
-    var withPos = vessels.filter(function (v) { return typeof v.lat === "number"; });
-    withPos.forEach(function (v) {
-      var marker = document.createElement("div");
-      marker.style.cssText = "width:34px;height:34px;border-radius:50%;background:#0D5966;color:#fff;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11px;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);";
-      marker.textContent = v.code;
-      new maplibregl.Marker({element:marker})
-        .setLngLat([v.lon, v.lat])
-        .setPopup(new maplibregl.Popup({offset:18}).setHTML(
-          "<strong>"+v.name+"</strong><br><span style='font-family:monospace'>"+v.code+"</span><br>SOG "+v.sog+" kn<br><small>"+new Date(v.recorded_at).toLocaleString("fr-FR")+"</small>"
-        ))
-        .addTo(map);
-    });
-    if (!withPos.length) {
-      var note = document.createElement("div");
-      note.style.cssText = "position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,.92);padding:12px 20px;border-radius:6px;font-size:14px;color:#6E6E6E;text-align:center;z-index:5;";
-      note.innerHTML = "Aucune position enregistrée.<br/><small>Alimente <code>vessel_positions</code> via le module Tracking.</small>";
-      el.appendChild(note);
-    }
-  });
-});
-</script>
-
+{# Map rendering deferred to /static/js/fleet-map.js (CSP-compliant, no inline script).
+   Le conteneur #dashboard-map est picked up automatiquement via la classe .js-fleet-map. #}
 {% endblock %}

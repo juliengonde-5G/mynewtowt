@@ -5,12 +5,11 @@ from pathlib import Path
 from typing import Any
 
 from fastapi.templating import Jinja2Templates
+from starlette.requests import Request
 
 from app.config import settings
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
-
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
 def _format_money(value: Any, currency: str = "EUR") -> str:
@@ -43,7 +42,6 @@ def _format_datetime(value: Any, fmt: str = "%Y-%m-%d %H:%M") -> str:
 def _flag_emoji(country_code: str | None) -> str:
     if not country_code or len(country_code) != 2:
         return ""
-    # Build regional indicator symbols
     base = ord("🇦") - ord("A")
     try:
         return chr(ord(country_code[0].upper()) + base) + chr(
@@ -53,13 +51,42 @@ def _flag_emoji(country_code: str | None) -> str:
         return ""
 
 
+# ─────────── i18n helpers ──────────────
+from app.i18n import (
+    DEFAULT as _i18n_default,
+    SUPPORTED as _i18n_supported,
+    get_lang_from_request as _i18n_get_lang,
+    t as _i18n_t,
+)
+
+
+def _i18n_context_processor(request: Request) -> dict[str, Any]:
+    """Inject `lang` (lang détectée) et `lang_options` dans chaque template.
+
+    Ordre de priorité :
+      1. cookie `towt_lang` (posé via POST /lang/{lang})
+      2. query ?lang=
+      3. user.language (si staff loggué)
+      4. Accept-Language
+      5. DEFAULT
+    """
+    cookie_lang = request.cookies.get("towt_lang")
+    if cookie_lang and cookie_lang.lower() in _i18n_supported:
+        lang = cookie_lang.lower()
+    else:
+        lang = _i18n_get_lang(request, user=None)
+    return {"lang": lang, "lang_options": list(_i18n_supported)}
+
+
+templates = Jinja2Templates(
+    directory=str(TEMPLATES_DIR),
+    context_processors=[_i18n_context_processor],
+)
+
 templates.env.filters["money"] = _format_money
 templates.env.filters["date"] = _format_date
 templates.env.filters["datetime"] = _format_datetime
 templates.env.filters["flag"] = _flag_emoji
-
-# i18n helper exposed to all templates : {{ t('nav_dashboard', lang|default('fr')) }}
-from app.i18n import DEFAULT as _i18n_default, get_lang_from_request, t as _i18n_t
 
 
 def _t(key: str, lang: str = _i18n_default, **fmt) -> str:

@@ -1,6 +1,12 @@
 """English catalog."""
 CATALOG: dict[str, str] = {
-    # Navigation
+    # Public navigation
+    "nav_routes": "Routes & schedule",
+    "nav_fleet": "Fleet position",
+    "nav_about": "About",
+    "nav_client": "Customer area",
+    "nav_book": "Book",
+    # ERP navigation
     "nav_dashboard": "Dashboard",
     "nav_planning": "Planning",
     "nav_commercial": "Commercial",

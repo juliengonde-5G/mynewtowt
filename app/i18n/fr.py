@@ -1,6 +1,12 @@
 """French catalog (reference)."""
 CATALOG: dict[str, str] = {
-    # Navigation
+    # Public navigation
+    "nav_routes": "Routes & plannings",
+    "nav_fleet": "Position flotte",
+    "nav_about": "À propos",
+    "nav_client": "Espace client",
+    "nav_book": "Réserver",
+    # ERP navigation
     "nav_dashboard": "Tableau de bord",
     "nav_planning": "Planning",
     "nav_commercial": "Commercial",

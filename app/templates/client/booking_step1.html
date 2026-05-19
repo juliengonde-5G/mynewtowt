@@ -29,6 +29,7 @@
         <div class="meta">
           <span>ETD <span class="mono">{{ item.leg.etd|date }}</span></span>
           <span>ETA <span class="mono">{{ item.leg.eta|date }}</span></span>
+          {% if item.distance_nm %}<span>{{ item.distance_nm }} NM</span>{% endif %}
         </div>
         {% set occ = item.capacity.occupancy_pct %}
         <div>
@@ -37,6 +38,12 @@
             <div class="fill" style="width: {{ occ }}%"></div>
           </div>
         </div>
+        {% if item.co2_per_pallet %}
+        <div class="alert" style="background:rgba(135,189,41,0.08); border-left:3px solid var(--vert); padding:var(--space-2) var(--space-3); border-radius:var(--radius-sm); font-size:var(--text-xs); margin-bottom:0;">
+          🌿 <strong>{{ item.co2_per_pallet.avoidance_pct }}% CO₂ évité</strong> par palette (vs cargo conventionnel)<br/>
+          <span class="text-muted">{{ item.co2_per_pallet.towt_co2_kg }} kg CO₂ NEWTOWT vs {{ item.co2_per_pallet.conventional_co2_kg }} kg conventionnel (sur ~500 kg/palette)</span>
+        </div>
+        {% endif %}
         <a href="/booking/new/{{ item.leg.leg_code }}" class="btn btn-primary">Choisir cette route →</a>
       </article>
     {% endfor %}

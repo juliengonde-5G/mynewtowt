@@ -23,10 +23,17 @@
         </div>
       </div>
       <nav aria-label="Navigation principale">
-        <a href="/routes" class="btn btn-ghost">Routes & plannings</a>
-        <a href="/about" class="btn btn-ghost">À propos</a>
-        <a href="/me" class="btn btn-secondary">Espace client</a>
-        <a href="/booking/new" class="btn btn-primary">Réserver</a>
+        <a href="/routes" class="btn btn-ghost">{{ t('nav_routes', lang) }}</a>
+        <a href="/fleet" class="btn btn-ghost">{{ t('nav_fleet', lang) }}</a>
+        <a href="/about" class="btn btn-ghost">{{ t('nav_about', lang) }}</a>
+        <a href="/me" class="btn btn-secondary">{{ t('nav_client', lang) }}</a>
+        <a href="/booking/new" class="btn btn-primary">{{ t('nav_book', lang) }}</a>
+        {# Language switcher (FR ↔ EN) — GET to /lang/{lang} sets cookie #}
+        <a href="/lang/{{ 'en' if lang == 'fr' else 'fr' }}"
+           class="btn btn-ghost btn-sm" style="margin-left:var(--space-2);"
+           title="Switch language">
+          {{ 'EN' if lang == 'fr' else 'FR' }}
+        </a>
       </nav>
     </div>
   </div>
