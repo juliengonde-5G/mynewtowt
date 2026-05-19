@@ -37,7 +37,7 @@ from app.database import get_db
 from app.models.client_account import ClientAccount
 from app.models.user import User
 from app.models.webauthn_credential import WebAuthnCredential
-from app.services import security_alerts, webauthn_service as wa
+from app.services import device_detection, security_alerts, webauthn_service as wa
 from app.services.activity import record as activity_record
 from app.templating import templates
 
@@ -386,13 +386,24 @@ async def client_login_webauthn_verify(
         raise HTTPException(status_code=400, detail="Credential / user handle mismatch")
 
     user.last_login_at = datetime.now(timezone.utc)
+    ip = _client_ip(request)
+    ua = request.headers.get("user-agent")
     await activity_record(
         db, action="client_login",
         user_name=user.email, module="booking",
         entity_type="client_account", entity_id=user.id,
         detail=f"webauthn cred={cred.id}",
-        ip_address=_client_ip(request),
+        ip_address=ip,
     )
+    _, is_new = await device_detection.see_device(
+        db, owner_type="client", owner_id=user.id, ua=ua, ip=ip,
+    )
+    if is_new:
+        await security_alerts.notify_new_device_login(
+            to_email=user.email,
+            recipient_name=user.contact_name or user.company_name or user.email,
+            ip=ip, ua=ua,
+        )
 
     token = create_client_session(user.id)
     redirect = JSONResponse({"ok": True, "redirect": "/me"})
@@ -469,12 +480,23 @@ async def staff_login_webauthn_verify(
         raise HTTPException(status_code=400, detail="Credential / user handle mismatch")
 
     user.last_login_at = datetime.now(timezone.utc)
+    ip = _client_ip(request)
+    ua = request.headers.get("user-agent")
     await activity_record(
         db, action="login",
         user_id=user.id, user_name=user.username, user_role=user.role,
         detail=f"webauthn cred={cred.id}",
-        ip_address=_client_ip(request),
+        ip_address=ip,
     )
+    _, is_new = await device_detection.see_device(
+        db, owner_type="staff", owner_id=user.id, ua=ua, ip=ip,
+    )
+    if is_new and user.email:
+        await security_alerts.notify_new_device_login(
+            to_email=user.email,
+            recipient_name=user.full_name or user.username,
+            ip=ip, ua=ua,
+        )
 
     redirect_to = "/admin/my-account/change-password" if user.must_change_password else "/dashboard"
     token = create_staff_session(user.id)

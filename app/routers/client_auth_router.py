@@ -32,7 +32,7 @@ from app.auth import (
 )
 from app.database import get_db
 from app.models.client_account import ClientAccount
-from app.services import mfa, rate_limit
+from app.services import device_detection, mfa, rate_limit, security_alerts
 from app.services.activity import record as activity_record
 from app.templating import templates
 
@@ -137,6 +137,17 @@ async def login(
         entity_id=user.id,
         ip_address=ip,
     )
+    # Détection nouveau device — alerte email si jamais vu
+    ua = request.headers.get("user-agent")
+    _, is_new = await device_detection.see_device(
+        db, owner_type="client", owner_id=user.id, ua=ua, ip=ip,
+    )
+    if is_new:
+        await security_alerts.notify_new_device_login(
+            to_email=user.email,
+            recipient_name=user.contact_name or user.company_name or user.email,
+            ip=ip, ua=ua,
+        )
 
     token = create_client_session(user.id)
     redirect = RedirectResponse(url="/me", status_code=303)
@@ -221,6 +232,16 @@ async def mfa_challenge_submit(
         detail="mfa_ok" if totp_ok else "mfa_recovery_code_used",
         ip_address=ip,
     )
+    ua = request.headers.get("user-agent")
+    _, is_new = await device_detection.see_device(
+        db, owner_type="client", owner_id=user.id, ua=ua, ip=ip,
+    )
+    if is_new:
+        await security_alerts.notify_new_device_login(
+            to_email=user.email,
+            recipient_name=user.contact_name or user.company_name or user.email,
+            ip=ip, ua=ua,
+        )
     token = create_client_session(user.id)
     redirect = RedirectResponse(url="/me", status_code=303)
     redirect.set_cookie(value=token, **cookie_kwargs_for_client(request))

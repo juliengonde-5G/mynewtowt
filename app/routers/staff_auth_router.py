@@ -21,7 +21,7 @@ from app.auth import (
 )
 from app.database import get_db
 from app.models.user import User
-from app.services import mfa, rate_limit
+from app.services import device_detection, mfa, rate_limit, security_alerts
 from app.services.activity import record as activity_record
 from app.templating import templates
 
@@ -73,14 +73,25 @@ async def login(
         return redirect
 
     user.last_login_at = datetime.now(timezone.utc)
+    ip = _client_ip(request)
+    ua = request.headers.get("user-agent")
     await activity_record(
         db,
         action="login",
         user_id=user.id,
         user_name=user.username,
         user_role=user.role,
-        ip_address=_client_ip(request),
+        ip_address=ip,
     )
+    _, is_new = await device_detection.see_device(
+        db, owner_type="staff", owner_id=user.id, ua=ua, ip=ip,
+    )
+    if is_new and user.email:
+        await security_alerts.notify_new_device_login(
+            to_email=user.email,
+            recipient_name=user.full_name or user.username,
+            ip=ip, ua=ua,
+        )
 
     token = create_staff_session(user.id)
     redirect_to = "/admin/my-account/change-password" if user.must_change_password else "/dashboard"
@@ -153,12 +164,22 @@ async def staff_mfa_challenge_submit(
         )
 
     user.last_login_at = datetime.now(timezone.utc)
+    ua = request.headers.get("user-agent")
     await activity_record(
         db, action="login", user_id=user.id, user_name=user.username,
         user_role=user.role,
         detail="mfa_ok" if totp_ok else "mfa_recovery_code_used",
         ip_address=ip,
     )
+    _, is_new = await device_detection.see_device(
+        db, owner_type="staff", owner_id=user.id, ua=ua, ip=ip,
+    )
+    if is_new and user.email:
+        await security_alerts.notify_new_device_login(
+            to_email=user.email,
+            recipient_name=user.full_name or user.username,
+            ip=ip, ua=ua,
+        )
     token = create_staff_session(user.id)
     redirect_to = "/admin/my-account/change-password" if user.must_change_password else "/dashboard"
     redirect = RedirectResponse(url=redirect_to, status_code=303)

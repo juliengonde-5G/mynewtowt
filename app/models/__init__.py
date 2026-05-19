@@ -23,6 +23,7 @@ from app.models.finance import LegFinance, LegKPI, OpexParameter, PortConfig
 from app.models.insurance import InsuranceContract
 from app.models.leg import Leg
 from app.models.mrv import MRVEvent, MRVParameter
+from app.models.known_device import KnownDevice
 from app.models.mfa_recovery_code import MfaRecoveryCode
 from app.models.noon_report import NoonReport
 from app.models.notification import Notification
@@ -62,6 +63,7 @@ __all__ = [
     "FeatureFlag",
     "InsuranceContract",
     "Leg", "LegFinance", "LegKPI",
+    "KnownDevice",
     "MfaRecoveryCode",
     "MRVEvent", "MRVParameter",
     "NoonReport",
