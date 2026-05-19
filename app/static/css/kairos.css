@@ -299,12 +299,20 @@ form label {
   margin-bottom: var(--space-1);
   font-weight: var(--fw-medium);
 }
+/* Sélecteur défensif : matche aussi les <input> sans type explicite.
+ * En HTML, type défaut = "text" mais le sélecteur [type="text"] ne match
+ * que les attributs explicites — sinon le champ reste non stylé. */
+form input:not([type]),
 form input[type="text"],
 form input[type="email"],
 form input[type="password"],
 form input[type="number"],
 form input[type="date"],
 form input[type="datetime-local"],
+form input[type="time"],
+form input[type="tel"],
+form input[type="url"],
+form input[type="search"],
 form select,
 form textarea {
   width: 100%;
@@ -779,12 +787,17 @@ form textarea::placeholder {
   color: var(--gris);
   opacity: 1;
 }
+form input:not([type]),
 form input[type="text"],
 form input[type="email"],
 form input[type="password"],
 form input[type="number"],
 form input[type="date"],
 form input[type="datetime-local"],
+form input[type="time"],
+form input[type="tel"],
+form input[type="url"],
+form input[type="search"],
 form select,
 form textarea {
   color: var(--anthracite);
