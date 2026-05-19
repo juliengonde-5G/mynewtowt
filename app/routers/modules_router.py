@@ -36,6 +36,7 @@ from app.models.vessel import Vessel
 from app.models.watch_log import OnboardChecklist, VisitorLog, WatchLog
 from app.permissions import require_permission
 from app.services.activity import record as activity_record
+from app.services.vessel_position import get_latest_position
 from app.templating import templates
 
 router = APIRouter(tags=["modules"])
@@ -73,12 +74,19 @@ async def onboard_navigation(
     db: AsyncSession = Depends(get_db),
     user=Depends(require_permission("captain", "C")),
 ) -> HTMLResponse:
-    legs = list((await db.execute(
-        select(Leg).order_by(Leg.etd.desc()).limit(30)
-    )).scalars().all())
+    # Filtre RBAC : si l'user est rattaché à un navire (assigned_vessel_id),
+    # on ne lui montre que les legs de ce navire.
+    legs_stmt = select(Leg).order_by(Leg.etd.desc()).limit(30)
+    if getattr(user, "assigned_vessel_id", None):
+        legs_stmt = (
+            select(Leg).where(Leg.vessel_id == user.assigned_vessel_id)
+            .order_by(Leg.etd.desc()).limit(30)
+        )
+    legs = list((await db.execute(legs_stmt)).scalars().all())
     selected = (await db.get(Leg, leg_id)) if leg_id else (legs[0] if legs else None)
     noon_reports = []
     watch_logs = []
+    latest_position = None
     if selected:
         noon_reports = list((await db.execute(
             select(NoonReport).where(NoonReport.leg_id == selected.id)
@@ -88,10 +96,13 @@ async def onboard_navigation(
             select(WatchLog).where(WatchLog.leg_id == selected.id)
             .order_by(WatchLog.watch_date.desc(), WatchLog.watch_period.desc()).limit(30)
         )).scalars().all())
+        # Pré-remplissage GPS — dernière position satcom < 6h
+        latest_position = await get_latest_position(db, selected.vessel_id)
     return templates.TemplateResponse(
         "staff/onboard/navigation.html",
         {"request": request, "user": user, "legs": legs, "leg": selected,
-         "noon_reports": noon_reports, "watch_logs": watch_logs},
+         "noon_reports": noon_reports, "watch_logs": watch_logs,
+         "latest_position": latest_position},
     )
 
 
