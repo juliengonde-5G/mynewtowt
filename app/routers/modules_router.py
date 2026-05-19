@@ -224,55 +224,10 @@ async def post_visitor(
 # ────────────────────────────────────────────────────────────────────
 
 
-@router.get("/crew", response_class=HTMLResponse)
-async def crew_index(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(require_permission("crew", "C")),
-) -> HTMLResponse:
-    members = list((await db.execute(
-        select(CrewMember).where(CrewMember.is_active.is_(True)).order_by(CrewMember.full_name)
-    )).scalars().all())
-    schengen_warning = [m for m in members if m.schengen_status in ("warning", "non_compliant")]
-    return templates.TemplateResponse(
-        "staff/crew/index.html",
-        {"request": request, "user": user, "members": members,
-         "schengen_warning": schengen_warning},
-    )
-
-
-@router.get("/crew/new", response_class=HTMLResponse)
-async def crew_new_form(
-    request: Request,
-    user=Depends(require_permission("crew", "M")),
-) -> HTMLResponse:
-    return templates.TemplateResponse(
-        "staff/crew/new.html",
-        {"request": request, "user": user, "error": None},
-    )
-
-
-@router.post("/crew/new")
-async def crew_new_submit(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(require_permission("crew", "M")),
-) -> RedirectResponse:
-    f = await request.form()
-    m = CrewMember(
-        full_name=f["full_name"],
-        role=f["role"],
-        nationality=(f.get("nationality") or "").upper()[:2] or None,
-        date_of_birth=(date.fromisoformat(f["date_of_birth"]) if f.get("date_of_birth") else None),
-        passport_number=f.get("passport_number") or None,
-        passport_expires_at=(date.fromisoformat(f["passport_expires_at"]) if f.get("passport_expires_at") else None),
-        email=f.get("email") or None,
-        phone=f.get("phone") or None,
-        notes=f.get("notes") or None,
-    )
-    db.add(m)
-    await db.flush()
-    return RedirectResponse(url="/crew", status_code=303)
+# NOTE V3.1 — Les routes /crew, /crew/new (GET+POST) ont été retirées
+# d'ici : le routeur dédié ``crew_router`` (monté plus haut dans main.py)
+# les sert. Les conserver ici créait du code mort + risque de drift entre
+# deux implémentations divergentes.
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -342,82 +297,8 @@ async def rh_decide_leave(
     return RedirectResponse(url="/rh", status_code=303)
 
 
-# ────────────────────────────────────────────────────────────────────
-#                              ESCALE Import/Export
-# ────────────────────────────────────────────────────────────────────
-
-
-@router.get("/escale", response_class=HTMLResponse)
-async def escale_index(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(require_permission("escale", "C")),
-) -> HTMLResponse:
-    now = datetime.now(timezone.utc)
-    upcoming = list((await db.execute(
-        select(Leg).where(Leg.eta > now - timedelta(days=14))
-        .order_by(Leg.eta.asc()).limit(20)
-    )).scalars().all())
-    return templates.TemplateResponse(
-        "staff/escale/index.html",
-        {"request": request, "user": user, "legs": upcoming},
-    )
-
-
-@router.get("/escale/{leg_id}", response_class=HTMLResponse)
-async def escale_detail(
-    request: Request,
-    leg_id: int,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(require_permission("escale", "C")),
-) -> HTMLResponse:
-    leg = await db.get(Leg, leg_id)
-    if not leg:
-        raise HTTPException(status_code=404, detail="Leg not found")
-    ops_import = list((await db.execute(
-        select(EscaleOperation).where(EscaleOperation.leg_id == leg_id)
-        .where(EscaleOperation.direction == "IMPORT").order_by(EscaleOperation.planned_start)
-    )).scalars().all())
-    ops_export = list((await db.execute(
-        select(EscaleOperation).where(EscaleOperation.leg_id == leg_id)
-        .where(EscaleOperation.direction == "EXPORT").order_by(EscaleOperation.planned_start)
-    )).scalars().all())
-    ops_common = list((await db.execute(
-        select(EscaleOperation).where(EscaleOperation.leg_id == leg_id)
-        .where((EscaleOperation.direction == "BOTH") | (EscaleOperation.direction.is_(None)))
-        .order_by(EscaleOperation.planned_start)
-    )).scalars().all())
-    dockers = list((await db.execute(
-        select(DockerShift).where(DockerShift.leg_id == leg_id)
-    )).scalars().all())
-    return templates.TemplateResponse(
-        "staff/escale/detail.html",
-        {"request": request, "user": user, "leg": leg,
-         "ops_import": ops_import, "ops_export": ops_export, "ops_common": ops_common,
-         "dockers": dockers},
-    )
-
-
-@router.post("/escale/{leg_id}/operation")
-async def escale_add_op(
-    leg_id: int,
-    direction: str = Form(""),
-    operation_type: str = Form(...),
-    action: str = Form(...),
-    label: str = Form(""),
-    db: AsyncSession = Depends(get_db),
-    user=Depends(require_permission("escale", "M")),
-) -> RedirectResponse:
-    op = EscaleOperation(
-        leg_id=leg_id,
-        direction=direction or None,
-        operation_type=operation_type,
-        action=action,
-        label=label or None,
-    )
-    db.add(op)
-    await db.flush()
-    return RedirectResponse(url=f"/escale/{leg_id}", status_code=303)
+# NOTE V3.1 — Les routes /escale, /escale/{leg_id}, /escale/{leg_id}/operation
+# ont été retirées : le routeur dédié ``escale_router`` les sert.
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -467,83 +348,8 @@ async def kpi_index(
     )
 
 
-# ────────────────────────────────────────────────────────────────────
-#                                  MRV
-# ────────────────────────────────────────────────────────────────────
-
-
-@router.get("/mrv", response_class=HTMLResponse)
-async def mrv_index(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(require_permission("mrv", "C")),
-) -> HTMLResponse:
-    events = list((await db.execute(
-        select(MRVEvent).order_by(MRVEvent.recorded_at.desc()).limit(50)
-    )).scalars().all())
-    params = list((await db.execute(select(MRVParameter).order_by(MRVParameter.name))).scalars().all())
-    return templates.TemplateResponse(
-        "staff/mrv/index.html",
-        {"request": request, "user": user, "events": events, "params": params},
-    )
-
-
-# ────────────────────────────────────────────────────────────────────
-#                                CLAIMS
-# ────────────────────────────────────────────────────────────────────
-
-
-@router.get("/claims", response_class=HTMLResponse)
-async def claims_index(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(require_permission("claims", "C")),
-) -> HTMLResponse:
-    claims = list((await db.execute(
-        select(Claim).order_by(Claim.declared_at.desc()).limit(50)
-    )).scalars().all())
-    return templates.TemplateResponse(
-        "staff/claims/index.html",
-        {"request": request, "user": user, "claims": claims},
-    )
-
-
-@router.get("/claims/new", response_class=HTMLResponse)
-async def claims_new_form(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(require_permission("claims", "M")),
-) -> HTMLResponse:
-    legs = list((await db.execute(select(Leg).order_by(Leg.etd.desc()).limit(50))).scalars().all())
-    return templates.TemplateResponse(
-        "staff/claims/new.html",
-        {"request": request, "user": user, "legs": legs},
-    )
-
-
-@router.post("/claims/new")
-async def claims_create(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(require_permission("claims", "M")),
-) -> RedirectResponse:
-    f = await request.form()
-    ref = f"CLM-{datetime.now(timezone.utc).year}-{secrets.token_hex(2).upper()}"
-    c = Claim(
-        reference=ref,
-        claim_type=f["claim_type"],
-        leg_id=int(f["leg_id"]) if f.get("leg_id") else None,
-        title=f["title"],
-        description=f["description"],
-        occurred_at=datetime.fromisoformat(f["occurred_at"].replace("T", " ")).replace(tzinfo=timezone.utc),
-        status="open",
-        provision_eur=Decimal(f["provision_eur"]) if f.get("provision_eur") else None,
-        insurer=f.get("insurer") or None,
-        created_by_id=user.id,
-    )
-    db.add(c)
-    await db.flush()
-    return RedirectResponse(url="/claims", status_code=303)
+# NOTE V3.1 — Routes /mrv et /claims, /claims/new (GET+POST) retirées :
+# ``mrv_router`` et ``claims_router`` les servent désormais.
 
 
 # ────────────────────────────────────────────────────────────────────

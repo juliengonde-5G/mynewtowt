@@ -1,9 +1,17 @@
 """Client authentication — login, register, logout, change password.
 
 Separate cookie / serializer from staff (`towt_client_session`).
+
+Hardenings V3.1 :
+  - Login : rate-limit persistant (`rate_limit_attempts`), 10 tentatives /
+    10 min / IP → 429.
+  - Anti-énumération : message d'erreur unique + bcrypt fictif sur email
+    inexistant pour égaliser le temps de réponse.
+  - Pas de PII en clair dans les logs (email hashé côté ``activity.record``).
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
@@ -20,8 +28,20 @@ from app.auth import (
 )
 from app.database import get_db
 from app.models.client_account import ClientAccount
+from app.services import rate_limit
 from app.services.activity import record as activity_record
 from app.templating import templates
+
+
+# Hash bcrypt fictif (vrai bcrypt cost=12) utilisé pour égaliser le temps
+# quand l'email n'existe pas — précalculé pour le password aléatoire
+# "newtowt_decoy_password_2026" (valeur jamais utilisée en clair).
+# Évite de calculer un hash au module-load (incompatibilité bcrypt v4 +
+# passlib < 1.8 sur certains envs).
+_DUMMY_HASH = "$2b$12$O/jKlBtKnLgWqyXmEjPq8eYDQ.UQ0Ahnt0LeG6h2XdNJgI4r5kSDS"
+
+# Message d'erreur unique (anti-énum)
+_LOGIN_ERR = "Identifiants incorrects ou compte non vérifié."
 
 router = APIRouter(tags=["client-auth"])
 
@@ -40,33 +60,52 @@ async def login(
     password: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
+    ip = _client_ip(request) or "unknown"
     email_clean = email.strip().lower()
+
+    # Rate-limit par IP (10/10 min). On vérifie AVANT le lookup DB pour ne
+    # pas exposer un canal de timing par cache miss.
+    if await rate_limit.exceeded(
+        db, scope="client_login_ip", identifier=ip,
+        max_attempts=10, window_minutes=10,
+    ):
+        return templates.TemplateResponse(
+            "client/login.html",
+            {"request": request, "error": "Trop de tentatives — patientez 10 minutes."},
+            status_code=429,
+        )
+
     user = (
         await db.execute(
             select(ClientAccount).where(ClientAccount.email == email_clean)
         )
     ).scalar_one_or_none()
-    if not user or not verify_password(password, user.hashed_password):
+
+    # Anti-énum : on calcule TOUJOURS un verify_password, même si l'email
+    # est inconnu (avec un hash fictif). Le temps de réponse est égalisé.
+    if user is not None:
+        ok = verify_password(password, user.hashed_password)
+        verified = user.is_verified
+    else:
+        verify_password(password, _DUMMY_HASH)  # constant-time decoy
+        ok = False
+        verified = False
+
+    if not ok or not verified:
+        await rate_limit.record(db, scope="client_login_ip", identifier=ip)
         await activity_record(
             db,
             action="client_login_fail",
             module="booking",
             entity_type="client_account",
-            entity_label=email_clean,
-            ip_address=_client_ip(request),
+            entity_label=email_clean,  # automatiquement scrubbé par activity.record
+            ip_address=ip,
         )
+        # Petit jitter constant pour brouiller l'inférence
+        await asyncio.sleep(0.05)
         return templates.TemplateResponse(
             "client/login.html",
-            {"request": request, "error": "Identifiants incorrects."},
-            status_code=400,
-        )
-    if not user.is_verified:
-        return templates.TemplateResponse(
-            "client/login.html",
-            {
-                "request": request,
-                "error": "Compte non vérifié — vérifiez vos emails.",
-            },
+            {"request": request, "error": _LOGIN_ERR},
             status_code=400,
         )
 
@@ -78,7 +117,7 @@ async def login(
         module="booking",
         entity_type="client_account",
         entity_id=user.id,
-        ip_address=_client_ip(request),
+        ip_address=ip,
     )
 
     token = create_client_session(user.id)
