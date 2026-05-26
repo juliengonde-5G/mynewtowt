@@ -241,8 +241,8 @@ async def _next_bookable_legs(db: AsyncSession, *, limit: int = 6) -> list[dict[
             capacity = await get_available_capacity(db, leg.id)
             available = capacity.available_palettes
             capacity_total = capacity.capacity_palettes
-        except (NotBookable, BookingClosed):
-            # leg ouvert à la liste publique mais non bookable / window fermée
+        except Exception:
+            # leg ouvert à la liste publique mais non bookable / window fermée / config incomplète
             available = 0
             capacity_total = leg.public_capacity_palettes or 0
         out.append(
@@ -296,7 +296,7 @@ async def _search_legs(
             cap = await get_available_capacity(db, leg.id)
             available = cap.available_palettes
             capacity_total = cap.capacity_palettes
-        except (NotBookable, BookingClosed):
+        except Exception:
             available = 0
             capacity_total = leg.public_capacity_palettes or 0
         legs.append(
