@@ -13,12 +13,24 @@
   <div class="kpi-card"><div class="label">Legs réservables</div><div class="value">{{ legs_bookable }}</div></div>
 </section>
 
-<article class="card mt-4">
-  <h2>Dashboards à venir (V3.1)</h2>
-  <div class="grid grid-3 gap-3">
-    <div class="feature-card accent-teal"><h3>Exécutif</h3><p class="text-muted">Vue flotte + variance N-1</p></div>
-    <div class="feature-card accent-cuivre"><h3>Commercial</h3><p class="text-muted">Funnel booking + LTV</p></div>
-    <div class="feature-card"><h3>Opérations</h3><p class="text-muted">SLA tickets + escales</p></div>
-  </div>
-</article>
+<div class="grid grid-3 gap-4 mt-4">
+  <a href="/dashboard/analytics/executive" class="card card-interactive" style="border-top:3px solid var(--teal); color:inherit; text-decoration:none;">
+    <span class="kicker">Performance flotte</span>
+    <h2 style="margin:var(--space-2) 0;">Dashboard Exécutif</h2>
+    <p class="text-muted">Tonnage · CO₂ évité · variance N-1 · revenus</p>
+    <div class="mt-3"><span class="btn btn-primary btn-sm">Ouvrir →</span></div>
+  </a>
+  <a href="/dashboard/analytics/commercial" class="card card-interactive" style="border-top:3px solid var(--vert); color:inherit; text-decoration:none;">
+    <span class="kicker">Ventes</span>
+    <h2 style="margin:var(--space-2) 0;">Dashboard Commercial</h2>
+    <p class="text-muted">Funnel booking · top clients · facturation</p>
+    <div class="mt-3"><span class="btn btn-primary btn-sm">Ouvrir →</span></div>
+  </a>
+  <a href="/dashboard/analytics/operations" class="card card-interactive" style="border-top:3px solid var(--cuivre); color:inherit; text-decoration:none;">
+    <span class="kicker">Opérations</span>
+    <h2 style="margin:var(--space-2) 0;">Dashboard Opérations</h2>
+    <p class="text-muted">SLA tickets · legs en cours · activité récente</p>
+    <div class="mt-3"><span class="btn btn-primary btn-sm">Ouvrir →</span></div>
+  </a>
+</div>
 {% endblock %}

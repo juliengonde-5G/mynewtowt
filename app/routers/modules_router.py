@@ -394,6 +394,206 @@ async def analytics_index(
     )
 
 
+@router.get("/dashboard/analytics/executive", response_class=HTMLResponse)
+async def analytics_executive(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("analytics", "C")),
+) -> HTMLResponse:
+    from app.models.booking import Booking
+    from app.models.client_account import ClientAccount
+    from app.models.client_invoice import ClientInvoice
+    from app.models.finance import LegKPI
+
+    now = datetime.now(timezone.utc)
+    year = now.year
+    year_start = datetime(year, 1, 1, tzinfo=timezone.utc)
+    prev_year_start = datetime(year - 1, 1, 1, tzinfo=timezone.utc)
+    prev_year_end = datetime(year - 1, 12, 31, 23, 59, tzinfo=timezone.utc)
+
+    # Legs by status (current year)
+    legs_all = list((await db.execute(
+        select(Leg).where(Leg.etd >= year_start)
+    )).scalars().all())
+    legs_by_status: dict[str, int] = {}
+    for leg in legs_all:
+        legs_by_status[leg.status] = legs_by_status.get(leg.status, 0) + 1
+
+    # KPI totals (current year)
+    kpis = list((await db.execute(
+        select(LegKPI).join(Leg, Leg.id == LegKPI.leg_id).where(Leg.etd >= year_start)
+    )).scalars().all())
+    total_tonnage_t = sum(float(k.tonnage_kg) / 1000 for k in kpis)
+    total_co2_avoided_kg = sum(float(k.co2_avoided_kg or 0) for k in kpis)
+    on_time_count = sum(1 for k in kpis if k.on_time)
+    on_time_pct = round(on_time_count / len(kpis) * 100) if kpis else 0
+
+    # KPI totals (previous year for N-1 comparison)
+    kpis_prev = list((await db.execute(
+        select(LegKPI).join(Leg, Leg.id == LegKPI.leg_id).where(
+            Leg.etd >= prev_year_start, Leg.etd <= prev_year_end
+        )
+    )).scalars().all())
+    prev_tonnage_t = sum(float(k.tonnage_kg) / 1000 for k in kpis_prev)
+    prev_co2_kg = sum(float(k.co2_avoided_kg or 0) for k in kpis_prev)
+
+    # Revenue (invoices issued this year)
+    revenue = await db.scalar(
+        select(func.sum(ClientInvoice.amount_incl_vat_eur)).where(
+            ClientInvoice.issued_at >= year_start
+        )
+    ) or 0
+    prev_revenue = await db.scalar(
+        select(func.sum(ClientInvoice.amount_incl_vat_eur)).where(
+            ClientInvoice.issued_at >= prev_year_start,
+            ClientInvoice.issued_at <= prev_year_end,
+        )
+    ) or 0
+
+    clients_total = await db.scalar(select(func.count(ClientAccount.id))) or 0
+    bookings_total = await db.scalar(select(func.count(Booking.id)).where(Booking.created_at >= year_start)) or 0
+
+    return templates.TemplateResponse(
+        "staff/analytics/executive.html",
+        {
+            "request": request, "user": user, "year": year,
+            "legs_by_status": legs_by_status,
+            "legs_total": len(legs_all),
+            "total_tonnage_t": round(total_tonnage_t, 1),
+            "total_co2_avoided_kg": round(total_co2_avoided_kg),
+            "on_time_pct": on_time_pct,
+            "revenue": float(revenue),
+            "clients_total": clients_total,
+            "bookings_total": bookings_total,
+            "prev_tonnage_t": round(prev_tonnage_t, 1),
+            "prev_co2_kg": round(prev_co2_kg),
+            "prev_revenue": float(prev_revenue),
+            "year_prev": year - 1,
+        },
+    )
+
+
+@router.get("/dashboard/analytics/commercial", response_class=HTMLResponse)
+async def analytics_commercial(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("analytics", "C")),
+) -> HTMLResponse:
+    from app.models.booking import Booking
+    from app.models.client_account import ClientAccount
+    from app.models.client_invoice import ClientInvoice
+
+    now = datetime.now(timezone.utc)
+    year_start = datetime(now.year, 1, 1, tzinfo=timezone.utc)
+
+    # Funnel: bookings par statut
+    funnel_statuses = ["draft", "submitted", "confirmed", "loaded", "at_sea", "discharged", "delivered", "cancelled"]
+    funnel_rows = (await db.execute(
+        select(Booking.status, func.count(Booking.id).label("n"))
+        .where(Booking.created_at >= year_start)
+        .group_by(Booking.status)
+    )).all()
+    funnel: dict[str, int] = {s: 0 for s in funnel_statuses}
+    for row in funnel_rows:
+        if row.status in funnel:
+            funnel[row.status] = row.n
+    funnel_max = max(funnel.values()) or 1
+
+    # Top clients by booking count
+    top_clients_rows = (await db.execute(
+        select(ClientAccount.company_name, func.count(Booking.id).label("n"))
+        .join(Booking, Booking.client_account_id == ClientAccount.id)
+        .where(Booking.created_at >= year_start)
+        .group_by(ClientAccount.id, ClientAccount.company_name)
+        .order_by(func.count(Booking.id).desc())
+        .limit(8)
+    )).all()
+
+    # Invoices by status
+    inv_rows = (await db.execute(
+        select(ClientInvoice.status, func.count(ClientInvoice.id).label("n"),
+               func.sum(ClientInvoice.amount_incl_vat_eur).label("total"))
+        .where(ClientInvoice.issued_at >= year_start)
+        .group_by(ClientInvoice.status)
+    )).all()
+    inv_by_status = {r.status: {"count": r.n, "total": float(r.total or 0)} for r in inv_rows}
+
+    total_revenue = sum(v["total"] for v in inv_by_status.values())
+    conversion_pct = (
+        round(funnel["confirmed"] / funnel["submitted"] * 100)
+        if funnel["submitted"] else 0
+    )
+
+    return templates.TemplateResponse(
+        "staff/analytics/commercial.html",
+        {
+            "request": request, "user": user, "year": now.year,
+            "funnel": funnel, "funnel_statuses": funnel_statuses, "funnel_max": funnel_max,
+            "top_clients": top_clients_rows,
+            "inv_by_status": inv_by_status,
+            "total_revenue": total_revenue,
+            "conversion_pct": conversion_pct,
+        },
+    )
+
+
+@router.get("/dashboard/analytics/operations", response_class=HTMLResponse)
+async def analytics_operations(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("analytics", "C")),
+) -> HTMLResponse:
+    from app.models.ticket import Ticket
+
+    now = datetime.now(timezone.utc)
+    year_start = datetime(now.year, 1, 1, tzinfo=timezone.utc)
+
+    # Tickets: totals + SLA
+    all_tickets = list((await db.execute(
+        select(Ticket).where(Ticket.created_at >= year_start).order_by(Ticket.created_at.desc())
+    )).scalars().all())
+
+    by_priority: dict[str, dict] = {
+        "P1": {"total": 0, "breached": 0, "open": 0},
+        "P2": {"total": 0, "breached": 0, "open": 0},
+        "P3": {"total": 0, "breached": 0, "open": 0},
+    }
+    closed_statuses = {"resolved", "closed"}
+    for t in all_tickets:
+        p = t.priority
+        if p in by_priority:
+            by_priority[p]["total"] += 1
+            if t.sla_breached:
+                by_priority[p]["breached"] += 1
+            if t.status not in closed_statuses:
+                by_priority[p]["open"] += 1
+
+    # Active legs (inprogress)
+    active_legs = list((await db.execute(
+        select(Leg, Vessel).join(Vessel, Vessel.id == Leg.vessel_id)
+        .where(Leg.status == "inprogress")
+        .order_by(Leg.etd.asc())
+    )).all())
+
+    # Recent tickets (last 10 open)
+    recent_tickets = [t for t in all_tickets if t.status not in closed_statuses][:10]
+
+    total_breached = sum(p["breached"] for p in by_priority.values())
+    total_open = sum(p["open"] for p in by_priority.values())
+
+    return templates.TemplateResponse(
+        "staff/analytics/operations.html",
+        {
+            "request": request, "user": user, "year": now.year,
+            "by_priority": by_priority,
+            "total_breached": total_breached,
+            "total_open": total_open,
+            "active_legs": active_legs,
+            "recent_tickets": recent_tickets,
+        },
+    )
+
+
 # ────────────────────────────────────────────────────────────────────
 #                                ADMIN
 # ────────────────────────────────────────────────────────────────────
