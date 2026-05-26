@@ -9,9 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.booking import Booking
 from app.permissions import require_permission
+from app.services import invoicing
 from app.services.activity import record as activity_record
-from app.services.booking import cancel, confirm
+from app.services.booking import InvalidStatusTransition, advance, cancel, confirm
+from app.services.booking_lifecycle import on_status_change
 from app.templating import templates
+
+_ADVANCE_TARGETS = ("loaded", "at_sea", "discharged", "delivered")
 
 router = APIRouter(prefix="/staff/bookings", tags=["staff-booking"])
 
@@ -52,6 +56,8 @@ async def confirm_booking(
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     await confirm(db, booking)
+    await invoicing.issue_for_booking(db, booking)
+    await on_status_change(db, booking, "confirmed")
     await activity_record(
         db,
         action="booking_confirm",
@@ -83,6 +89,7 @@ async def reject_booking(
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     await cancel(db, booking, reason=reason)
+    await on_status_change(db, booking, "cancelled")
     await activity_record(
         db,
         action="booking_reject",
@@ -94,5 +101,47 @@ async def reject_booking(
         entity_id=booking.id,
         entity_label=booking.reference,
         detail=reason,
+    )
+    return RedirectResponse(url="/staff/bookings", status_code=303)
+
+
+@router.post(
+    "/{ref}/advance",
+    dependencies=[Depends(require_permission("booking", "M"))],
+)
+async def advance_booking(
+    request: Request,
+    ref: str,
+    target: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("booking", "M")),
+) -> RedirectResponse:
+    """Avance une réservation dans le workflow de voyage
+    (loaded → at_sea → discharged → delivered)."""
+    if target not in _ADVANCE_TARGETS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid target status: {target}",
+        )
+    booking = (
+        await db.execute(select(Booking).where(Booking.reference == ref))
+    ).scalar_one_or_none()
+    if not booking:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    try:
+        await advance(db, booking, target)
+    except InvalidStatusTransition as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    await activity_record(
+        db,
+        action="booking_advance",
+        user_id=user.id,
+        user_name=user.username,
+        user_role=user.role,
+        module="booking",
+        entity_type="booking",
+        entity_id=booking.id,
+        entity_label=booking.reference,
+        detail=target,
     )
     return RedirectResponse(url="/staff/bookings", status_code=303)

@@ -55,6 +55,10 @@ class Leg(Base):
     # le leg suivant du même navire commence après ETA + port_stay_planned_hours.
     port_stay_planned_hours: Mapped[int | None] = mapped_column(Integer)
 
+    # Distance orthodromique POL→POD (milles nautiques). Calculée par
+    # haversine et persistée pour alimenter le label Anemos (CO₂ évité).
+    distance_nm: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

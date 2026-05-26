@@ -80,4 +80,27 @@
   </div>
 </article>
 
+<article class="card mt-4">
+  <h2>Cycle de vie</h2>
+  <p class="text-muted">Statut actuel : <span class="pill pill-info">{{ booking.status }}</span></p>
+  <div class="flex gap-3 mt-3" style="flex-wrap:wrap;">
+    {% if booking.status == 'submitted' %}
+      <form method="post" action="/staff/bookings/{{ booking.reference }}/confirm" style="display:inline">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}" />
+        <button class="btn btn-primary" type="submit">Confirmer la réservation</button>
+      </form>
+    {% elif booking.status in ('confirmed', 'loaded', 'at_sea', 'discharged') %}
+      {% set next_step = {'confirmed': 'loaded', 'loaded': 'at_sea', 'at_sea': 'discharged', 'discharged': 'delivered'} %}
+      {% set labels = {'loaded': 'Marquer chargé', 'at_sea': 'Marquer en mer', 'discharged': 'Marquer débarqué', 'delivered': 'Marquer livré'} %}
+      <form method="post" action="/staff/bookings/{{ booking.reference }}/advance" style="display:inline">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}" />
+        <input type="hidden" name="target" value="{{ next_step[booking.status] }}" />
+        <button class="btn btn-primary" type="submit">→ {{ labels[next_step[booking.status]] }}</button>
+      </form>
+    {% else %}
+      <p class="text-muted">Aucune transition disponible.</p>
+    {% endif %}
+  </div>
+</article>
+
 {% endblock %}

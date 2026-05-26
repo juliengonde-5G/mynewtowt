@@ -42,6 +42,14 @@
                   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}" />
                   <button class="btn btn-primary text-sm" type="submit">Confirmer</button>
                 </form>
+              {% elif b.status in ('confirmed', 'loaded', 'at_sea', 'discharged') %}
+                {% set next_step = {'confirmed': 'loaded', 'loaded': 'at_sea', 'at_sea': 'discharged', 'discharged': 'delivered'} %}
+                {% set labels = {'loaded': 'Chargé', 'at_sea': 'En mer', 'discharged': 'Débarqué', 'delivered': 'Livré'} %}
+                <form method="post" action="/staff/bookings/{{ b.reference }}/advance" style="display:inline">
+                  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}" />
+                  <input type="hidden" name="target" value="{{ next_step[b.status] }}" />
+                  <button class="btn btn-secondary text-sm" type="submit">→ {{ labels[next_step[b.status]] }}</button>
+                </form>
               {% endif %}
             </td>
           </tr>

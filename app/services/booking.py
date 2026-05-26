@@ -19,7 +19,6 @@ from app.models.client_account import ClientAccount
 from app.models.leg import Leg
 from app.services.capacity import (
     CapacityExceeded,
-    NotBookable,
     check_and_lock,
     get_available_capacity,
 )
@@ -182,6 +181,39 @@ async def cancel(db: AsyncSession, booking: Booking, reason: str) -> Booking:
     booking.cancelled_at = datetime.now(timezone.utc)
     booking.cancelled_reason = reason
     await db.flush()
+    return booking
+
+
+_STATUS_TIMESTAMP: dict[str, str] = {
+    "submitted": "submitted_at",
+    "confirmed": "confirmed_at",
+    "loaded": "loaded_at",
+    "at_sea": "at_sea_at",
+    "discharged": "discharged_at",
+    "delivered": "delivered_at",
+    "cancelled": "cancelled_at",
+}
+
+
+async def advance(db: AsyncSession, booking: Booking, target: str) -> Booking:
+    """Generic forward transition for voyage-progression states.
+
+    Centralises the post-confirmation workflow (loaded → at_sea →
+    discharged → delivered) so lifecycle side-effects fire from a single
+    chokepoint. ``submit`` / ``confirm`` / ``cancel`` keep their own
+    pre/post logic (capacity lock, pricing, reason) and are not routed here.
+    """
+    _assert_transition(booking.status, target)
+    booking.status = target
+    field = _STATUS_TIMESTAMP.get(target)
+    if field and getattr(booking, field, None) is None:
+        setattr(booking, field, datetime.now(timezone.utc))
+    await db.flush()
+    # Effets de bord (notifications client, email, label Anemos). Import
+    # tardif pour éviter tout cycle d'import au chargement du module.
+    from app.services.booking_lifecycle import on_status_change
+
+    await on_status_change(db, booking, target)
     return booking
 
 

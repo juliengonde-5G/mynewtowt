@@ -13,8 +13,6 @@ distance after the noon-report data is collected.
 """
 from __future__ import annotations
 
-from decimal import Decimal
-
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import select
@@ -28,6 +26,7 @@ from app.models.leg import Leg
 from app.models.port import Port
 from app.models.vessel import Vessel
 from app.permissions import require_permission
+from app.services.anemos import resolve_distance_nm
 from app.services.pdf_generator import (
     render_bill_of_lading,
     render_anemos_certificate,
@@ -37,28 +36,6 @@ from app.services.pdf_generator import (
 from app.templating import templates
 
 router = APIRouter(tags=["cargo"])
-
-
-# Distance lookup (NM) — orthodromic, V3.0 simplification.
-# Bidirectional. Future: store on Leg.distance_nm after first crossing.
-_DISTANCE_NM: dict[frozenset[str], Decimal] = {
-    frozenset({"FRFEC", "USNYC"}): Decimal("3200"),
-    frozenset({"FRLEH", "USNYC"}): Decimal("3180"),
-    frozenset({"FRFEC", "USBOS"}): Decimal("3020"),
-    frozenset({"FRLEH", "USBOS"}): Decimal("3050"),
-    frozenset({"FRLEH", "BRSSO"}): Decimal("4900"),
-    frozenset({"FRFEC", "BRSSO"}): Decimal("4920"),
-    frozenset({"FRLEH", "PTPDL"}): Decimal("1450"),
-    frozenset({"FRFEC", "PTPDL"}): Decimal("1480"),
-    frozenset({"PTPDL", "USNYC"}): Decimal("2280"),
-    frozenset({"PTPDL", "USBOS"}): Decimal("2150"),
-}
-
-
-def _distance_nm(pol_locode: str, pod_locode: str) -> Decimal:
-    """Return an estimated orthodromic distance for a port pair."""
-    key = frozenset({pol_locode, pod_locode})
-    return _DISTANCE_NM.get(key, Decimal("3000"))  # default fallback
 
 
 async def _load_booking_bundle(
@@ -308,7 +285,7 @@ async def _co2_response(db, ref, owner_client_id=None) -> Response:
             status_code=400,
             detail="CO2 certificate is issued once the cargo is discharged",
         )
-    distance = _distance_nm(pol.locode, pod.locode)
+    distance = resolve_distance_nm(leg, pol, pod)
     from app.models.anemos_certificate import AnemosCertificate
 
     cert = (

@@ -22,7 +22,8 @@ from app.database import get_db
 from app.models.booking import Booking
 from app.models.client_invoice import ClientInvoice
 from app.models.anemos_certificate import AnemosCertificate
-from app.services import mfa, security_alerts
+from app.models.notification import Notification
+from app.services import mfa, notifications, security_alerts
 from app.services.activity import record as activity_record
 from app.services.booking import find_by_reference, list_for_client
 from app.templating import templates
@@ -46,6 +47,7 @@ async def dashboard(
         select(func.coalesce(func.sum(AnemosCertificate.co2_avoided_kg), 0))
         .where(AnemosCertificate.client_account_id == client.id)
     )
+    notif_unread = await notifications.count_unread(db, client_id=client.id)
     return templates.TemplateResponse(
         "client/dashboard.html",
         {
@@ -54,8 +56,34 @@ async def dashboard(
             "bookings": bookings,
             "active_count": active_count,
             "co2_avoided_kg": float(co2_avoided or 0),
+            "notif_unread": notif_unread,
         },
     )
+
+
+@router.get("/me/notifications", response_class=HTMLResponse)
+async def notifications_list(
+    request: Request,
+    client=Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    items = await notifications.list_for(db, client_id=client.id, limit=100)
+    return templates.TemplateResponse(
+        "client/notifications.html",
+        {"request": request, "client": client, "notifications": items},
+    )
+
+
+@router.post("/me/notifications/{notif_id}/read")
+async def notification_mark_read(
+    notif_id: int,
+    client=Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    notif = await db.get(Notification, notif_id)
+    if notif is not None and notif.target_client_id == client.id:
+        await notifications.mark_read(db, notif)
+    return RedirectResponse(url="/me/notifications", status_code=303)
 
 
 @router.get("/me/bookings", response_class=HTMLResponse)
@@ -112,13 +140,18 @@ async def anemos(
 ) -> HTMLResponse:
     """Page des Labels Anemos (anciennement "Certificats CO₂")."""
     res = await db.execute(
-        select(AnemosCertificate)
+        select(AnemosCertificate, Booking.reference)
+        .join(Booking, Booking.id == AnemosCertificate.booking_id, isouter=True)
         .where(AnemosCertificate.client_account_id == client.id)
         .order_by(AnemosCertificate.issued_at.desc())
     )
+    certificates = []
+    for cert, booking_ref in res.all():
+        cert.booking_ref = booking_ref
+        certificates.append(cert)
     return templates.TemplateResponse(
         "client/anemos.html",
-        {"request": request, "client": client, "certificates": list(res.scalars().all())},
+        {"request": request, "client": client, "certificates": certificates},
     )
 
 
