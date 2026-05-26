@@ -22,6 +22,14 @@
   </div>
 </header>
 
+{% if booking.status in ('confirmed','loaded','at_sea','discharged','delivered') %}
+<div class="mb-4">
+  <a href="/me/track/{{ booking.reference }}" class="btn btn-accent">
+    <i data-lucide="navigation"></i>&nbsp;{% if lang == 'en' %}Track the voyage{% else %}Suivre la traversée{% endif %}
+  </a>
+</div>
+{% endif %}
+
 <section class="card mb-4">
   <h2>{% if lang == 'en' %}Summary{% else %}Récapitulatif{% endif %}</h2>
   <div class="grid grid-2 gap-4">
@@ -116,6 +124,13 @@
     <h3 class="mt-4">{% if lang == 'en' %}Notes{% else %}Notes{% endif %}</h3>
     <p class="text-muted">{{ booking.notes }}</p>
   {% endif %}
+</section>
+
+<section class="card mt-4" id="messages">
+  <h2>{% if lang == 'en' %}Messages with our team{% else %}Échanger avec notre équipe{% endif %}</h2>
+  {% set post_url = "/me/bookings/" ~ booking.reference ~ "/messages" %}
+  {% set viewer = "client" %}
+  {% include "_partials/message_thread.html" %}
 </section>
 
 {% endblock %}

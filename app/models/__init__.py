@@ -5,6 +5,7 @@ which is required for `init_db()` (dev) and Alembic auto-generate.
 """
 from app.models.activity_log import ActivityLog
 from app.models.booking import Booking, BookingItem
+from app.models.booking_message import BookingMessage
 from app.models.chat import ChatConversation, ChatMessage
 from app.models.claim import Claim, ClaimTimelineEntry, VesselPosition
 from app.models.client_account import ClientAccount
@@ -49,7 +50,7 @@ from app.models.webauthn_credential import WebAuthnCredential
 
 __all__ = [
     "ActivityLog",
-    "Booking", "BookingItem",
+    "Booking", "BookingItem", "BookingMessage",
     "CargoDocument",
     "CashboxClosure", "CashboxMovement", "OnboardCashbox",
     "ChatConversation", "ChatMessage",

@@ -10,9 +10,6 @@ l'utilisateur courant ou son rôle.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Iterable
-
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,12 +25,14 @@ async def create(
     link: str | None = None,
     target_user_id: int | None = None,
     target_role: str | None = None,
+    target_client_id: int | None = None,
 ) -> Notification:
     if type not in NOTIFICATION_TYPES:
         raise ValueError(f"unknown notification type: {type}")
     n = Notification(
         type=type, title=title, detail=detail, link=link,
         target_user_id=target_user_id, target_role=target_role,
+        target_client_id=target_client_id,
     )
     db.add(n)
     await db.flush()
@@ -45,6 +44,7 @@ async def list_for(
     *,
     user_id: int | None = None,
     user_role: str | None = None,
+    client_id: int | None = None,
     include_archived: bool = False,
     limit: int = 50,
 ) -> list[Notification]:
@@ -56,6 +56,8 @@ async def list_for(
         conds.append(Notification.target_user_id == user_id)
     if user_role is not None:
         conds.append(Notification.target_role == user_role)
+    if client_id is not None:
+        conds.append(Notification.target_client_id == client_id)
     if conds:
         stmt = stmt.where(or_(*conds))
     stmt = stmt.limit(max(5, min(limit, 200)))
@@ -64,6 +66,7 @@ async def list_for(
 
 async def count_unread(
     db: AsyncSession, *, user_id: int | None = None, user_role: str | None = None,
+    client_id: int | None = None,
 ) -> int:
     from sqlalchemy import func
     stmt = select(func.count(Notification.id)).where(Notification.is_read.is_(False)).where(
@@ -74,6 +77,8 @@ async def count_unread(
         conds.append(Notification.target_user_id == user_id)
     if user_role is not None:
         conds.append(Notification.target_role == user_role)
+    if client_id is not None:
+        conds.append(Notification.target_client_id == client_id)
     if conds:
         stmt = stmt.where(or_(*conds))
     return int((await db.scalar(stmt)) or 0)
@@ -144,4 +149,34 @@ async def notify_eta_shift(db: AsyncSession, leg_code: str, leg_id: int, reason:
         detail=f"Motif : {reason}",
         link=f"/captain?leg_id={leg_id}",
         target_role="commercial",
+    )
+
+
+# ──────────────────────── Notifications côté client (espace /me) ─────────────
+
+async def notify_client(
+    db: AsyncSession,
+    *,
+    client_id: int,
+    type: str,
+    title: str,
+    link: str | None = None,
+    detail: str | None = None,
+) -> Notification:
+    """Crée une notification in-app destinée à un compte client."""
+    return await create(
+        db, type=type, title=title, detail=detail, link=link,
+        target_client_id=client_id,
+    )
+
+
+async def notify_new_booking_message(
+    db: AsyncSession, *, booking_reference: str, booking_id: int,
+) -> Notification:
+    """Alerte le staff (rôle operation) d'un nouveau message client sur un booking."""
+    return await create(
+        db, type="new_booking_message",
+        title=f"Nouveau message client — {booking_reference}",
+        link=f"/staff/bookings/{booking_reference}",
+        target_role="operation",
     )

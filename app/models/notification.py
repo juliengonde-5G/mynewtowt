@@ -20,6 +20,11 @@ NOTIFICATION_TYPES = (
     "new_order", "new_cargo_message", "eosp", "sosp",
     "new_claim", "eta_shift", "packing_to_review", "leg_locked",
     "info",
+    # Cycle de vie booking — côté client
+    "booking_submitted", "booking_confirmed", "booking_loaded",
+    "booking_at_sea", "booking_discharged", "booking_delivered",
+    "booking_cancelled", "invoice_issued", "anemos_issued",
+    "new_booking_message",
 )
 
 # Icônes par type (emoji)
@@ -33,6 +38,16 @@ NOTIFICATION_ICONS: dict[str, str] = {
     "packing_to_review": "📋",
     "leg_locked":        "🔒",
     "info":              "ℹ️",
+    "booking_submitted": "📝",
+    "booking_confirmed": "✅",
+    "booking_loaded":    "📦",
+    "booking_at_sea":    "⛵",
+    "booking_discharged": "⚓",
+    "booking_delivered": "🎉",
+    "booking_cancelled": "❌",
+    "invoice_issued":    "🧾",
+    "anemos_issued":     "🌿",
+    "new_booking_message": "💬",
 }
 
 
@@ -42,6 +57,9 @@ class Notification(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     target_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
     target_role: Mapped[str | None] = mapped_column(String(40))  # broadcast par rôle
+    target_client_id: Mapped[int | None] = mapped_column(
+        ForeignKey("client_accounts.id"), index=True
+    )  # notification destinée à un compte client (espace /me)
     type: Mapped[str] = mapped_column(String(40), nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     detail: Mapped[str | None] = mapped_column(Text)

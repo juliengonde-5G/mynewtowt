@@ -61,6 +61,10 @@ class Booking(Base):
 
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    loaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    at_sea_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    discharged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelled_reason: Mapped[str | None] = mapped_column(Text)
 

@@ -38,7 +38,7 @@
             <td>{{ c.co2_emitted_kg }}</td>
             <td>{{ c.co2_conventional_kg }}</td>
             <td><strong class="text-accent">-{{ c.co2_avoided_kg }} kg</strong></td>
-            <td>{% if c.pdf_url %}<a href="{{ c.pdf_url }}" class="btn btn-ghost">PDF →</a>{% endif %}</td>
+            <td>{% if c.booking_ref %}<a href="/me/bookings/{{ c.booking_ref }}/anemos.pdf" target="_blank" class="btn btn-ghost">PDF →</a>{% endif %}</td>
           </tr>
         {% endfor %}
       </tbody>

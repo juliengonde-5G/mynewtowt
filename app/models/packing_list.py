@@ -138,9 +138,14 @@ class PackingListDocument(Base):
     __tablename__ = "packing_list_documents"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    packing_list_id: Mapped[int] = mapped_column(
+    # Un document peut être rattaché à une packing list (portail expéditeur)
+    # OU directement à un booking (upload client depuis l'espace /me).
+    packing_list_id: Mapped[int | None] = mapped_column(
         ForeignKey("packing_lists.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=True, index=True,
+    )
+    booking_id: Mapped[int | None] = mapped_column(
+        ForeignKey("bookings.id", ondelete="CASCADE"), nullable=True, index=True,
     )
     kind: Mapped[str] = mapped_column(String(40), nullable=False)
     # 'bl' | 'arrival_notice' | 'invoice' | 'customs' | 'msds' | 'other'

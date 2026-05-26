@@ -17,6 +17,7 @@ other fields normally.
 """
 from __future__ import annotations
 
+import re
 import secrets
 from urllib.parse import parse_qs
 
@@ -27,6 +28,15 @@ from starlette.responses import Response
 CSRF_COOKIE = "towt_csrf"
 CSRF_HEADER = "x-csrf-token"
 CSRF_FORM_FIELD = "_csrf"
+
+
+def _extract_multipart_field(body: bytes, field: str) -> str | None:
+    """Extrait la valeur d'un champ texte d'un corps multipart, sans
+    consommer le parser (on lit ``request.body()`` mis en cache, le parsing
+    fichier en aval reste possible)."""
+    pattern = rb'name="' + re.escape(field.encode()) + rb'"\r\n\r\n(.*?)\r\n--'
+    m = re.search(pattern, body, re.DOTALL)
+    return m.group(1).decode("utf-8", errors="replace") if m else None
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 EXEMPT_PATHS_PREFIXES = (
     "/api/v1/",        # API expects its own auth (API key / bearer)
@@ -57,6 +67,12 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 parsed = parse_qs(body_bytes.decode("utf-8", errors="replace"))
                 values = parsed.get(CSRF_FORM_FIELD)
                 form_token = values[0] if values else None
+            elif not header_token and content_type.startswith("multipart/form-data"):
+                # File-upload forms : on met en cache le corps via body() (rejoué
+                # en aval par BaseHTTPMiddleware) puis on extrait juste _csrf des
+                # octets bruts — le parsing fichier FastAPI en aval reste intact.
+                body_bytes = await request.body()
+                form_token = _extract_multipart_field(body_bytes, CSRF_FORM_FIELD)
 
             submitted = header_token or form_token
             if not submitted or submitted != cookie_value:

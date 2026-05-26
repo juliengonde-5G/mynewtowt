@@ -258,6 +258,10 @@ async def step_3_confirm_submit(
     booking.signed_terms_at = datetime.now(timezone.utc)
     await submit(db, booking)
 
+    from app.services.booking_lifecycle import on_status_change
+
+    await on_status_change(db, booking, "submitted")
+
     await activity_record(
         db,
         action="booking_submit",
