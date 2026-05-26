@@ -59,13 +59,15 @@ async def set_language(lang: str, request: Request):
     pas encore posée au premier hit anonyme.
     """
     from fastapi.responses import RedirectResponse
-    from app.config import settings as _s
     from app.i18n import SUPPORTED, DEFAULT
 
     target = request.headers.get("referer") or "/"
-    # Anti open-redirect : refuse les URLs absolues hors SITE_URL
-    if target.startswith(("http://", "https://")) and not target.startswith(_s.site_url):
-        target = "/"
+    # Anti open-redirect : pour toute URL absolue, on ne conserve que le chemin
+    # (path + query) pour rester sur le même serveur quel que soit SITE_URL.
+    if target.startswith(("http://", "https://")):
+        from urllib.parse import urlparse as _urlparse
+        _p = _urlparse(target)
+        target = (_p.path or "/") + (("?" + _p.query) if _p.query else "")
 
     if lang not in SUPPORTED:
         lang = DEFAULT
