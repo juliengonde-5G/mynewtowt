@@ -170,12 +170,20 @@
                        " = " + eff.toFixed(0) + " NM @ " + speed().toFixed(1) + " kn → " +
                        (hours / 24).toFixed(1) + " j (" + hours.toFixed(0) + " h)";
 
-    // Auto-fill ETA from ETD if user hasn't manually set it
+    // Auto-fill ETA from ETD if user hasn't manually set it.
     var etdEl = document.getElementById("etd");
     var etaEl = document.getElementById("eta");
+    if (!etdEl || !etaEl) return;
     if (etdEl.value && (!etaEl.value || etaEl.dataset.auto !== "off")) {
       var etd = new Date(etdEl.value);
+      // Garde-fou : ETD invalide (champ vidé/partiel) ⇒ ne pas écrire un
+      // "NaN" dans l'ETA. On efface l'ETA auto-remplie au lieu de la corrompre.
+      if (isNaN(etd.getTime()) || !isFinite(hours)) {
+        if (etaEl.dataset.auto === "on") etaEl.value = "";
+        return;
+      }
       var eta = new Date(etd.getTime() + hours * 3600 * 1000);
+      if (isNaN(eta.getTime())) return;
       etaEl.value = isoLocal(eta);
       etaEl.dataset.auto = "on";
     }

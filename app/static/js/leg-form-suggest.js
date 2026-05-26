@@ -42,14 +42,19 @@
         if (banner) banner.style.display = "none";
         return;
       }
-      // Ne touche que les champs vides
+      // Ne touche que les champs vides (jamais écraser une saisie).
       if (etd && !etd.value) etd.value = s.etd;
       if (portStay && !portStay.value && s.port_stay_hours)
         portStay.value = s.port_stay_hours;
       if (pol && !pol.value && s.pol_id) {
         pol.value = String(s.pol_id);
-        // Trigger l'event change pour le cascade ETA (cf. leg-cascade.js)
-        pol.dispatchEvent(new Event("change", { bubbles: true }));
+        // Recalcule l'ETA via leg-cascade.js — UNIQUEMENT si l'ETA n'a pas
+        // été saisie manuellement (dataset.auto==="off" = l'utilisateur a
+        // touché le champ). Évite d'écraser une ETA voulue par l'opérateur.
+        var etaEl = document.getElementById("eta");
+        if (!etaEl || etaEl.dataset.auto !== "off") {
+          pol.dispatchEvent(new Event("change", { bubbles: true }));
+        }
       }
       // Affiche le bandeau
       if (banner && bannerText) {
