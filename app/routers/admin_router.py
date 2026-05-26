@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import (
     get_current_staff, hash_password, verify_password,
 )
+from app.config import settings
 from app.database import get_db
 from app.i18n import SUPPORTED as SUPPORTED_LANGS
 from app.models.activity_log import ActivityLog
@@ -475,6 +476,16 @@ async def security_dashboard(
         clients, lambda c: None, lambda c: c.mfa_enabled, "client",
     )
 
+    # Comptes à risque : rôles sensibles SANS aucune 2FA (ni MFA ni passkey).
+    # Mis en tête du dashboard pour action prioritaire.
+    SENSITIVE_ROLES = ("administrateur", "manager_maritime")
+    risky_staff = [
+        u for u in staff_users
+        if u.role in SENSITIVE_ROLES
+        and not u.mfa_enabled
+        and pk_count.get(("staff", u.id), 0) == 0
+    ]
+
     return templates.TemplateResponse(
         "staff/admin/security_dashboard.html",
         {
@@ -482,8 +493,48 @@ async def security_dashboard(
             "staff_users": staff_users, "clients": clients,
             "pk_count": pk_count,
             "stats_staff": stats_staff, "stats_client": stats_client,
+            "risky_staff": risky_staff,
+            "require_mfa_for_admin": settings.require_mfa_for_admin,
         },
     )
+
+
+@router.post("/users/{user_id}/reset-mfa")
+async def users_reset_mfa(
+    user_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("admin", "M")),
+):
+    """Réinitialise la MFA d'un utilisateur (perte de téléphone, etc.).
+
+    Désactive MFA TOTP + purge le secret + supprime les recovery codes.
+    Ne touche PAS aux passkeys (l'user peut encore en avoir une valide).
+    Si require_mfa_for_admin est actif et que la cible est admin, elle
+    sera redirigée vers la reconfiguration MFA à sa prochaine requête.
+    """
+    from sqlalchemy import delete
+    from app.models.mfa_recovery_code import MfaRecoveryCode
+
+    target = await db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status_code=404)
+    target.mfa_enabled = False
+    target.mfa_secret = None
+    await db.flush()
+    await db.execute(
+        delete(MfaRecoveryCode)
+        .where(MfaRecoveryCode.owner_type == "staff")
+        .where(MfaRecoveryCode.owner_id == target.id)
+    )
+    await activity_record(
+        db, action="staff_mfa_reset_by_admin",
+        user_id=user.id, user_name=user.full_name or user.username,
+        user_role=user.role, module="admin", entity_type="user",
+        entity_id=target.id, entity_label=target.username,
+        ip_address=_client_ip(request),
+    )
+    return RedirectResponse(url="/admin/security", status_code=303)
 
 
 # ────────────────────────────────────────────── My account
