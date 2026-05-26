@@ -32,7 +32,7 @@ services:
     expose:
       - "8000"
     volumes:
-      - uploads:/app/uploads
+      - uploads:/app/var/uploads
 
   caddy:
     image: caddy:2-alpine
