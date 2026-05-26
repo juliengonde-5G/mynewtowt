@@ -6,7 +6,7 @@ mirroring the safety policy established in V2 and reinforced for V3.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 WEAK_SECRETS: set[str] = {
@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     app_env: Literal["development", "staging", "production"] = "development"
     debug: bool = False
     site_url: str = "http://localhost:8000"
+
+    # Stockage des pièces jointes uploadées (packing list docs, pièces client).
+    # Relatif au cwd en dev ; mettre un chemin absolu en prod (volume monté).
+    upload_dir: str = "var/uploads"
 
     # Security
     secret_key: str

@@ -10,14 +10,14 @@ Routes :
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import (
+    APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status,
+)
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import AuthRequired, get_current_client
+from app.auth import get_current_client
 from app.config import settings
 from app.database import get_db
 from app.models.booking import Booking
@@ -25,9 +25,11 @@ from app.models.client_invoice import ClientInvoice
 from app.models.anemos_certificate import AnemosCertificate
 from app.models.leg import Leg
 from app.models.notification import Notification
+from app.models.packing_list import PackingListDocument
 from app.models.port import Port
 from app.models.vessel import Vessel
-from app.services import mfa, notifications, security_alerts
+from app.services import documents as documents_svc
+from app.services import mfa, notifications, safe_files, security_alerts
 from app.services.activity import record as activity_record
 from app.services.booking import find_by_reference, list_for_client
 from app.services.vessel_position import get_latest_position
@@ -206,6 +208,79 @@ async def invoices(
     return templates.TemplateResponse(
         "client/invoices.html",
         {"request": request, "client": client, "invoices": list(res.scalars().all())},
+    )
+
+
+@router.get("/me/documents", response_class=HTMLResponse)
+async def documents_hub(
+    request: Request,
+    client=Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    groups = await documents_svc.list_for_client(db, client.id)
+    return templates.TemplateResponse(
+        "client/documents.html",
+        {"request": request, "client": client, "groups": groups},
+    )
+
+
+_CLIENT_DOC_KINDS = ("customs", "msds", "other")
+
+
+@router.post("/me/bookings/{ref}/documents")
+async def upload_document(
+    ref: str,
+    kind: str = Form("other"),
+    file: UploadFile = File(...),
+    client=Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    booking = await find_by_reference(db, ref)
+    if not booking or booking.client_account_id != client.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    if kind not in _CLIENT_DOC_KINDS:
+        kind = "other"
+    content = await file.read()
+    try:
+        rel_path, mime = safe_files.save_upload(
+            content, file.filename or "document", subdir=f"bookings/{booking.id}",
+        )
+    except safe_files.UploadRejected as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    db.add(PackingListDocument(
+        booking_id=booking.id, kind=kind, label=file.filename,
+        file_path=rel_path, file_mime=mime, uploaded_by=client.email,
+    ))
+    await db.flush()
+    await activity_record(
+        db, action="client_doc_upload", user_name=client.email,
+        module="cargo", entity_type="booking", entity_id=booking.id,
+        entity_label=booking.reference, detail=kind,
+    )
+    return RedirectResponse(url="/me/documents", status_code=303)
+
+
+@router.get("/me/bookings/{ref}/documents/{doc_id}")
+async def download_document(
+    ref: str,
+    doc_id: int,
+    client=Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    booking = await find_by_reference(db, ref)
+    if not booking or booking.client_account_id != client.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    doc = await db.get(PackingListDocument, doc_id)
+    if not doc or doc.booking_id != booking.id or not doc.file_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    try:
+        path = safe_files.resolve_path(doc.file_path)
+    except (safe_files.UploadRejected, FileNotFoundError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File missing")
+    return Response(
+        content=path.read_bytes(),
+        media_type=doc.file_mime or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{doc.label or path.name}"'},
     )
 
 
