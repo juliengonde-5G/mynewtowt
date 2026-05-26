@@ -16,8 +16,10 @@
 
   /* Accents */
   --c-green:          #87BD29;
+  --c-green-light:    #BEDB92;
   --c-copper:         #B47148;
   --c-copper-deep:    #985E3A;
+  --c-copper-light:   #D49975;
 
   /* Secondary maritime */
   --c-horizon:        #9EC6D2;
@@ -104,7 +106,8 @@
   --sp-6: 32px;
   --sp-7: 48px;
   --sp-8: 64px;
-  --sp-9: 96px;
+  --sp-9:  96px;
+  --sp-10: 128px;
 
   /* ============ RADII ============ */
   --r-0:  0;
