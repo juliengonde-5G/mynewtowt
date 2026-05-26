@@ -1,4 +1,4 @@
-"""Kairos AI chatbot — Claude Sonnet 4.6 with prompt caching + tools.
+"""Newtowt Agent chatbot — Claude Sonnet 4.6 with prompt caching + tools.
 
 V3.0 minimal implementation:
 - One conversation per user (or anonymous session).
@@ -50,7 +50,7 @@ INJECTION_PATTERNS = [
 ]
 
 
-SYSTEM_PROMPT = """Tu es Kairos AI, l'assistant de la plateforme NEWTOWT.
+SYSTEM_PROMPT = """Tu es Newtowt Agent, l'assistant de la plateforme NEWTOWT.
 
 NEWTOWT est une compagnie maritime française de transport cargo à la
 voile (transport décarboné). Elle exploite une flotte de voiliers cargo
@@ -281,7 +281,7 @@ async def respond(
     # If no API key — canned response, but still log.
     if not settings.anthropic_api_key:
         canned = (
-            "Le chatbot Kairos AI n'est pas activé sur cet environnement "
+            "Le Newtowt Agent n'est pas activé sur cet environnement "
             "(clé Anthropic absente). Demande à l'administrateur de configurer "
             "ANTHROPIC_API_KEY dans le .env, puis redéployer."
         )

@@ -96,19 +96,42 @@
 
   function highlightActive() {
     var here = window.location.pathname;
-    document.querySelectorAll(".sidebar nav a[href]").forEach(function (a) {
+    var links = Array.prototype.slice.call(
+      document.querySelectorAll(".sidebar nav a[href]")
+    );
+
+    // Un lien "matche" si exact OU si le chemin courant commence par
+    // href + "/" (frontière de path — évite que /me matche /medical).
+    function matches(href) {
+      if (!href || href === "#") return false;
+      if (href === here) return true;
+      if (href === "/") return false; // accueil : match exact seulement
+      return here === href || here.indexOf(href + "/") === 0;
+    }
+
+    // On ne garde QUE le match le plus spécifique (href le plus long)
+    // pour qu'un seul bouton soit en surbrillance, même quand /cargo et
+    // /cargo/booking sont tous deux des entrées de menu.
+    var best = null;
+    var bestLen = -1;
+    links.forEach(function (a) {
+      a.removeAttribute("aria-current");
       var href = a.getAttribute("href");
-      // Exact match or path prefix (so /planning/legs/42 highlights /planning)
-      if (href === here || (href !== "/" && here.indexOf(href) === 0)) {
-        a.setAttribute("aria-current", "page");
-        var group = a.closest(".nav-group");
-        if (group && !group.classList.contains("open")) {
-          group.classList.add("open");
-          var t = group.querySelector(".nav-group-toggle");
-          if (t) t.setAttribute("aria-expanded", "true");
-        }
+      if (matches(href) && href.length > bestLen) {
+        best = a;
+        bestLen = href.length;
       }
     });
+
+    if (best) {
+      best.setAttribute("aria-current", "page");
+      var group = best.closest(".nav-group");
+      if (group && !group.classList.contains("open")) {
+        group.classList.add("open");
+        var t = group.querySelector(".nav-group-toggle");
+        if (t) t.setAttribute("aria-expanded", "true");
+      }
+    }
   }
 
   function bindHamburger() {

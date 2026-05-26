@@ -40,7 +40,7 @@
         "/tickets": "Tickets escale",
         "/cashbox": "Caisse de bord",
         "/tracking": "Tracking flotte",
-        "/chat": "Kairos AI",
+        "/chat": "Newtowt Agent",
         "/staff/bookings": "Bookings",
         "/dashboard/analytics": "Analytics",
         "/admin": "Configuration",
@@ -77,7 +77,7 @@
       </div>
     </div>
 
-    <a href="/chat" class="topbar-action" title="Chatbot Kairos AI">
+    <a href="/chat" class="topbar-action" title="Newtowt Agent">
       <i data-lucide="message-square"></i>
     </a>
 
@@ -98,7 +98,7 @@
     <div class="topbar-menu" id="topbar-user-menu" role="menu">
       <div class="menu-header">{% if user is defined and user %}{{ user.full_name or user.username }} · {{ user.role }}{% else %}Compte{% endif %}</div>
       <a href="/admin"><i data-lucide="settings"></i><span>Configuration</span></a>
-      <a href="/chat"><i data-lucide="message-square"></i><span>Chatbot Kairos AI</span></a>
+      <a href="/chat"><i data-lucide="message-square"></i><span>Newtowt Agent</span></a>
       <div class="menu-divider"></div>
       <a href="/logout" style="color: var(--danger);"><i data-lucide="log-out"></i><span>Déconnexion</span></a>
     </div>
