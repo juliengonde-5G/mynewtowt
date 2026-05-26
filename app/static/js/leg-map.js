@@ -21,8 +21,12 @@
     if (!container || typeof maplibregl === "undefined") return;
 
     var token = container.dataset.maptilerToken;
+    // Style compagnie : MapTiler Outdoor (cohérent avec fleet-map.js).
+    // Surchargeable via data-map-style sur #leg-map.
+    var mapStyle = container.dataset.mapStyle || "outdoor-v2";
     var style = token
-      ? "https://api.maptiler.com/maps/streets-v2/style.json?key=" + encodeURIComponent(token)
+      ? "https://api.maptiler.com/maps/" + encodeURIComponent(mapStyle) +
+        "/style.json?key=" + encodeURIComponent(token)
       : "https://demotiles.maplibre.org/style.json";
 
     var map = new maplibregl.Map({

@@ -34,10 +34,10 @@
     try { if (el.dataset.center) center = JSON.parse(el.dataset.center); } catch (e) {}
     try { if (el.dataset.zoom) zoom = parseFloat(el.dataset.zoom); } catch (e) {}
 
-    // Style de fond : par défaut "ocean" (carte nautique MapTiler avec
-    // bathymétrie — adapté à une flotte transatlantique). Surchargeable
-    // via data-map-style="streets-v2 | basic-v2 | dataviz-dark | ...".
-    var mapStyle = el.dataset.mapStyle || "ocean";
+    // Style de fond : par défaut "outdoor-v2" (MapTiler Outdoor — relief,
+    // terrain, lisible terre + mer, charte compagnie). Surchargeable via
+    // data-map-style="streets-v2 | ocean | basic-v2 | dataviz-dark | ...".
+    var mapStyle = el.dataset.mapStyle || "outdoor-v2";
     var style = token
       ? "https://api.maptiler.com/maps/" + encodeURIComponent(mapStyle) +
         "/style.json?key=" + encodeURIComponent(token)
