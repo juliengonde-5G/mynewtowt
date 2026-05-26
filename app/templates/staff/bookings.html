@@ -29,7 +29,7 @@
       <tbody>
         {% for b in bookings %}
           <tr>
-            <td><span class="mono">{{ b.reference }}</span></td>
+            <td><a href="/staff/bookings/{{ b.reference }}" class="mono">{{ b.reference }}</a></td>
             <td>#{{ b.client_account_id }}</td>
             <td>{{ b.leg_id }}</td>
             <td>{{ b.total_palettes }}</td>

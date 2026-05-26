@@ -29,7 +29,7 @@ from app.models.packing_list import PackingListDocument
 from app.models.port import Port
 from app.models.vessel import Vessel
 from app.services import documents as documents_svc
-from app.services import mfa, notifications, safe_files, security_alerts
+from app.services import messaging, mfa, notifications, safe_files, security_alerts
 from app.services.activity import record as activity_record
 from app.services.booking import find_by_reference, list_for_client
 from app.services.vessel_position import get_latest_position
@@ -119,9 +119,51 @@ async def booking_detail(
     booking = await find_by_reference(db, ref)
     if not booking or booking.client_account_id != client.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    messages = await messaging.list_for_booking(db, booking.id)
+    await messaging.mark_thread_read(db, booking.id, reader="client")
     return templates.TemplateResponse(
         "client/booking_detail.html",
-        {"request": request, "client": client, "booking": booking},
+        {"request": request, "client": client, "booking": booking, "messages": messages},
+    )
+
+
+@router.post("/me/bookings/{ref}/messages")
+async def post_message(
+    ref: str,
+    body: str = Form(...),
+    client=Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    booking = await find_by_reference(db, ref)
+    if not booking or booking.client_account_id != client.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    if body.strip():
+        await messaging.post(
+            db, booking_id=booking.id, sender="client",
+            sender_name=client.company_name or client.email, body=body,
+        )
+        await notifications.notify_new_booking_message(
+            db, booking_reference=booking.reference, booking_id=booking.id,
+        )
+    return RedirectResponse(url=f"/me/bookings/{ref}#messages", status_code=303)
+
+
+@router.get("/me/messages", response_class=HTMLResponse)
+async def messages_overview(
+    request: Request,
+    client=Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    bookings = await list_for_client(db, client.id, limit=200)
+    threads = []
+    for b in bookings:
+        msgs = await messaging.list_for_booking(db, b.id)
+        if msgs:
+            unread = sum(1 for m in msgs if m.sender == "staff" and not m.is_read)
+            threads.append({"booking": b, "last": msgs[-1], "count": len(msgs), "unread": unread})
+    return templates.TemplateResponse(
+        "client/messages.html",
+        {"request": request, "client": client, "threads": threads},
     )
 
 

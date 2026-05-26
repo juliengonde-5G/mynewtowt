@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.booking import Booking
+from app.models.client_account import ClientAccount
 from app.permissions import require_permission
-from app.services import invoicing
+from app.services import invoicing, messaging, notifications
 from app.services.activity import record as activity_record
 from app.services.booking import InvalidStatusTransition, advance, cancel, confirm
 from app.services.booking_lifecycle import on_status_change
@@ -38,6 +39,58 @@ async def list_all(
         "staff/bookings.html",
         {"request": request, "bookings": bookings, "status_filter": status_filter},
     )
+
+
+@router.get(
+    "/{ref}",
+    response_class=HTMLResponse,
+    dependencies=[Depends(require_permission("booking", "C"))],
+)
+async def detail(
+    request: Request,
+    ref: str,
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    booking = (
+        await db.execute(select(Booking).where(Booking.reference == ref))
+    ).scalar_one_or_none()
+    if not booking:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    client = await db.get(ClientAccount, booking.client_account_id)
+    messages = await messaging.list_for_booking(db, booking.id)
+    await messaging.mark_thread_read(db, booking.id, reader="staff")
+    return templates.TemplateResponse(
+        "staff/booking_detail.html",
+        {"request": request, "booking": booking, "client": client, "messages": messages},
+    )
+
+
+@router.post(
+    "/{ref}/messages",
+    dependencies=[Depends(require_permission("booking", "M"))],
+)
+async def post_staff_message(
+    ref: str,
+    body: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    user=Depends(require_permission("booking", "M")),
+) -> RedirectResponse:
+    booking = (
+        await db.execute(select(Booking).where(Booking.reference == ref))
+    ).scalar_one_or_none()
+    if not booking:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    if body.strip():
+        await messaging.post(
+            db, booking_id=booking.id, sender="staff",
+            sender_name=user.username, body=body,
+        )
+        await notifications.notify_client(
+            db, client_id=booking.client_account_id, type="new_booking_message",
+            title=f"Nouveau message NEWTOWT — {booking.reference}",
+            link=f"/me/bookings/{booking.reference}#messages",
+        )
+    return RedirectResponse(url=f"/staff/bookings/{ref}#messages", status_code=303)
 
 
 @router.post(
@@ -144,4 +197,4 @@ async def advance_booking(
         entity_label=booking.reference,
         detail=target,
     )
-    return RedirectResponse(url="/staff/bookings", status_code=303)
+    return RedirectResponse(url=f"/staff/bookings/{ref}", status_code=303)

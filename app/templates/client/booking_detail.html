@@ -126,4 +126,11 @@
   {% endif %}
 </section>
 
+<section class="card mt-4" id="messages">
+  <h2>{% if lang == 'en' %}Messages with our team{% else %}Échanger avec notre équipe{% endif %}</h2>
+  {% set post_url = "/me/bookings/" ~ booking.reference ~ "/messages" %}
+  {% set viewer = "client" %}
+  {% include "_partials/message_thread.html" %}
+</section>
+
 {% endblock %}
