@@ -40,7 +40,7 @@
       if (prevBtn) prevBtn.style.visibility = current === 0 ? "hidden" : "visible";
       var last = current === steps.length - 1;
       if (nextBtn) nextBtn.style.display = last ? "none" : "";
-      if (submitBtn) submitBtn.style.display = last ? "" : "none";
+      if (submitBtn) submitBtn.style.display = last ? "inline-flex" : "none";
     }
 
     // Valide uniquement les champs de l'étape courante (HTML5).
