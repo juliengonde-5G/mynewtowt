@@ -1,7 +1,8 @@
-# Architecture — `mynewtowt` V3
+# Architecture — `mynewtowt` V3.1
 
-> Étape 9 — `/architecture`. Architecture cible, flux, et organisation
-> de l'application au regard des personas et des nouveaux modules.
+> Mis à jour le 2026-05-27 — V3.1 : Stripe retiré (facturation virement),
+> nginx remplacé par Caddy, passkey WebAuthn supprimé.
+> Version originale V3.0 archivée dans `docs/archive/ARCHIVE-INDEX.md`.
 
 ## 1. Vue d'ensemble
 
@@ -25,9 +26,10 @@
              │                  │                    │
              ▼                  ▼                    ▼
    ┌──────────────┐   ┌─────────────────┐   ┌───────────────┐
-   │   Stripe     │   │ Anthropic Claude│   │ Windy / Mapbox│
-   │  paiements   │   │ chatbot + RAG   │   │ météo + cartes│
+   │  Pipedrive   │   │ Anthropic Claude│   │ Windy / Mapbox│
+   │  CRM sync    │   │ chatbot Kairos  │   │ météo + cartes│
    └──────────────┘   └─────────────────┘   └───────────────┘
+   ⚠️  NOTE V3.1 : Stripe retiré — facturation par virement bancaire uniquement.
              ▲                  ▲                    ▲
              │                  │                    │
    ┌──────────────┐   ┌─────────────────┐   ┌───────────────┐
@@ -42,11 +44,12 @@
 ┌────────────────────────────────────────────────────────────────┐
 │                     mynewtowt (docker-compose)                 │
 │                                                                │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────┐  │
-│  │  nginx   │  │  app     │  │  worker  │  │ dbt-runner    │  │
-│  │  TLS     │←→│ FastAPI  │←→│ celery / │  │ scheduled     │  │
-│  │  WAF     │  │ uvicorn  │  │ rq       │  │ jobs analytics│  │
-│  └──────────┘  └────┬─────┘  └────┬─────┘  └──────┬────────┘  │
+│  ┌──────────┐  ┌──────────┐                                     │
+│  │  Caddy 2 │  │  app     │                                     │
+│  │  TLS auto│←→│ FastAPI  │                                     │
+│  │  HTTP/3  │  │ uvicorn  │                                     │
+│  └──────────┘  └────┬─────┘                                     │
+│  ⚠️  V3.1 : nginx → Caddy. Worker Celery non déployé (in-proc). │
 │                     │             │                │           │
 │                     ▼             ▼                ▼           │
 │                ┌────────────────────────────────────────┐      │
@@ -232,26 +235,13 @@
    └──▶ Streame la réponse au client + log + cost tracking
 ```
 
-### 3.4 Flux webhook Stripe
+### 3.4 ~~Flux webhook Stripe~~ — RETIRÉ EN V3.1
 
-```
-[Stripe envoie POST /webhooks/stripe]
-   │ headers: stripe-signature
-   ▼
-[StripeWebhookRouter]
-   │
-   ├──▶ verify_signature(payload, signature, webhook_secret)
-   │     └─▶ Refuser si signature invalide
-   │
-   ├──▶ Idempotency check via stripe_event_id
-   │
-   ├──▶ switch(event.type) :
-   │     payment_intent.succeeded → Booking.confirm + Invoice.mark_paid
-   │     payment_intent.payment_failed → notification client
-   │     charge.refunded → Booking.cancel + Invoice.refund
-   │
-   └──▶ Record in stripe_events table
-```
+> **Note V3.1** : Stripe a été retiré de l'application.
+> NEWTOWT facture exclusivement par virement bancaire.
+> L'équipe commerciale confirme les bookings manuellement sous 4h.
+> Le client reçoit une facture PDF (`pdf/invoice.html`) par email.
+> Migration Alembic `20260519_0005_drop_stripe.py` a supprimé les tables Stripe.
 
 ## 4. Décisions architecturales (ADR)
 
@@ -403,25 +393,29 @@ push branch → lint → tests → build image → push registry → deploy stag
 PR merged main → tests → build image → push registry → deploy prod (manual approval)
 ```
 
-### 8.2 Docker compose prod
+### 8.2 Docker compose prod (V3.1 actuel)
 
 ```yaml
 services:
-  nginx: ...
-  app:
-    image: ghcr.io/newtowt/mynewtowt:${VERSION}
-    deploy:
-      replicas: 2
-      resources: { limits: { memory: 1G, cpus: '1' } }
-  worker:
-    image: ghcr.io/newtowt/mynewtowt:${VERSION}
-    command: celery -A app.worker worker
   db:
     image: postgres:16-alpine
     volumes: [pgdata:/var/lib/postgresql/data]
-  metabase: ...
-  grafana: ...
+
+  app:
+    build: .          # FastAPI/Uvicorn, expose 8000 (interne uniquement)
+    depends_on:
+      db: { condition: service_healthy }
+    volumes: [uploads:/app/var/uploads]
+
+  caddy:              # Reverse proxy TLS auto (Let's Encrypt) + HTTP/3
+    image: caddy:2-alpine
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes: [./caddy/Caddyfile:/etc/caddy/Caddyfile:ro]
 ```
+
+> **Note V3.1** : nginx remplacé par Caddy (TLS automatique).
+> Worker Celery non déployé — jobs asynchrones traités in-process.
+> Scale horizontal prévu en V3.2 avec 2 replicas app.
 
 ### 8.3 Zero-downtime deploy
 
